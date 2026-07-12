@@ -344,7 +344,7 @@ export function createGame(
       displayName: seated.displayName,
       color: colors[seatIndex],
       isBot: seated.isBot,
-      botDifficulty: seated.botDifficulty,
+      ...(seated.botDifficulty ? { botDifficulty: seated.botDifficulty } : {}),
       seatIndex,
       resourceCount: 0,
       devCardCount: 0,
