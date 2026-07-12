@@ -13,6 +13,10 @@
   cursor: pointer;
 }
 
+.catan-board__hotspot:focus-visible {
+  outline: none;
+}
+
 .catan-board__hotspot--vertex {
   fill: var(--color-accent);
   fill-opacity: 0.55;
@@ -20,7 +24,8 @@
   stroke-width: 2;
 }
 
-.catan-board__hotspot--vertex:hover {
+.catan-board__hotspot--vertex:hover,
+.catan-board__hotspot--vertex:focus-visible {
   fill-opacity: 0.9;
 }
 
@@ -33,6 +38,11 @@
   stroke-opacity: 0.85;
 }
 
+g[role='button']:focus-visible .catan-board__hotspot--edge {
+  stroke-opacity: 0.9;
+  stroke-width: 18;
+}
+
 .catan-board__hotspot--hex {
   fill: var(--color-accent);
   fill-opacity: 0.15;
@@ -40,6 +50,7 @@
   stroke-width: 2;
 }
 
-.catan-board__hotspot--hex:hover {
+.catan-board__hotspot--hex:hover,
+.catan-board__hotspot--hex:focus-visible {
   fill-opacity: 0.35;
 }

@@ -1,4 +1,4 @@
-import { useMemo, type JSX } from 'react';
+import { useMemo, type JSX, type KeyboardEvent } from 'react';
 import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '../game/types';
 import { TERRAIN_RESOURCE } from '../game/types';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '../game/board';
@@ -49,6 +49,15 @@ function hexCornerPoints(center: { x: number; y: number }, size: number): { x: n
     pts.push({ x: center.x + size * Math.cos(angleRad), y: center.y + size * Math.sin(angleRad) });
   }
   return pts;
+}
+
+/** Lets keyboard/screen-reader users activate an SVG hotspot (role="button") the same way
+ * a native <button> would — Enter or Space. */
+function activateOnEnterOrSpace(e: KeyboardEvent, activate: () => void): void {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    activate();
+  }
 }
 
 // --- Local mirrors of rules.ts legality helpers, scoped to board+room only
@@ -326,6 +335,10 @@ export default function BoardView({
               r={9}
               className="catan-board__hotspot catan-board__hotspot--vertex"
               onClick={() => onVertexClick?.(vid)}
+              role="button"
+              tabIndex={0}
+              aria-label="Build settlement here"
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onVertexClick?.(vid))}
             />
           );
         })}
@@ -341,6 +354,10 @@ export default function BoardView({
               r={12}
               className="catan-board__hotspot catan-board__hotspot--vertex"
               onClick={() => onVertexClick?.(vid)}
+              role="button"
+              tabIndex={0}
+              aria-label="Upgrade to city here"
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onVertexClick?.(vid))}
             />
           );
         })}
@@ -353,7 +370,14 @@ export default function BoardView({
           const pa = vertexPixel(a, board, SIZE);
           const pb = vertexPixel(b, board, SIZE);
           return (
-            <g key={`hot-${eid}`} onClick={() => onEdgeClick?.(eid)}>
+            <g
+              key={`hot-${eid}`}
+              onClick={() => onEdgeClick?.(eid)}
+              role="button"
+              tabIndex={0}
+              aria-label="Build road here"
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onEdgeClick?.(eid))}
+            >
               <line
                 x1={pa.x}
                 y1={pa.y}
@@ -382,6 +406,10 @@ export default function BoardView({
                 points={points}
                 className="catan-board__hotspot catan-board__hotspot--hex"
                 onClick={() => onHexClick?.(hex.id)}
+                role="button"
+                tabIndex={0}
+                aria-label="Move the robber to this hex"
+                onKeyDown={(e) => activateOnEnterOrSpace(e, () => onHexClick?.(hex.id))}
               />
             );
           })}
