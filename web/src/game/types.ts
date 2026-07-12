@@ -177,6 +177,7 @@ export interface RoomState {
   // Host-configurable house rules, set at room creation, fixed once status leaves 'lobby'.
   victoryPointsToWin: number; // default DEFAULT_VICTORY_POINTS_TO_WIN
   discardLimit: number; // hand size that triggers a discard on a rolled 7; default DEFAULT_DISCARD_LIMIT
+  turnTimerSeconds: number | null; // countdown shown per turn; null = disabled. Informational only, not enforced.
   // Added by game/rules.ts (additive, optional so other constructors aren't broken):
   devCardPlayedThisTurn?: boolean; // at most one dev card may be played per turn
   lastSetupSettlementVertexId?: VertexId | null; // anchors the free setup road to the settlement just placed
@@ -196,6 +197,7 @@ export const MAX_SETTLEMENTS = 5;
 export const MAX_CITIES = 4;
 export const DEFAULT_VICTORY_POINTS_TO_WIN = 10;
 export const DEFAULT_DISCARD_LIMIT = 7;
+export const DEFAULT_TURN_TIMER_SECONDS = 120;
 export const LONGEST_ROAD_MIN = 5;
 export const LARGEST_ARMY_MIN = 3;
 

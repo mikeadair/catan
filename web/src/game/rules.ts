@@ -23,6 +23,7 @@ import type {
 import {
   BUILD_COSTS,
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TURN_TIMER_SECONDS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   LARGEST_ARMY_MIN,
   LONGEST_ROAD_MIN,
@@ -53,6 +54,8 @@ export interface CreateGameRoomBase {
   /** House rules, fixed once the game starts. Defaults to the DEFAULT_* constants. */
   victoryPointsToWin?: number;
   discardLimit?: number;
+  /** Per-turn countdown, informational only (not enforced). undefined = default; null = disabled. */
+  turnTimerSeconds?: number | null;
 }
 
 export interface CreateGameSeatedPlayer {
@@ -396,6 +399,8 @@ export function createGame(
     createdAt: Date.now(),
     victoryPointsToWin: roomBase.victoryPointsToWin ?? DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: roomBase.discardLimit ?? DEFAULT_DISCARD_LIMIT,
+    // undefined (unspecified) -> default; null (explicitly disabled) stays null.
+    turnTimerSeconds: roomBase.turnTimerSeconds !== undefined ? roomBase.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
     devCardPlayedThisTurn: false,
     lastSetupSettlementVertexId: null,
   };

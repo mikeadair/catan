@@ -24,6 +24,7 @@ import {
   STARTING_BANK,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TURN_TIMER_SECONDS,
   type RoomState,
   type PublicPlayer,
   type PrivateHand,
@@ -126,7 +127,7 @@ export async function createRoom(
   hostUid: string,
   hostName: string,
   mapPreset: MapPresetId,
-  settings?: { victoryPointsToWin?: number; discardLimit?: number }
+  settings?: { victoryPointsToWin?: number; discardLimit?: number; turnTimerSeconds?: number | null }
 ): Promise<{ roomId: string; code: string }> {
   const newRoomRef = doc(collection(db, 'rooms'));
   const roomId = newRoomRef.id;
@@ -174,6 +175,7 @@ export async function createRoom(
     createdAt: now,
     victoryPointsToWin: settings?.victoryPointsToWin ?? DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: settings?.discardLimit ?? DEFAULT_DISCARD_LIMIT,
+    turnTimerSeconds: settings?.turnTimerSeconds !== undefined ? settings.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
     devCardPlayedThisTurn: false,
     lastSetupSettlementVertexId: null,
   };
@@ -342,6 +344,7 @@ export async function startGame(roomId: string): Promise<void> {
       // from creation onward.
       victoryPointsToWin: room.victoryPointsToWin,
       discardLimit: room.discardLimit,
+      turnTimerSeconds: room.turnTimerSeconds,
     },
     seatedPlayers
   );
@@ -356,6 +359,7 @@ export async function startGame(roomId: string): Promise<void> {
     status: 'playing',
     victoryPointsToWin: room.victoryPointsToWin,
     discardLimit: room.discardLimit,
+    turnTimerSeconds: room.turnTimerSeconds,
   };
 
   const batch = writeBatch(db);
@@ -369,12 +373,18 @@ export async function startGame(roomId: string): Promise<void> {
   await batch.commit();
 }
 
-function neededHandUidsFor(action: GameAction, turnOrder: string[]): Set<string> {
+export function neededHandUidsFor(action: GameAction, turnOrder: string[]): Set<string> {
   const uids = new Set<string>([action.uid]);
   if ((action.type === 'playKnight' || action.type === 'moveRobber') && action.stealFromUid) {
     uids.add(action.stealFromUid);
   }
   if (action.type === 'playMonopoly') {
+    turnOrder.forEach((u) => uids.add(u));
+  }
+  if (action.type === 'rollDice') {
+    // distributeResources can credit ANY player with a settlement/city adjacent to the
+    // rolled number, not just the roller — every hand needs to be loaded into the
+    // transaction bundle or rules.ts throws trying to credit an unloaded player's hand.
     turnOrder.forEach((u) => uids.add(u));
   }
   return uids;
