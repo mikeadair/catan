@@ -13,8 +13,10 @@ import {
   type ChatMessage,
 } from '../firebase/rooms';
 
-const BOT_POLL_MS = 1500;
-const BOT_POLL_MAX_MS = 20000;
+// Bot turns are driven reactively off the room/players listeners we already pay for,
+// rather than an unconditional poll — see runBotActionIfDue/triggerBotCheck below.
+const BOT_TRIGGER_JITTER_MS = 250;
+const BOT_FALLBACK_MS = 15000;
 const HEARTBEAT_MS = 15000;
 const LAST_ROOM_KEY = 'catan.lastRoomId';
 
@@ -37,40 +39,64 @@ interface GameStore {
 }
 
 let unsubscribers: Array<() => void> = [];
-let botPollTimeout: ReturnType<typeof setTimeout> | null = null;
+let botTriggerTimeout: ReturnType<typeof setTimeout> | null = null;
+let botFallbackTimer: ReturnType<typeof setInterval> | null = null;
+let botActionInFlight = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 function teardown() {
   unsubscribers.forEach((u) => u());
   unsubscribers = [];
-  if (botPollTimeout) {
-    clearTimeout(botPollTimeout);
-    botPollTimeout = null;
+  if (botTriggerTimeout) {
+    clearTimeout(botTriggerTimeout);
+    botTriggerTimeout = null;
   }
+  if (botFallbackTimer) {
+    clearInterval(botFallbackTimer);
+    botFallbackTimer = null;
+  }
+  botActionInFlight = false;
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
 }
 
+// Mirrors the gate claimAndRunBotAction itself applies (only the current player's seat is
+// ever driven), computed here against state we already have locally from the room/players
+// listeners — so most of the time we can tell "nothing to do" without touching Firestore.
+function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>): boolean {
+  if (!room || room.status !== 'playing') return false;
+  const currentUid = room.turnOrder[room.currentPlayerIndex];
+  return !!currentUid && players[currentUid]?.isBot === true;
+}
+
+function runBotActionIfDue(roomId: string, get: () => GameStore): void {
+  if (botActionInFlight) return;
+  const { roomId: currentRoomId, room, players } = get();
+  if (currentRoomId !== roomId || !isBotTurn(room, players)) return;
+  botActionInFlight = true;
+  claimAndRunBotAction(roomId)
+    .catch(() => {})
+    .finally(() => {
+      botActionInFlight = false;
+    });
+}
+
 /**
- * Self-scheduling bot-turn poller (setTimeout, not setInterval) with exponential backoff on
- * failure. A burst of transient errors (e.g. a Firestore rate-limit blip) previously meant
- * every connected client kept retrying every 1.5s regardless, which only pours more load on
- * an already-throttled backend. On success (including "nothing to do right now") the delay
- * resets to the base cadence; on failure it doubles up to BOT_POLL_MAX_MS.
+ * Debounced entry point called from the room/players listeners. Coalesces bursts (room and
+ * players updating together, or several bot moves in a row) into one attempt, and jitters it
+ * slightly so multiple connected clients don't all open the write transaction in the same
+ * instant — Firestore resolves the resulting race safely either way, this just avoids paying
+ * for guaranteed-wasted contention retries. A bot's turn naturally chains: each committed
+ * action changes room/players, which re-fires this listener for the next move.
  */
-function scheduleBotPoll(roomId: string, get: () => GameStore, delay: number): void {
-  botPollTimeout = setTimeout(() => {
-    const current = get();
-    if (current.roomId !== roomId || current.room?.status !== 'playing') {
-      scheduleBotPoll(roomId, get, BOT_POLL_MS);
-      return;
-    }
-    claimAndRunBotAction(roomId)
-      .then(() => scheduleBotPoll(roomId, get, BOT_POLL_MS))
-      .catch(() => scheduleBotPoll(roomId, get, Math.min(delay * 2, BOT_POLL_MAX_MS)));
-  }, delay);
+function triggerBotCheck(roomId: string, get: () => GameStore): void {
+  if (botTriggerTimeout) return;
+  botTriggerTimeout = setTimeout(() => {
+    botTriggerTimeout = null;
+    runBotActionIfDue(roomId, get);
+  }, Math.random() * BOT_TRIGGER_JITTER_MS);
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -94,8 +120,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // localStorage unavailable (private browsing, etc) — non-fatal, just skip persistence.
     }
 
-    unsubscribers.push(subscribeRoom(roomId, (room) => set({ room })));
-    unsubscribers.push(subscribePlayers(roomId, (players) => set({ players })));
+    unsubscribers.push(
+      subscribeRoom(roomId, (room) => {
+        set({ room });
+        triggerBotCheck(roomId, get);
+      })
+    );
+    unsubscribers.push(
+      subscribePlayers(roomId, (players) => {
+        set({ players });
+        triggerBotCheck(roomId, get);
+      })
+    );
     unsubscribers.push(subscribeTrades(roomId, (trades) => set({ trades })));
     unsubscribers.push(subscribeChat(roomId, (chat) => set({ chat })));
 
@@ -108,9 +144,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }, HEARTBEAT_MS);
     }
 
-    // One driver per client polls to advance bot turns; claimAndRunBotAction is itself
-    // transaction-safe against every other connected client doing the same thing.
-    scheduleBotPoll(roomId, get, BOT_POLL_MS);
+    // Every connected client can drive bot turns (claimAndRunBotAction is transaction-safe
+    // against others doing the same), but only reactively — see triggerBotCheck. This
+    // low-frequency timer is purely a safety net for edge cases the listeners could miss
+    // (e.g. joining mid-bot-turn before any state change fires, or a stalled write).
+    botFallbackTimer = setInterval(() => runBotActionIfDue(roomId, get), BOT_FALLBACK_MS);
   },
 
   leaveRoom: () => {
