@@ -26,11 +26,20 @@ npm install
 npm run dev
 ```
 
-Run tests:
+Run unit tests:
 
 ```bash
 cd web
 npm run test
+```
+
+Run e2e tests (Playwright — drives the real app through Home → Lobby → a full game against production Firebase, at 1080p/ultrawide/1366×768; screenshots land in `web/e2e/screenshots/`):
+
+```bash
+cd web
+npx playwright install chromium   # first time only
+npm run test:e2e                  # headless, spins up its own dev server
+npm run test:e2e:ui               # interactive UI mode
 ```
 
 ## Deploy
