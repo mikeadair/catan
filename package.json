@@ -1,0 +1,13 @@
+{
+  "name": "catan",
+  "private": true,
+  "workspaces": [
+    "packages/engine",
+    "web",
+    "functions",
+    "firestore-tests"
+  ],
+  "devDependencies": {
+    "firebase-tools": "^13.29.1"
+  }
+}

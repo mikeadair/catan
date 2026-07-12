@@ -16,9 +16,9 @@ import {
   type DocumentReference,
   type Transaction,
 } from 'firebase/firestore';
-import { auth, db } from './config';
-import { createGame, applyAction, type GameStateBundle } from '../game/rules';
-import { decideBotAction } from '../game/bots';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from './config';
+import { decideBotAction } from '@catan/engine';
 import {
   PLAYER_COLORS,
   STARTING_BANK,
@@ -30,10 +30,11 @@ import {
   type PrivateHand,
   type TradeOffer,
   type GameAction,
+  type GameStateBundle,
   type MapPresetId,
   type BotDifficulty,
   type PlayerColor,
-} from '../game/types';
+} from '@catan/engine';
 
 // --- Firestore layout ---
 // rooms/{roomId}                                -> Omit<RoomState, 'id'>
@@ -41,6 +42,33 @@ import {
 // rooms/{roomId}/players/{uid}/private/hand      -> PrivateHand  (doc id literally "hand")
 // rooms/{roomId}/trades/{tradeId}                -> TradeOffer
 // rooms/{roomId}/chat/{msgId}                    -> ChatMessage
+// rooms/{roomId}/serverOnly/devDeck              -> { cards: DevCardType[] } (Cloud Functions only)
+//
+// All in-game mutation (rollDice, build*, trade*, ..., and startGame's initial deal) goes
+// through the submitAction/startGame Cloud Functions below, not direct Firestore writes —
+// see functions/src/{submitAction,startGame,roomIO}.ts for the authoritative counterpart of
+// what dispatchAction/claimAndRunBotAction/startGame used to do locally in this file.
+
+// Mirrors functions/src/submitAction.ts's request/response shape (kept as a local,
+// duplicated type rather than a shared import — functions/ depends on firebase-admin,
+// which web has no reason to pull in).
+interface SubmitActionRequest {
+  roomId: string;
+  action: GameAction;
+  asBotUid?: string;
+}
+interface SubmitActionResponse {
+  ok: true;
+}
+const submitActionCallable = httpsCallable<SubmitActionRequest, SubmitActionResponse>(functions, 'submitAction');
+
+interface StartGameRequest {
+  roomId: string;
+}
+interface StartGameResponse {
+  ok: true;
+}
+const startGameCallable = httpsCallable<StartGameRequest, StartGameResponse>(functions, 'startGame');
 
 export interface ChatMessage {
   id: string;
@@ -62,9 +90,6 @@ function playerRef(roomId: string, uid: string): DocumentReference {
 }
 function handRef(roomId: string, uid: string): DocumentReference {
   return doc(db, 'rooms', roomId, 'players', uid, 'private', 'hand');
-}
-function tradeRef(roomId: string, tradeId: string): DocumentReference {
-  return doc(db, 'rooms', roomId, 'trades', tradeId);
 }
 
 function newPublicPlayer(params: {
@@ -162,7 +187,8 @@ export async function createRoom(
     phase: 'lobby',
     diceRoll: null,
     bank: { ...STARTING_BANK },
-    devCardDeck: [],
+    devCardDeck: [], // placeholder while status is 'lobby' — no real deck exists yet, nothing to leak; startGame (Cloud Function) is what deals real cards, kept server-only
+    devCardDeckCount: 0,
     longestRoadUid: null,
     largestArmyUid: null,
     winnerUid: null,
@@ -276,313 +302,95 @@ export async function addBot(roomId: string, difficulty: BotDifficulty): Promise
 }
 
 export async function removeSeat(roomId: string, uid: string): Promise<void> {
-  await runTransaction(db, async (tx) => {
-    const ref = roomRef(roomId);
-    const pRef = playerRef(roomId, uid);
-    const [roomSnap, playerSnap] = await Promise.all([tx.get(ref), tx.get(pRef)]);
-    if (!roomSnap.exists()) {
-      throw new Error('Room not found');
-    }
-    const room = roomSnap.data() as Omit<RoomState, 'id'>;
-    const player = playerSnap.exists() ? (playerSnap.data() as PublicPlayer) : null;
-
-    const currentUid = auth.currentUser?.uid ?? null;
-    const isSelf = currentUid === uid;
-    const isHostKickingBot = currentUid === room.hostUid && !!player?.isBot;
-    if (!isSelf && !isHostKickingBot) {
-      throw new Error('Not allowed to remove this seat');
-    }
-
-    tx.update(ref, { turnOrder: room.turnOrder.filter((u) => u !== uid) });
-    tx.delete(pRef);
-    tx.delete(handRef(roomId, uid));
-  });
-}
-
-export async function startGame(roomId: string): Promise<void> {
-  const ref = roomRef(roomId);
-  const roomSnap = await getDoc(ref);
+  const roomSnap = await getDoc(roomRef(roomId));
   if (!roomSnap.exists()) {
     throw new Error('Room not found');
   }
   const room = roomSnap.data() as Omit<RoomState, 'id'>;
 
-  const currentUid = auth.currentUser?.uid ?? null;
-  if (currentUid !== room.hostUid) {
-    throw new Error('Only the host can start the game');
+  // Lobby: still a direct client write, same as every other lobby-management action —
+  // nothing hidden or resource-bearing is at stake before a game starts.
+  if (room.status === 'lobby') {
+    await runTransaction(db, async (tx) => {
+      const ref = roomRef(roomId);
+      const pRef = playerRef(roomId, uid);
+      const [roomTxSnap, playerSnap] = await Promise.all([tx.get(ref), tx.get(pRef)]);
+      if (!roomTxSnap.exists()) {
+        throw new Error('Room not found');
+      }
+      const roomTx = roomTxSnap.data() as Omit<RoomState, 'id'>;
+      const player = playerSnap.exists() ? (playerSnap.data() as PublicPlayer) : null;
+
+      const currentUid = auth.currentUser?.uid ?? null;
+      const isSelf = currentUid === uid;
+      const isHostKickingBot = currentUid === roomTx.hostUid && !!player?.isBot;
+      if (!isSelf && !isHostKickingBot) {
+        throw new Error('Not allowed to remove this seat');
+      }
+
+      // No hand-doc delete here: a hand can only ever exist once startGame (Cloud
+      // Function) has run, which also flips status to 'playing' in the same transaction —
+      // so a hand never exists while status is still 'lobby'. (It also couldn't succeed
+      // anymore: private/hand's write rule is now unconditionally `false` for clients.)
+      tx.update(ref, { turnOrder: roomTx.turnOrder.filter((u) => u !== uid) });
+      tx.delete(pRef);
+    });
+    return;
   }
-  if (room.status !== 'lobby') {
-    throw new Error('Game already started');
-  }
 
-  const playersSnap = await getDocs(collection(db, 'rooms', roomId, 'players'));
-  const playersByUid = new Map<string, PublicPlayer>();
-  playersSnap.forEach((d) => playersByUid.set(d.id, d.data() as PublicPlayer));
-
-  const seatedPlayers = room.turnOrder.map((uid) => {
-    const p = playersByUid.get(uid);
-    if (!p) {
-      throw new Error(`Missing player doc for seated uid ${uid}`);
-    }
-    return {
-      uid: p.uid,
-      displayName: p.displayName,
-      isBot: p.isBot,
-      ...(p.botDifficulty ? { botDifficulty: p.botDifficulty } : {}),
-    };
-  });
-
-  const bundle = createGame(
-    {
-      id: roomId,
-      code: room.code,
-      hostUid: room.hostUid,
-      mapPreset: room.mapPreset,
-      seed: room.seed,
-      // Host-configured house rules, set at createRoom time — createGame defaults these
-      // internally if omitted, but we always have them here since every room carries them
-      // from creation onward.
-      victoryPointsToWin: room.victoryPointsToWin,
-      discardLimit: room.discardLimit,
-      turnTimerSeconds: room.turnTimerSeconds,
-    },
-    seatedPlayers
-  );
-
-  const { id: _bundleRoomId, ...bundleRoomWithoutId } = bundle.room;
-  void _bundleRoomId;
-  // Defensive belt-and-suspenders: re-assert the configured house rules even though
-  // createGame already threads them through, in case a future createGame revision ever
-  // stops doing so.
-  const roomToWrite: Omit<RoomState, 'id'> = {
-    ...bundleRoomWithoutId,
-    status: 'playing',
-    victoryPointsToWin: room.victoryPointsToWin,
-    discardLimit: room.discardLimit,
-    turnTimerSeconds: room.turnTimerSeconds,
-  };
-
-  const batch = writeBatch(db);
-  batch.set(ref, roomToWrite);
-  for (const uid of Object.keys(bundle.players)) {
-    batch.set(playerRef(roomId, uid), bundle.players[uid]);
-  }
-  for (const uid of Object.keys(bundle.hands)) {
-    batch.set(handRef(roomId, uid), bundle.hands[uid]);
-  }
-  await batch.commit();
+  // Mid-game: a game-rule (leave/kick invariants, turn-order reindexing, award
+  // reassignment, ...) now enforced server-side — see rules.ts's 'removeSeat' case.
+  const currentUid = auth.currentUser?.uid ?? '';
+  await submitActionCallable({ roomId, action: { type: 'removeSeat', uid: currentUid, targetUid: uid } });
 }
 
-export function neededHandUidsFor(action: GameAction, turnOrder: string[]): Set<string> {
-  const uids = new Set<string>([action.uid]);
-  if ((action.type === 'playKnight' || action.type === 'moveRobber') && action.stealFromUid) {
-    uids.add(action.stealFromUid);
-  }
-  if (action.type === 'playMonopoly') {
-    turnOrder.forEach((u) => uids.add(u));
-  }
-  if (action.type === 'rollDice') {
-    // distributeResources can credit ANY player with a settlement/city adjacent to the
-    // rolled number, not just the roller — every hand needs to be loaded into the
-    // transaction bundle or rules.ts throws trying to credit an unloaded player's hand.
-    turnOrder.forEach((u) => uids.add(u));
-  }
-  return uids;
-}
-
-async function loadRoomForTx(tx: Transaction, roomId: string): Promise<RoomState> {
-  const snap = await tx.get(roomRef(roomId));
-  if (!snap.exists()) {
-    throw new Error('Room not found');
-  }
-  return { id: roomId, ...(snap.data() as Omit<RoomState, 'id'>) };
-}
-
-/**
- * Reads whatever public players / hands / trades this specific action needs, applies it
- * via game/rules.ts's pure `applyAction`, and writes back only the docs that changed.
- *
- * Trade-off: this SDK version's `Transaction.get` only accepts a `DocumentReference`
- * (verified against the installed @firebase/firestore v12.16.0 typings — no `Query`
- * overload), so a fully transactional `where('status','==','pending')` read isn't
- * available. Callers instead take a non-transactional snapshot of pending trades
- * (`pendingTrades`) before starting the transaction; the *specific* trade this action
- * touches (respondTrade/cancelTrade's tradeId) is still read+written transactionally by
- * id here, so accept/reject/cancel races on a single trade are still safe. Unrelated
- * pending trades included in the returned bundle purely for context may be up to a poll
- * interval stale.
- */
-async function applyActionInTransaction(
-  tx: Transaction,
-  roomId: string,
-  room: RoomState,
-  action: GameAction,
-  pendingTrades: TradeOffer[],
-  roomPatch: Partial<RoomState> = {}
-): Promise<void> {
-  // Public players: read directly by uid off room.turnOrder (bounded, no wildcard read needed).
-  const playerUids = room.turnOrder;
-  const playerSnaps = await Promise.all(playerUids.map((uid) => tx.get(playerRef(roomId, uid))));
-  const players: Record<string, PublicPlayer> = {};
-  playerUids.forEach((uid, i) => {
-    const snap = playerSnaps[i];
-    if (snap.exists()) players[uid] = snap.data() as PublicPlayer;
-  });
-
-  // Trades: merge the non-transactional pending snapshot with a transactional read of the
-  // specific trade this action references (if any), so accept/cancel are race-safe.
-  const tradesById = new Map(pendingTrades.map((t) => [t.id, t]));
-  if (action.type === 'respondTrade' || action.type === 'cancelTrade') {
-    const specificSnap = await tx.get(tradeRef(roomId, action.tradeId));
-    if (specificSnap.exists()) {
-      tradesById.set(action.tradeId, specificSnap.data() as TradeOffer);
-    } else {
-      tradesById.delete(action.tradeId);
-    }
-  }
-  const trades = [...tradesById.values()];
-
-  // Hands: only what this action needs (acting player, steal/monopoly targets, and — for
-  // respondTrade — the trade proposer, since accept swaps resources between both sides).
-  const neededHandUids = neededHandUidsFor(action, room.turnOrder);
-  if (action.type === 'respondTrade') {
-    const trade = tradesById.get(action.tradeId);
-    if (trade) neededHandUids.add(trade.proposerUid);
-  }
-  const neededHandUidList = [...neededHandUids];
-  const handSnaps = await Promise.all(neededHandUidList.map((uid) => tx.get(handRef(roomId, uid))));
-  const hands: Record<string, PrivateHand> = {};
-  neededHandUidList.forEach((uid, i) => {
-    const snap = handSnaps[i];
-    if (snap.exists()) hands[uid] = snap.data() as PrivateHand;
-  });
-
-  const bundle: GameStateBundle = { room, players, hands, trades };
-  const rawNextBundle = applyAction(bundle, action); // throws Error(message) on illegal action
-  const nextBundle: GameStateBundle = {
-    ...rawNextBundle,
-    room: { ...rawNextBundle.room, ...roomPatch },
-  };
-
-  // Write back only what changed.
-  if (JSON.stringify(room) !== JSON.stringify(nextBundle.room)) {
-    const { id: _nextRoomId, ...nextRoomData } = nextBundle.room;
-    void _nextRoomId;
-    tx.set(roomRef(roomId), nextRoomData);
-  }
-
-  for (const uid of Object.keys(nextBundle.players)) {
-    if (JSON.stringify(players[uid]) !== JSON.stringify(nextBundle.players[uid])) {
-      tx.set(playerRef(roomId, uid), nextBundle.players[uid]);
-    }
-  }
-
-  for (const uid of neededHandUidList) {
-    const next = nextBundle.hands[uid];
-    if (next && JSON.stringify(hands[uid]) !== JSON.stringify(next)) {
-      tx.set(handRef(roomId, uid), next);
-    }
-  }
-
-  for (const trade of nextBundle.trades) {
-    const prev = tradesById.get(trade.id);
-    if (!prev || JSON.stringify(prev) !== JSON.stringify(trade)) {
-      tx.set(tradeRef(roomId, trade.id), trade);
-    }
-  }
-}
-
-// Of every action type, only endTurn actually reads the broader pending-trades list (to
-// auto-cancel the actor's own open offers) — proposeTrade doesn't consult existing trades,
-// and respondTrade/cancelTrade fetch their specific trade transactionally by id regardless
-// (see applyActionInTransaction below). Skipping this getDocs() call for every other action
-// type removes a full extra network round-trip before the real transaction even starts,
-// which was adding up to ~30-50% of the latency on the most common actions (rolls, builds,
-// dev cards).
-async function fetchPendingTradesIfNeeded(roomId: string, action: GameAction): Promise<TradeOffer[]> {
-  if (action.type !== 'endTurn') return [];
-  const pendingTradesSnap = await getDocs(
-    query(collection(db, 'rooms', roomId, 'trades'), where('status', '==', 'pending'), limit(20))
-  );
-  return pendingTradesSnap.docs.map((d) => d.data() as TradeOffer);
+export async function startGame(roomId: string): Promise<void> {
+  await startGameCallable({ roomId });
 }
 
 export async function dispatchAction(roomId: string, action: GameAction): Promise<void> {
-  const pendingTrades = await fetchPendingTradesIfNeeded(roomId, action);
-
-  await runTransaction(db, async (tx) => {
-    const room = await loadRoomForTx(tx, roomId);
-    if (room.status !== 'playing') {
-      throw new Error('Game is not in progress');
-    }
-    await applyActionInTransaction(tx, roomId, room, action, pendingTrades);
-  });
+  await submitActionCallable({ roomId, action });
 }
 
-export async function claimAndRunBotAction(roomId: string): Promise<boolean> {
-  return runTransaction(db, async (tx) => {
-    const room = await loadRoomForTx(tx, roomId);
-    if (room.status !== 'playing') return false;
+export async function claimAndRunBotAction(roomId: string, room: RoomState, players: Record<string, PublicPlayer>): Promise<boolean> {
+  if (room.status !== 'playing') return false;
 
-    const botUid = room.turnOrder[room.currentPlayerIndex];
-    if (!botUid) return false;
+  const botUid = room.turnOrder[room.currentPlayerIndex];
+  if (!botUid) return false;
 
-    const currentPlayerSnap = await tx.get(playerRef(roomId, botUid));
-    const currentPlayer = currentPlayerSnap.exists() ? (currentPlayerSnap.data() as PublicPlayer) : null;
-    if (!currentPlayer?.isBot) return false;
+  const currentPlayer = players[botUid];
+  if (!currentPlayer?.isBot) return false;
 
-    const now = Date.now();
-    const existingClaim = room.botActionClaim;
-    const claimIsFresh = !!existingClaim && now - existingClaim.ts < BOT_CLAIM_STALE_MS;
-    if (claimIsFresh) return false; // another client already holds a fresh claim
+  // Client-side politeness check only, to skip a redundant invocation when another client
+  // is likely already driving this bot's turn — NOT the source of double-execution safety.
+  // That safety now lives inside submitAction's Firestore transaction: two concurrent
+  // callers both submit their (already-decided) action, whichever commits first wins, and
+  // the loser's transaction reads the now-advanced state on retry and fails with a normal
+  // "not your turn"/phase-mismatch error from rules.ts, which callers of this function
+  // should treat as a harmless no-op.
+  const now = Date.now();
+  const existingClaim = room.botActionClaim;
+  const claimIsFresh = !!existingClaim && now - existingClaim.ts < BOT_CLAIM_STALE_MS;
+  if (claimIsFresh) return false;
 
-    // Gather everything decideBotAction/applyAction might need before any writes (Firestore
-    // transactions require all reads before all writes).
-    const playerUids = room.turnOrder;
-    const playerSnaps = await Promise.all(playerUids.map((uid) => tx.get(playerRef(roomId, uid))));
-    const players: Record<string, PublicPlayer> = {};
-    playerUids.forEach((uid, i) => {
-      const snap = playerSnaps[i];
-      if (snap.exists()) players[uid] = snap.data() as PublicPlayer;
-    });
+  const botHandSnap = await getDoc(handRef(roomId, botUid));
+  const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
 
-    const botHandSnap = await tx.get(handRef(roomId, botUid));
-    const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
+  // trades: [] — decideBotAction only ever consults `bundle.trades` via
+  // decideTradeResponse, which is for reacting to another player's turn. This driver only
+  // ever acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]),
+  // so that branch is unreachable here.
+  const decisionBundle: GameStateBundle = {
+    room,
+    players,
+    hands: botHand ? { [botUid]: botHand } : {},
+    trades: [],
+  };
+  const action = decideBotAction(decisionBundle, botUid);
+  if (!action) return false;
 
-    // trades: [] — decideBotAction only ever consults `bundle.trades` via
-    // decideTradeResponse, which is for reacting to another player's turn. This driver only
-    // ever acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]),
-    // so that branch is unreachable here; skipping the fetch avoids a wasted read on every
-    // poll tick.
-    const decisionBundle: GameStateBundle = {
-      room,
-      players,
-      hands: botHand ? { [botUid]: botHand } : {},
-      trades: [],
-    };
-    const action = decideBotAction(decisionBundle, botUid);
-
-    if (!action) {
-      tx.set(roomRef(roomId), { botActionClaim: null }, { merge: true });
-      return false;
-    }
-
-    // Only endTurn actually needs the broader pending-trades list (see
-    // fetchPendingTradesIfNeeded) — fetched here, after deciding, so every other action type
-    // (the vast majority of bot moves) skips this read entirely.
-    const pendingTrades = await fetchPendingTradesIfNeeded(roomId, action);
-
-    // Claim + apply as one atomic write. Note: because this whole flow (claim, decide,
-    // apply, clear) runs inside a single transaction, the botActionClaim field is never
-    // observably non-null to other clients on success — real double-execution safety comes
-    // from Firestore's optimistic-concurrency conflict detection + automatic transaction
-    // retry, not from this field. The 5s staleness window here is a defensive/observability
-    // guard (and matches the documented contract) rather than the sole correctness mechanism.
-    await applyActionInTransaction(tx, roomId, room, action, pendingTrades, {
-      botActionClaim: null,
-    });
-    return true;
-  });
+  await submitActionCallable({ roomId, action, asBotUid: botUid });
+  return true;
 }
 
 export function subscribeRoom(roomId: string, cb: (room: RoomState | null) => void): () => void {

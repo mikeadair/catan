@@ -1,0 +1,14 @@
+{
+  "name": "firestore-tests",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.16.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.10"
+  }
+}

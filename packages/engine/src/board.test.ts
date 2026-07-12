@@ -1,0 +1,176 @@
+import { describe, expect, it } from 'vitest';
+import { edgeMidpoint, generateBoard, hexPixel, vertexPixel } from './board';
+import { TERRAIN_RESOURCE, type Terrain } from './types';
+
+const ALL_TERRAINS: Terrain[] = ['hills', 'forest', 'mountains', 'fields', 'pasture', 'desert'];
+
+function terrainCounts(board: ReturnType<typeof generateBoard>): Record<Terrain, number> {
+  const counts = Object.fromEntries(ALL_TERRAINS.map((t) => [t, 0])) as Record<Terrain, number>;
+  for (const hex of board.hexes) counts[hex.terrain]++;
+  return counts;
+}
+
+function numberMultiset(board: ReturnType<typeof generateBoard>): number[] {
+  return board.hexes
+    .map((h) => h.number)
+    .filter((n): n is number => n !== null)
+    .sort((a, b) => a - b);
+}
+
+const EXPECTED_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12].sort((a, b) => a - b);
+
+describe('generateBoard: counts', () => {
+  for (const preset of ['official-beginner', 'balanced-random', 'chaos'] as const) {
+    it(`${preset}: has 19 hexes with correct terrain/number/port counts`, () => {
+      const board = generateBoard(preset, `seed-${preset}`);
+      expect(board.hexes).toHaveLength(19);
+
+      const counts = terrainCounts(board);
+      expect(counts.hills).toBe(3);
+      expect(counts.forest).toBe(4);
+      expect(counts.mountains).toBe(3);
+      expect(counts.fields).toBe(4);
+      expect(counts.pasture).toBe(4);
+      expect(counts.desert).toBe(1);
+
+      expect(numberMultiset(board)).toEqual(EXPECTED_NUMBERS);
+
+      const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
+      expect(desertHexes).toHaveLength(1);
+      expect(desertHexes[0].number).toBeNull();
+      expect(board.robberHexId).toBe(desertHexes[0].id);
+
+      expect(board.ports).toHaveLength(9);
+      const generic = board.ports.filter((p) => p.type === 'generic');
+      expect(generic).toHaveLength(4);
+      for (const r of ['brick', 'lumber', 'ore', 'grain', 'wool'] as const) {
+        expect(board.ports.filter((p) => p.type === r)).toHaveLength(1);
+      }
+      for (const port of board.ports) {
+        expect(new Set(port.vertexIds).size).toBe(2);
+      }
+    });
+  }
+});
+
+describe('generateBoard: determinism', () => {
+  it('same preset+seed produces an identical board', () => {
+    const a = generateBoard('chaos', 'my-seed-123');
+    const b = generateBoard('chaos', 'my-seed-123');
+    expect(a).toEqual(b);
+  });
+
+  it('different seeds produce different chaos boards', () => {
+    const a = generateBoard('chaos', 'seed-A');
+    const b = generateBoard('chaos', 'seed-B');
+    expect(a.hexes.map((h) => h.terrain)).not.toEqual(b.hexes.map((h) => h.terrain));
+  });
+
+  it('official-beginner is identical regardless of seed', () => {
+    const a = generateBoard('official-beginner', 'seed-A');
+    const b = generateBoard('official-beginner', 'seed-B');
+    expect(a.hexes.map((h) => h.terrain)).toEqual(b.hexes.map((h) => h.terrain));
+    expect(a.hexes.map((h) => h.number)).toEqual(b.hexes.map((h) => h.number));
+  });
+});
+
+describe('generateBoard: balanced-random fairness', () => {
+  it('never places two 6/8 tokens on hex-adjacent tiles, across many seeds', () => {
+    for (let i = 0; i < 25; i++) {
+      const board = generateBoard('balanced-random', `fair-seed-${i}`);
+      const hot = board.hexes.filter((h) => h.number === 6 || h.number === 8);
+      for (let a = 0; a < hot.length; a++) {
+        for (let b = a + 1; b < hot.length; b++) {
+          const dq = Math.abs(hot[a].coord.q - hot[b].coord.q);
+          const dr = Math.abs(hot[a].coord.r - hot[b].coord.r);
+          const ds = Math.abs(hot[a].coord.q + hot[a].coord.r - (hot[b].coord.q + hot[b].coord.r));
+          const isAdjacent = Math.max(dq, dr, ds) === 1;
+          expect(isAdjacent).toBe(false);
+        }
+      }
+    }
+  });
+});
+
+describe('board adjacency', () => {
+  const board = generateBoard('chaos', 'adjacency-seed');
+
+  it('every vertex touches 1-3 hexes and 2-3 edges/vertices', () => {
+    for (const v of Object.values(board.vertices)) {
+      expect(v.adjacentHexIds.length).toBeGreaterThanOrEqual(1);
+      expect(v.adjacentHexIds.length).toBeLessThanOrEqual(3);
+      expect(v.adjacentEdgeIds.length).toBeGreaterThanOrEqual(2);
+      expect(v.adjacentEdgeIds.length).toBeLessThanOrEqual(3);
+      expect(v.adjacentVertexIds.length).toBe(v.adjacentEdgeIds.length);
+    }
+  });
+
+  it('vertex adjacency is symmetric', () => {
+    for (const v of Object.values(board.vertices)) {
+      for (const n of v.adjacentVertexIds) {
+        const neighbor = board.vertices[n];
+        expect(neighbor).toBeDefined();
+        expect(neighbor.adjacentVertexIds).toContain(v.id);
+      }
+    }
+  });
+
+  it('every edge references exactly 2 distinct vertices that both know about it', () => {
+    for (const e of Object.values(board.edges)) {
+      expect(e.vertexIds).toHaveLength(2);
+      expect(e.vertexIds[0]).not.toBe(e.vertexIds[1]);
+      for (const vId of e.vertexIds) {
+        const v = board.vertices[vId];
+        expect(v.adjacentEdgeIds).toContain(e.id);
+      }
+      expect(e.adjacentHexIds.length).toBeGreaterThanOrEqual(1);
+      expect(e.adjacentHexIds.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('total hexes touching each vertex matches count of distinct terrains at that corner', () => {
+    // sanity: hex count referenced by vertices should be consistent with 19 hexes, 6 corners each
+    const totalCorners = board.hexes.length * 6;
+    let sum = 0;
+    for (const v of Object.values(board.vertices)) sum += v.adjacentHexIds.length;
+    expect(sum).toBe(totalCorners);
+  });
+
+  it('terrain/resource mapping is consistent for adjacent hexes', () => {
+    for (const hex of board.hexes) {
+      if (hex.terrain === 'desert') continue;
+      expect(TERRAIN_RESOURCE[hex.terrain]).toBeDefined();
+    }
+  });
+});
+
+describe('geometry helpers', () => {
+  const board = generateBoard('chaos', 'geometry-seed');
+
+  it('hexPixel scales linearly with size', () => {
+    const p1 = hexPixel({ q: 1, r: -1 }, 1);
+    const p2 = hexPixel({ q: 1, r: -1 }, 10);
+    expect(p2.x).toBeCloseTo(p1.x * 10, 6);
+    expect(p2.y).toBeCloseTo(p1.y * 10, 6);
+  });
+
+  it('vertexPixel scales with size and throws for unknown vertex', () => {
+    const someVertexId = Object.keys(board.vertices)[0];
+    const p1 = vertexPixel(someVertexId, board, 1);
+    const p2 = vertexPixel(someVertexId, board, 5);
+    expect(p2.x).toBeCloseTo(p1.x * 5, 6);
+    expect(p2.y).toBeCloseTo(p1.y * 5, 6);
+    expect(() => vertexPixel('not-a-real-vertex', board, 1)).toThrow();
+  });
+
+  it('edgeMidpoint is the average of its two vertex positions', () => {
+    const someEdgeId = Object.keys(board.edges)[0];
+    const edge = board.edges[someEdgeId];
+    const [a, b] = edge.vertexIds;
+    const pa = vertexPixel(a, board, 3);
+    const pb = vertexPixel(b, board, 3);
+    const mid = edgeMidpoint(someEdgeId, board, 3);
+    expect(mid.x).toBeCloseTo((pa.x + pb.x) / 2, 6);
+    expect(mid.y).toBeCloseTo((pa.y + pb.y) / 2, 6);
+  });
+});

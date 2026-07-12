@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { neededHandUidsFor } from './rooms';
+import { neededHandUidsFor } from './actionHands';
 
 // Regression test for a real production bug: rollDice's distributeResources (rules.ts)
 // can credit ANY player with a settlement/city adjacent to the rolled number, not just

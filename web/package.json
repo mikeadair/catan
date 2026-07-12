@@ -13,6 +13,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@catan/engine": "*",
     "firebase": "^12.16.0",
     "nanoid": "^5.1.16",
     "react": "^19.2.7",

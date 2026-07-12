@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { RoomState, PublicPlayer, PrivateHand, TradeOffer, GameAction } from '../game/types';
+import type { RoomState, PublicPlayer, PrivateHand, TradeOffer, GameAction } from '@catan/engine';
 import {
   subscribeRoom,
   subscribePlayers,
@@ -74,9 +74,9 @@ function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>
 function runBotActionIfDue(roomId: string, get: () => GameStore): void {
   if (botActionInFlight) return;
   const { roomId: currentRoomId, room, players } = get();
-  if (currentRoomId !== roomId || !isBotTurn(room, players)) return;
+  if (currentRoomId !== roomId || !room || !isBotTurn(room, players)) return;
   botActionInFlight = true;
-  claimAndRunBotAction(roomId)
+  claimAndRunBotAction(roomId, room, players)
     .catch(() => {})
     .finally(() => {
       botActionInFlight = false;
