@@ -7,6 +7,7 @@ import { MAP_PRESETS } from '../game/mapPresets';
 import {
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TURN_TIMER_SECONDS,
   type MapPresetId,
 } from '../game/types';
 import './Home.css';
@@ -36,6 +37,8 @@ const VP_MIN = 5;
 const VP_MAX = 15;
 const DISCARD_MIN = 4;
 const DISCARD_MAX = 12;
+const TURN_TIMER_MIN = 30;
+const TURN_TIMER_MAX = 600;
 
 export default function Home({ uid }: { uid: string }): JSX.Element {
   const [name, setName] = useState<string>(loadStoredName);
@@ -44,6 +47,8 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [victoryPointsToWin, setVictoryPointsToWin] = useState(DEFAULT_VICTORY_POINTS_TO_WIN);
   const [discardLimit, setDiscardLimit] = useState(DEFAULT_DISCARD_LIMIT);
+  const [turnTimerEnabled, setTurnTimerEnabled] = useState(true);
+  const [turnTimerSeconds, setTurnTimerSeconds] = useState(DEFAULT_TURN_TIMER_SECONDS);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -82,6 +87,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       const { roomId } = await createRoom(uid, finalName, selectedPreset, {
         victoryPointsToWin,
         discardLimit,
+        turnTimerSeconds: turnTimerEnabled ? turnTimerSeconds : null,
       });
       useGameStore.getState().enterRoom(roomId);
     } catch (err) {
@@ -198,6 +204,30 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
                     )
                   }
                 />
+              </label>
+              <label className="home__field home__field--checkbox">
+                <span className="home__label">Turn timer</span>
+                <span className="home__checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={turnTimerEnabled}
+                    onChange={(e) => setTurnTimerEnabled(e.target.checked)}
+                  />
+                  <input
+                    type="number"
+                    min={TURN_TIMER_MIN}
+                    max={TURN_TIMER_MAX}
+                    step={15}
+                    disabled={!turnTimerEnabled}
+                    value={turnTimerSeconds}
+                    onChange={(e) =>
+                      setTurnTimerSeconds(
+                        Math.min(TURN_TIMER_MAX, Math.max(TURN_TIMER_MIN, Number(e.target.value) || TURN_TIMER_MIN))
+                      )
+                    }
+                  />
+                  <span className="home__field-hint">seconds (shown as a countdown, not enforced)</span>
+                </span>
               </label>
             </div>
           )}

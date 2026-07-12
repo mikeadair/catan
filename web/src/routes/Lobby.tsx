@@ -177,6 +177,10 @@ export default function Lobby(): JSX.Element {
             <dt>Discard limit</dt>
             <dd>{room.discardLimit}</dd>
           </div>
+          <div className="lobby__settings-row">
+            <dt>Turn timer</dt>
+            <dd>{room.turnTimerSeconds ? `${room.turnTimerSeconds}s` : 'Off'}</dd>
+          </div>
         </dl>
       </div>
     </div>

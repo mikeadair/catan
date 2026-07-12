@@ -1,0 +1,30 @@
+.turn-timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.turn-timer--low {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  animation: turn-timer-pulse 1s infinite;
+}
+
+@keyframes turn-timer-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}

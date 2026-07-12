@@ -9,6 +9,7 @@ import PlayerRoster from '../components/PlayerRoster';
 import BankPanel from '../components/BankPanel';
 import GameLog from '../components/GameLog';
 import DiceRoller from '../components/DiceRoller';
+import TurnTimer from '../components/TurnTimer';
 import BuildToolbar, { type BuildMode } from '../components/BuildToolbar';
 import DevCardPanel from '../components/DevCardPanel';
 import TradePanel from '../components/TradePanel';
@@ -329,6 +330,7 @@ export default function Game(): JSX.Element {
             <ResourceHand resources={resources} />
           </div>
           <DiceRoller diceRoll={room.diceRoll} canRoll={legalTypes.includes('rollDice')} onRoll={() => void runAction({ type: 'rollDice', uid })} />
+          <TurnTimer turnStartedAt={room.turnStartedAt} turnTimerSeconds={room.turnTimerSeconds} />
           <BuildToolbar
             resources={resources}
             legalTypes={legalTypes}
