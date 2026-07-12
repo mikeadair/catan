@@ -1,0 +1,89 @@
+.trade-offers {
+  background: var(--color-panel);
+  border: 1px solid var(--color-accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.trade-offers__header {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.trade-offers__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trade-offers__trade {
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trade-offers__desc {
+  font-size: 12.5px;
+}
+
+.trade-offers__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.trade-offers__actions button {
+  background: var(--color-accent);
+  color: #1c1c1c;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.trade-offers__actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: var(--color-panel);
+  color: var(--color-text-dim);
+}
+
+.trade-offers__interested {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trade-offers__interested button {
+  background: var(--color-success);
+  color: #0c1c12;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-weight: 700;
+  font-size: 12px;
+  text-align: left;
+}
+
+.trade-offers__interested button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.trade-offers__waiting {
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--color-text-dim);
+  align-self: center;
+}

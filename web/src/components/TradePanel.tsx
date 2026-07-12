@@ -1,6 +1,6 @@
 import { useState, type JSX } from 'react';
-import type { PublicPlayer, Resource, ResourceCount, RoomState, TradeOffer } from '../game/types';
-import { RESOURCES } from '../game/types';
+import type { PublicPlayer, Resource, ResourceCount, RoomState } from '@catan/engine';
+import { RESOURCES } from '@catan/engine';
 import ResourceHand from './ResourceHand';
 import './TradePanel.css';
 
@@ -27,15 +27,12 @@ export interface TradePanelProps {
   players: Record<string, PublicPlayer>;
   uid: string;
   ownResources: ResourceCount;
-  trades: TradeOffer[];
   canTrade: boolean;
   /** True while a different action is already in flight — blocks new trade actions to
    * avoid double-submits. */
   blocked: boolean;
   onBankTrade: (give: Resource, giveAmount: number, receive: Resource) => void;
   onProposeTrade: (give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) => void;
-  onRespondTrade: (tradeId: string, accept: boolean) => void;
-  onCancelTrade: (tradeId: string) => void;
 }
 
 export default function TradePanel({
@@ -43,13 +40,10 @@ export default function TradePanel({
   players,
   uid,
   ownResources,
-  trades,
   canTrade,
   blocked,
   onBankTrade,
   onProposeTrade,
-  onRespondTrade,
-  onCancelTrade,
 }: TradePanelProps): JSX.Element {
   const rates = computePortRates(room, uid);
 
@@ -102,10 +96,6 @@ export default function TradePanel({
     setOfferReceive({});
   }
 
-  const relevantTrades = trades.filter(
-    (t) => t.status === 'pending' && (t.proposerUid === uid || t.targetUid === uid || t.targetUid === null),
-  );
-
   const otherPlayers = Object.values(players).filter((p) => p.uid !== uid);
 
   return (
@@ -154,47 +144,6 @@ export default function TradePanel({
           </button>
         </div>
       </div>
-
-      <div className="trade-panel__section">
-        <div className="trade-panel__header">Pending Trades</div>
-        {relevantTrades.length === 0 && <div className="trade-panel__empty">No pending trades.</div>}
-        <div className="trade-panel__trades">
-          {relevantTrades.map((t) => {
-            const proposer = players[t.proposerUid];
-            const isMine = t.proposerUid === uid;
-            return (
-              <div key={t.id} className="trade-panel__trade">
-                <div className="trade-panel__trade-desc">
-                  <strong>{isMine ? 'You' : proposer?.displayName ?? 'Someone'}</strong> offers{' '}
-                  {describeResources(t.give)} for {describeResources(t.receive)}
-                  {t.targetUid === null && !isMine ? ' (open to all)' : ''}
-                </div>
-                <div className="trade-panel__trade-actions">
-                  {isMine ? (
-                    <button type="button" onClick={() => onCancelTrade(t.id)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
-                      Cancel
-                    </button>
-                  ) : (
-                    <>
-                      <button type="button" onClick={() => onRespondTrade(t.id, true)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
-                        Accept
-                      </button>
-                      <button type="button" onClick={() => onRespondTrade(t.id, false)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
-}
-
-function describeResources(r: Partial<ResourceCount>): string {
-  const parts = RESOURCES.filter((res) => (r[res] ?? 0) > 0).map((res) => `${r[res]} ${res}`);
-  return parts.length > 0 ? parts.join(', ') : 'nothing';
 }

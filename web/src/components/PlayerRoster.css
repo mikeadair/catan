@@ -110,3 +110,17 @@
 .player-roster__icon-badge {
   margin-left: 2px;
 }
+
+.player-roster__pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-accent);
+}
+
+.player-roster__piece {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}

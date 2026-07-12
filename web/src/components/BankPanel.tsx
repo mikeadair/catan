@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { ResourceCount } from '../game/types';
+import type { ResourceCount } from '@catan/engine';
 import ResourceHand from './ResourceHand';
 import './BankPanel.css';
 

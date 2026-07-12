@@ -1,18 +1,24 @@
 import type { JSX } from 'react';
-import type { GameAction, ResourceCount } from '../game/types';
-import { BUILD_COSTS } from '../game/types';
+import { BUILD_COSTS, type GameAction, type ResourceCount } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './BuildToolbar.css';
 
-function CostChips({ cost }: { cost: Partial<ResourceCount> }): JSX.Element {
+function CostChips({ cost, resources }: { cost: Partial<ResourceCount>; resources: ResourceCount }): JSX.Element {
   return (
     <span className="build-toolbar__cost">
-      {(Object.keys(cost) as (keyof ResourceCount)[]).map((r) => (
-        <span key={r} className="build-toolbar__cost-chip">
-          <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="build-toolbar__cost-icon" />
-          {cost[r]}
-        </span>
-      ))}
+      {(Object.keys(cost) as (keyof ResourceCount)[]).map((r) => {
+        const have = resources[r] >= (cost[r] ?? 0);
+        return (
+          <span
+            key={r}
+            className={`build-toolbar__cost-chip${have ? '' : ' build-toolbar__cost-chip--short'}`}
+            title={`${RESOURCE_LABEL[r]}: have ${resources[r]}, need ${cost[r]}`}
+          >
+            <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="build-toolbar__cost-icon" />
+            {cost[r]}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -99,7 +105,7 @@ export default function BuildToolbar({
         onClick={() => onToggleMode('road')}
       >
         <span className="build-toolbar__label">Road</span>
-        <CostChips cost={BUILD_COSTS.road} />
+        <CostChips cost={BUILD_COSTS.road} resources={resources} />
       </button>
       <button
         type="button"
@@ -109,7 +115,7 @@ export default function BuildToolbar({
         onClick={() => onToggleMode('settlement')}
       >
         <span className="build-toolbar__label">Settlement</span>
-        <CostChips cost={BUILD_COSTS.settlement} />
+        <CostChips cost={BUILD_COSTS.settlement} resources={resources} />
       </button>
       <button
         type="button"
@@ -119,7 +125,7 @@ export default function BuildToolbar({
         onClick={() => onToggleMode('city')}
       >
         <span className="build-toolbar__label">City</span>
-        <CostChips cost={BUILD_COSTS.city} />
+        <CostChips cost={BUILD_COSTS.city} resources={resources} />
       </button>
       <button
         type="button"
@@ -129,7 +135,7 @@ export default function BuildToolbar({
         onClick={onBuyDevCard}
       >
         <span className="build-toolbar__label">{isBuyingDevCard ? 'Buying…' : 'Dev Card'}</span>
-        <CostChips cost={BUILD_COSTS.devCard} />
+        <CostChips cost={BUILD_COSTS.devCard} resources={resources} />
       </button>
       <button
         type="button"

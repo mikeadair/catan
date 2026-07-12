@@ -62,6 +62,10 @@
   gap: 1px;
 }
 
+.build-toolbar__cost-chip--short {
+  opacity: 0.4;
+}
+
 .build-toolbar__cost-icon {
   width: 13px;
   height: 13px;

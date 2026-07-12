@@ -13,6 +13,19 @@
   overflow: hidden;
 }
 
+.game--sidebar-left {
+  grid-template-columns: 320px 1fr;
+}
+
+.game--sidebar-left .game__board-area,
+.game--sidebar-left .game__toolbar {
+  grid-column: 2;
+}
+
+.game--sidebar-left .game__sidebar {
+  grid-column: 1;
+}
+
 .game__board-area {
   position: relative;
   grid-column: 1;
@@ -73,6 +86,25 @@
   }
 }
 
+.game__roll-gains {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(92%, 640px);
+  background: var(--color-panel);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 8px;
+  padding: 6px 14px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: resource-grant-in 0.25s ease-out, resource-grant-out 0.3s ease-in 3.7s forwards;
+}
+
 .game__sidebar {
   grid-column: 2;
   grid-row: 1 / span 2;
@@ -83,8 +115,30 @@
   overflow-y: auto;
 }
 
+.game__sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.game__sidebar-side-toggle {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--color-text-dim);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.game__sidebar-side-toggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
 .game__leave-button {
-  align-self: flex-end;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -111,6 +165,18 @@
   gap: 16px;
   flex-wrap: wrap;
   position: relative;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+/* Kept mounted (rather than unmounted) so the grid row it occupies stays reserved —
+   toggling display/mount was causing the board area above to visibly resize/jump every
+   time the phase left 'roll'/'main' (e.g. into 'robber'), which read as jarring. */
+.game__toolbar--hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .game__toolbar-hand {
@@ -145,6 +211,13 @@
 
 .game__toolbar-toggle:hover {
   border-color: var(--color-accent);
+}
+
+.game__toolbar-toggle--alert {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #1c1c1c;
+  animation: dice-roller-pulse 1.6s ease-in-out infinite;
 }
 
 .game__popover {

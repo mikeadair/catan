@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
-import { legalActionTypes, type GameStateBundle } from '../game/rules';
-import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '../game/types';
-import { RESOURCES } from '../game/types';
+import { computeRollGains, legalActionTypes, type GameStateBundle } from '@catan/engine';
+import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '@catan/engine';
+import { RESOURCES } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
@@ -14,6 +14,7 @@ import TurnTimer from '../components/TurnTimer';
 import BuildToolbar, { type BuildMode } from '../components/BuildToolbar';
 import DevCardPanel from '../components/DevCardPanel';
 import TradePanel from '../components/TradePanel';
+import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
 import DiscardModal from '../components/DiscardModal';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
@@ -63,14 +64,33 @@ export default function Game(): JSX.Element {
   const [yopSelection, setYopSelection] = useState<Partial<ResourceCount>>({});
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
   const [robberVictimStep, setRobberVictimStep] = useState<RobberVictimStep | null>(null);
-  const [activePopover, setActivePopover] = useState<'devcards' | 'trade' | null>(null);
+  const [activePopover, setActivePopover] = useState<'trade' | null>(null);
   const popoversRef = useRef<HTMLDivElement | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
+    try {
+      return localStorage.getItem('catan.sidebarSide') === 'left' ? 'left' : 'right';
+    } catch {
+      return 'right';
+    }
+  });
+  function toggleSidebarSide() {
+    setSidebarSide((cur) => {
+      const next = cur === 'left' ? 'right' : 'left';
+      try {
+        localStorage.setItem('catan.sidebarSide', next);
+      } catch {
+        // non-fatal
+      }
+      return next;
+    });
+  }
   // Every dispatched action is a real network round-trip; track which one (if any) is
   // in flight so controls can show pending state instead of just going inert with no
   // feedback until the promise settles.
   const [pendingActionType, setPendingActionType] = useState<GameAction['type'] | null>(null);
   const [resourceGrantMessage, setResourceGrantMessage] = useState<string | null>(null);
+  const [rollGainsMessage, setRollGainsMessage] = useState<string | null>(null);
 
   // Clear transient, per-turn UI selection state whenever the phase or the
   // active player changes underneath us (e.g. an illegal click didn't clear
@@ -126,6 +146,54 @@ export default function Game(): JSX.Element {
     const timer = setTimeout(() => setResourceGrantMessage(null), 2800);
     return () => clearTimeout(timer);
   }, [ownHand, room?.phase]);
+
+  // Callout showing what EVERY player gained on the latest roll, not just yourself — board
+  // layout, building ownership, and the roll itself are all already public, so this is a
+  // pure client-side recomputation of the same claim rules.ts already applied server-side
+  // (computeRollGains), not a new information exposure.
+  const prevDiceRollRef = useRef<[number, number] | null>(null);
+  useEffect(() => {
+    const current = room?.diceRoll ?? null;
+    const prev = prevDiceRollRef.current;
+    prevDiceRollRef.current = current;
+    if (!current || !room?.board) return;
+    if (prev && prev[0] === current[0] && prev[1] === current[1]) return; // same roll, not a new one
+
+    const gains = computeRollGains(room.board, room.vertices, current[0] + current[1]);
+    const parts = Object.entries(gains)
+      .map(([gainUid, byResource]) => {
+        const name = players[gainUid]?.displayName ?? 'Someone';
+        const resourceParts = RESOURCES.filter((r) => byResource[r]).map((r) => `+${byResource[r]} ${RESOURCE_LABEL[r]}`);
+        return resourceParts.length > 0 ? `${name}: ${resourceParts.join(', ')}` : null;
+      })
+      .filter((s): s is string => s !== null);
+    if (parts.length === 0) return;
+
+    setRollGainsMessage(parts.join('   •   '));
+    const timer = setTimeout(() => setRollGainsMessage(null), 4000);
+    return () => clearTimeout(timer);
+  }, [room?.diceRoll, room?.board, room?.vertices, players]);
+
+  // Trades were easy to miss entirely — tucked behind a toggle button with no cue that
+  // anything changed. Pending trades relevant to you now render persistently in the
+  // sidebar (<TradeOffers>), always visible and directly actionable; this effect just adds
+  // a sound cue the moment a NEW one shows up, since the sidebar itself is always present.
+  const seenTradeIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!uid) return;
+    const relevant = trades.filter(
+      (t) => t.status === 'pending' && t.proposerUid !== uid && (t.targetUid === uid || t.targetUid === null),
+    );
+    const seen = seenTradeIdsRef.current;
+    if (seen === null) {
+      // First load: mark whatever's already pending as seen, no sound for history.
+      seenTradeIdsRef.current = new Set(relevant.map((t) => t.id));
+      return;
+    }
+    const fresh = relevant.filter((t) => !seen.has(t.id));
+    for (const t of relevant) seen.add(t.id);
+    if (fresh.length > 0) playSfx('trade');
+  }, [trades, uid]);
 
   // Sound effect: a short chime whenever it becomes this player's turn.
   const wasCurrentPlayerRef = useRef<boolean | null>(null);
@@ -329,6 +397,7 @@ export default function Game(): JSX.Element {
   let phaseBanner: string | null = null;
   if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
   else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
+  else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
   else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `${setupRoundLabel}Waiting for ${waitingOn.displayName} to set up…` : null;
@@ -343,12 +412,17 @@ export default function Game(): JSX.Element {
   const showBottomBar = room.phase === 'roll' || room.phase === 'main';
 
   return (
-    <div className="game">
+    <div className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}`}>
       <div className="game__board-area">
         {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
         {resourceGrantMessage && (
           <div key={resourceGrantMessage} className="game__resource-grant">
             {resourceGrantMessage}
+          </div>
+        )}
+        {rollGainsMessage && (
+          <div key={rollGainsMessage} className="game__roll-gains">
+            {rollGainsMessage}
           </div>
         )}
         <Board
@@ -362,13 +436,43 @@ export default function Game(): JSX.Element {
           onEdgeClick={onEdgeClick}
           onHexClick={onHexClick}
         />
+        {showBottomBar && (
+          <DiceRoller
+            diceRoll={room.diceRoll}
+            canRoll={legalTypes.includes('rollDice')}
+            isCurrentPlayer={isCurrentPlayer}
+            isPending={pendingActionType === 'rollDice'}
+            onRoll={() => void runAction({ type: 'rollDice', uid })}
+          />
+        )}
       </div>
 
       <aside className="game__sidebar">
-        <button type="button" className="game__leave-button" onClick={() => setLeaveConfirmOpen(true)}>
-          Leave game
-        </button>
-        <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeck.length} />
+        <div className="game__sidebar-top">
+          <button
+            type="button"
+            className="game__sidebar-side-toggle"
+            onClick={toggleSidebarSide}
+            title={`Move sidebar to the ${sidebarSide === 'left' ? 'right' : 'left'}`}
+            aria-label={`Move sidebar to the ${sidebarSide === 'left' ? 'right' : 'left'}`}
+          >
+            {sidebarSide === 'left' ? '⇥' : '⇤'}
+          </button>
+          <button type="button" className="game__leave-button" onClick={() => setLeaveConfirmOpen(true)}>
+            Leave game
+          </button>
+        </div>
+        <TradeOffers
+          uid={uid}
+          players={players}
+          ownResources={resources}
+          trades={trades}
+          blocked={pendingActionType !== null}
+          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
+          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
+        />
+        <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeckCount} />
         <PlayerRoster
           players={players}
           turnOrder={room.turnOrder}
@@ -381,25 +485,24 @@ export default function Game(): JSX.Element {
         <GameLog log={room.log} chat={chat} onSend={(text) => void sendChatMessage(text)} />
       </aside>
 
-      {showBottomBar && (
-        <footer className="game__toolbar">
+      <footer className={`game__toolbar${showBottomBar ? '' : ' game__toolbar--hidden'}`}>
           <div className="game__toolbar-hand">
             <div className="game__toolbar-label">Your hand</div>
-            <ResourceHand resources={resources} />
+            <ResourceHand resources={resources} variant="cards" />
+            <DevCardPanel
+              devCards={ownHand?.devCards ?? []}
+              turnNumber={room.turnNumber}
+              canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
+              blocked={pendingActionType !== null}
+              onPlay={handlePlayDevCard}
+            />
           </div>
-          <DiceRoller
-            diceRoll={room.diceRoll}
-            canRoll={legalTypes.includes('rollDice')}
-            isCurrentPlayer={isCurrentPlayer}
-            isPending={pendingActionType === 'rollDice'}
-            onRoll={() => void runAction({ type: 'rollDice', uid })}
-          />
           <TurnTimer turnStartedAt={room.turnStartedAt} turnTimerSeconds={room.turnTimerSeconds} />
           <BuildToolbar
             resources={resources}
             legalTypes={legalTypes}
             activeMode={buildMode}
-            devCardsRemaining={room.devCardDeck.length}
+            devCardsRemaining={room.devCardDeckCount}
             isCurrentPlayer={isCurrentPlayer}
             pendingActionType={pendingActionType}
             onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
@@ -410,28 +513,10 @@ export default function Game(): JSX.Element {
             <button
               type="button"
               className="game__toolbar-toggle"
-              onClick={() => setActivePopover((v) => (v === 'devcards' ? null : 'devcards'))}
-            >
-              Dev Cards ({ownHand?.devCards.length ?? 0})
-            </button>
-            <button
-              type="button"
-              className="game__toolbar-toggle"
               onClick={() => setActivePopover((v) => (v === 'trade' ? null : 'trade'))}
             >
               Trade
             </button>
-            {activePopover === 'devcards' && (
-              <div className="game__popover game__popover--devcards">
-                <DevCardPanel
-                  devCards={ownHand?.devCards ?? []}
-                  turnNumber={room.turnNumber}
-                  canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
-                  blocked={pendingActionType !== null}
-                  onPlay={handlePlayDevCard}
-                />
-              </div>
-            )}
             {activePopover === 'trade' && (
               <div className="game__popover game__popover--trade">
                 <TradePanel
@@ -439,7 +524,6 @@ export default function Game(): JSX.Element {
                   players={players}
                   uid={uid}
                   ownResources={resources}
-                  trades={trades}
                   canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
                   blocked={pendingActionType !== null}
                   onBankTrade={(give, giveAmount, receive) =>
@@ -448,14 +532,11 @@ export default function Game(): JSX.Element {
                   onProposeTrade={(give, receive, targetUid) =>
                     void runAction({ type: 'proposeTrade', uid, give, receive, targetUid })
                   }
-                  onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
-                  onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
                 />
               </div>
             )}
           </div>
-        </footer>
-      )}
+      </footer>
 
       <DiscardModal
         visible={room.phase === 'discard' && room.pendingDiscardUids.includes(uid)}

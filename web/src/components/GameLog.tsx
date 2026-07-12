@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { LogEntry } from '../game/types';
+import type { LogEntry } from '@catan/engine';
 import type { ChatMessage } from '../firebase/rooms';
 import './GameLog.css';
 

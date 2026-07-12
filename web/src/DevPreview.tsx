@@ -1,10 +1,10 @@
 // Temporary, local-only preview harness for iterating on Board.tsx visuals without touching
 // Firebase at all. Wired in from main.tsx behind a query param; delete before shipping.
 import type { JSX } from 'react';
-import { generateBoard } from './game/board';
+import { generateBoard } from '@catan/engine';
 import Board from './components/Board';
-import type { RoomState, PublicPlayer } from './game/types';
-import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from './game/types';
+import type { RoomState, PublicPlayer } from '@catan/engine';
+import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from '@catan/engine';
 import './routes/Game.css';
 
 export default function DevPreview(): JSX.Element {
@@ -26,6 +26,7 @@ export default function DevPreview(): JSX.Element {
     diceRoll: null,
     bank: { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 },
     devCardDeck: [],
+    devCardDeckCount: 0,
     longestRoadUid: null,
     largestArmyUid: null,
     winnerUid: null,

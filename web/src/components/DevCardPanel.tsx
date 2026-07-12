@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { DevCard, DevCardType } from '../game/types';
+import type { DevCard, DevCardType } from '@catan/engine';
 import './DevCardPanel.css';
 
 const CARD_LABEL: Record<DevCardType, string> = {

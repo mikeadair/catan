@@ -3,13 +3,14 @@ import { customAlphabet } from 'nanoid';
 import { createRoom, joinRoom } from '../firebase/rooms';
 import { setDisplayName } from '../firebase/auth';
 import { useGameStore } from '../state/store';
-import { MAP_PRESETS } from '../game/mapPresets';
 import {
+  MAP_PRESETS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
   DEFAULT_TURN_TIMER_SECONDS,
   type MapPresetId,
-} from '../game/types';
+} from '@catan/engine';
+import shipIcon from '../assets/decor/ship.png';
 import './Home.css';
 
 const DISPLAY_NAME_KEY = 'catan.displayName';
@@ -56,6 +57,19 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const joinInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Randomize the decorative sailing ship's path once per page load so it
+  // doesn't look identical on every visit. Purely cosmetic — no game state.
+  const [shipConfig] = useState(() => {
+    const duration = 32 + Math.random() * 22; // seconds for a full crossing
+    return {
+      top: 6 + Math.random() * 14, // % from the top, within the intro band
+      duration,
+      // Negative delay starts the animation partway through its cycle so
+      // the ship doesn't always begin at the edge on load.
+      delay: -(Math.random() * duration),
+    };
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -116,6 +130,22 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
 
   return (
     <div className="home">
+      <div className="home__ship-layer" aria-hidden="true">
+        <img
+          src={shipIcon}
+          className="home__ship"
+          alt=""
+          style={{
+            top: `${shipConfig.top}%`,
+            // Comma-separated: first value targets the "sail" (travel)
+            // keyframes, second targets the constant "bob" (wobble) ones —
+            // matches the animation-name order declared in Home.css.
+            animationDuration: `${shipConfig.duration}s, 3.6s`,
+            animationDelay: `${shipConfig.delay}s, 0s`,
+          }}
+        />
+      </div>
+
       <div className="home__intro">
         <h1 className="home__title">Settlers of Catan</h1>
         <p className="home__subtitle">Trade, build, and settle with friends — online.</p>

@@ -1,7 +1,7 @@
-import { useMemo, type JSX, type KeyboardEvent } from 'react';
-import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '../game/types';
-import { TERRAIN_RESOURCE } from '../game/types';
-import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '../game/board';
+import { useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '@catan/engine';
+import { TERRAIN_RESOURCE } from '@catan/engine';
+import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { RESOURCE_ICON } from './resourceIcons';
 import hillsIcon from '../assets/terrain/hills.png';
@@ -49,6 +49,15 @@ function hexCornerPoints(center: { x: number; y: number }, size: number): { x: n
     pts.push({ x: center.x + size * Math.cos(angleRad), y: center.y + size * Math.sin(angleRad) });
   }
   return pts;
+}
+
+/** Path for a simple house pictogram (roof + walls, roof peak up), centered on its own
+ * origin so it can be positioned purely via a `transform="translate(...)"` on the caller. */
+function housePath(halfWidth: number, height: number): string {
+  const roofPeakY = -height / 2;
+  const shoulderY = roofPeakY + height * 0.42;
+  const baseY = height / 2;
+  return `M 0,${roofPeakY} L ${halfWidth},${shoulderY} L ${halfWidth},${baseY} L ${-halfWidth},${baseY} L ${-halfWidth},${shoulderY} Z`;
 }
 
 /** Lets keyboard/screen-reader users activate an SVG hotspot (role="button") the same way
@@ -109,6 +118,15 @@ export default function BoardView({
   onHexClick,
 }: BoardProps): JSX.Element | null {
   const board = room.board;
+  const ownColor = uid && players[uid] ? PLAYER_COLOR_HEX[players[uid].color] : 'var(--color-accent)';
+
+  // Hover preview: show the actual piece (ghosted, in the player's own color) at whatever
+  // candidate vertex/edge the pointer is over, not just a generic highlighted hotspot.
+  const [hoverVertexId, setHoverVertexId] = useState<VertexId | null>(null);
+  const [hoverEdgeId, setHoverEdgeId] = useState<EdgeId | null>(null);
+  const previewVertexId =
+    interactionMode === 'placeSettlement' || interactionMode === 'placeCity' ? hoverVertexId : null;
+  const previewEdgeId = interactionMode === 'placeRoad' ? hoverEdgeId : null;
 
   const layout = useMemo(() => {
     if (!board) return null;
@@ -264,7 +282,11 @@ export default function BoardView({
         const oy = my + (my / dist) * 30;
         return (
           <g key={port.id}>
-            <line x1={mx} y1={my} x2={ox} y2={oy} stroke="var(--color-text-dim)" strokeWidth={2} />
+            {/* Two piers, one to each vertex the port actually serves — a single line to
+                the edge midpoint read as "attached to a hex side" rather than "attached to
+                the two corners a settlement there can use." */}
+            <line x1={pa.x} y1={pa.y} x2={ox} y2={oy} stroke="var(--color-text-dim)" strokeWidth={2} />
+            <line x1={pb.x} y1={pb.y} x2={ox} y2={oy} stroke="var(--color-text-dim)" strokeWidth={2} />
             <circle cx={ox} cy={oy} r={16} fill="var(--color-panel)" stroke="var(--color-border)" strokeWidth={1.5} />
             {port.type === 'generic' ? (
               <text x={ox} y={oy + 4} textAnchor="middle" fontSize={9} fill="var(--color-text)">
@@ -290,7 +312,9 @@ export default function BoardView({
         );
       })}
 
-      {/* Roads */}
+      {/* Roads. A dark outline renders underneath every road regardless of owner color —
+          without it, a green road (#2f7a3d) is the exact same hex as the forest tile fill
+          (--resource-lumber, also #2f7a3d) and disappears entirely against it. */}
       {Object.entries(room.edges).map(([edgeId, ownerUid]) => {
         const edgeInfo = board.edges[edgeId];
         if (!edgeInfo) return null;
@@ -299,16 +323,10 @@ export default function BoardView({
         const pb = vertexPixel(b, board, SIZE);
         const color = players[ownerUid] ? PLAYER_COLOR_HEX[players[ownerUid].color] : '#888';
         return (
-          <line
-            key={edgeId}
-            x1={pa.x}
-            y1={pa.y}
-            x2={pb.x}
-            y2={pb.y}
-            stroke={color}
-            strokeWidth={6}
-            strokeLinecap="round"
-          />
+          <g key={edgeId}>
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={9} strokeLinecap="round" />
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={6} strokeLinecap="round" />
+          </g>
         );
       })}
 
@@ -318,13 +336,24 @@ export default function BoardView({
         const color = players[building.uid] ? PLAYER_COLOR_HEX[players[building.uid].color] : '#888';
         if (building.type === 'city') {
           return (
-            <g key={vertexId}>
-              <circle cx={p.x} cy={p.y} r={11} fill={color} stroke="#1c1c1c" strokeWidth={1.5} />
-              <circle cx={p.x} cy={p.y} r={4.5} fill="var(--color-panel)" />
+            <g key={vertexId} transform={`translate(${p.x}, ${p.y})`}>
+              {/* City: a taller main house plus a smaller wing, reading as "grown" from a
+                  single settlement house without needing a second color/legend. */}
+              <path d={housePath(6, 10)} transform="translate(-3, -1)" fill={color} stroke="#1c1c1c" strokeWidth={1.3} />
+              <path d={housePath(4.5, 7)} transform="translate(6, 2)" fill={color} stroke="#1c1c1c" strokeWidth={1.2} />
             </g>
           );
         }
-        return <circle key={vertexId} cx={p.x} cy={p.y} r={7} fill={color} stroke="#1c1c1c" strokeWidth={1.5} />;
+        return (
+          <path
+            key={vertexId}
+            d={housePath(6.5, 9)}
+            transform={`translate(${p.x}, ${p.y})`}
+            fill={color}
+            stroke="#1c1c1c"
+            strokeWidth={1.3}
+          />
+        );
       })}
 
       {/* Interaction hotspots */}
@@ -339,6 +368,8 @@ export default function BoardView({
               r={9}
               className="catan-board__hotspot catan-board__hotspot--vertex"
               onClick={() => onVertexClick?.(vid)}
+              onMouseEnter={() => setHoverVertexId(vid)}
+              onMouseLeave={() => setHoverVertexId((cur) => (cur === vid ? null : cur))}
               role="button"
               tabIndex={0}
               aria-label="Build settlement here"
@@ -358,6 +389,8 @@ export default function BoardView({
               r={12}
               className="catan-board__hotspot catan-board__hotspot--vertex"
               onClick={() => onVertexClick?.(vid)}
+              onMouseEnter={() => setHoverVertexId(vid)}
+              onMouseLeave={() => setHoverVertexId((cur) => (cur === vid ? null : cur))}
               role="button"
               tabIndex={0}
               aria-label="Upgrade to city here"
@@ -377,6 +410,8 @@ export default function BoardView({
             <g
               key={`hot-${eid}`}
               onClick={() => onEdgeClick?.(eid)}
+              onMouseEnter={() => setHoverEdgeId(eid)}
+              onMouseLeave={() => setHoverEdgeId((cur) => (cur === eid ? null : cur))}
               role="button"
               tabIndex={0}
               aria-label="Build road here"
@@ -395,6 +430,45 @@ export default function BoardView({
             </g>
           );
         })}
+
+      {/* Hover preview: the actual piece, ghosted, in the player's own color — drawn last
+          (on top) and pointer-events-none so it never steals the hotspot's own hover/click. */}
+      {previewVertexId &&
+        (() => {
+          const p = vertexPixel(previewVertexId, board, SIZE);
+          const size = interactionMode === 'placeCity' ? housePath(6, 10) : housePath(6.5, 9);
+          return (
+            <path
+              d={size}
+              transform={`translate(${p.x}, ${p.y})`}
+              fill={ownColor}
+              stroke="#1c1c1c"
+              strokeWidth={1.3}
+              opacity={0.55}
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        })()}
+
+      {previewEdgeId &&
+        (() => {
+          const edgeInfo = board.edges[previewEdgeId];
+          const pa = vertexPixel(edgeInfo.vertexIds[0], board, SIZE);
+          const pb = vertexPixel(edgeInfo.vertexIds[1], board, SIZE);
+          return (
+            <line
+              x1={pa.x}
+              y1={pa.y}
+              x2={pb.x}
+              y2={pb.y}
+              stroke={ownColor}
+              strokeWidth={6}
+              strokeLinecap="round"
+              opacity={0.55}
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        })()}
 
       {interactionMode === 'placeRobber' &&
         board.hexes

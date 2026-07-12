@@ -49,6 +49,77 @@
 .resource-chip--grain { border-left-color: var(--resource-grain); }
 .resource-chip--wool { border-left-color: var(--resource-wool); }
 
+.resource-hand--cards {
+  gap: 0;
+  align-items: flex-end;
+  padding-left: 4px; /* room for the first card's rotation/shadow, which has no overlap to tuck under */
+}
+
+.resource-card {
+  position: relative;
+  width: 68px;
+  height: 94px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: var(--color-panel-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease;
+  transform: rotate(var(--card-rotate, 0deg));
+}
+
+.resource-card:hover {
+  transform: rotate(var(--card-rotate, 0deg)) translateY(-8px);
+}
+
+.resource-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  opacity: 0.28;
+}
+
+.resource-card--brick::before { background: var(--resource-brick); }
+.resource-card--lumber::before { background: var(--resource-lumber); }
+.resource-card--ore::before { background: var(--resource-ore); }
+.resource-card--grain::before { background: var(--resource-grain); }
+.resource-card--wool::before { background: var(--resource-wool); }
+
+.resource-card__icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.resource-card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--color-text);
+  z-index: 1;
+}
+
+.resource-card__overflow {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--color-accent);
+  color: #1c1c1c;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 5px;
+  z-index: 2;
+}
+
 .resource-chip__stepper {
   display: flex;
   align-items: center;

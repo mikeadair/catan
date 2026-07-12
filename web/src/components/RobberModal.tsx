@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { PublicPlayer } from '../game/types';
+import type { PublicPlayer } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import './RobberModal.css';
 

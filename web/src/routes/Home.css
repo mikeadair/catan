@@ -1,4 +1,5 @@
 .home {
+  position: relative;
   flex: 1;
   width: 100%;
   max-width: 920px;
@@ -7,12 +8,70 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% -10%, var(--color-ocean) 0%, transparent 60%),
     var(--color-ocean-deep);
 }
 
+/* Decorative sailing ship — purely cosmetic, sits behind the menu content. */
+.home__ship-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.home__ship {
+  position: absolute;
+  left: -14%;
+  width: 46px;
+  height: auto;
+  opacity: 0.32;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+  /* Two independent animations: "sail" drives left-to-right travel using
+     percentages of the containing block (so it always matches .home's
+     actual rendered width, unlike vw which ignores the centered layout),
+     "bob" adds a subtle sail-in-the-wind wobble. Order matters — inline
+     styles below override duration/delay per-animation by position. */
+  animation-name: home-ship-sail, home-ship-bob;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+  animation-duration: 36s, 3.6s;
+  animation-delay: 0s, 0s;
+  will-change: left, transform;
+}
+
+@keyframes home-ship-sail {
+  0% {
+    left: -14%;
+  }
+  100% {
+    left: 114%;
+  }
+}
+
+@keyframes home-ship-bob {
+  0%,
+  100% {
+    transform: rotate(-92deg);
+  }
+  50% {
+    transform: rotate(-88deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__ship {
+    animation: none;
+    display: none;
+  }
+}
+
 .home__intro {
+  position: relative;
+  z-index: 1;
   text-align: center;
   padding-top: 16px;
 }
@@ -39,12 +98,16 @@
 }
 
 .home__card--name {
+  position: relative;
+  z-index: 1;
   max-width: 420px;
   width: 100%;
   margin: 0 auto;
 }
 
 .home__grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;

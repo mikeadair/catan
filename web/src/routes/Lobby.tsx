@@ -1,8 +1,8 @@
 import { useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { addBot, removeSeat, startGame } from '../firebase/rooms';
-import { MAP_PRESETS } from '../game/mapPresets';
-import { PLAYER_COLORS } from '../game/types';
+import { MAP_PRESETS } from '@catan/engine';
+import { PLAYER_COLORS } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import './Lobby.css';
 

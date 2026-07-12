@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { PrivateHand, PublicPlayer } from '../game/types';
+import { MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, type PrivateHand, type PublicPlayer } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import './PlayerRoster.css';
 
@@ -68,6 +68,13 @@ export default function PlayerRoster({
                     {longestRoadUid === uid && <span className="player-roster__icon-badge" title="Longest Road">🏅</span>}
                   </span>
                 </div>
+                {isYou && (
+                  <div className="player-roster__pieces" title="Pieces you have left to build">
+                    <span className="player-roster__piece">🛤️ {MAX_ROADS - p.roadsBuilt} left</span>
+                    <span className="player-roster__piece">🏠 {MAX_SETTLEMENTS - p.settlementsBuilt} left</span>
+                    <span className="player-roster__piece">🏛️ {MAX_CITIES - p.citiesBuilt} left</span>
+                  </div>
+                )}
               </div>
             </li>
           );

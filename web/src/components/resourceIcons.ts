@@ -1,4 +1,4 @@
-import type { Resource } from '../game/types';
+import type { Resource } from '@catan/engine';
 import brickIcon from '../assets/resources/brick.png';
 import lumberIcon from '../assets/resources/lumber.png';
 import oreIcon from '../assets/resources/ore.png';
