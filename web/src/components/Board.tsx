@@ -125,7 +125,11 @@ export default function BoardView({
         maxY = Math.max(maxY, p.y);
       }
     }
-    const pad = 60;
+    // Tight enough to still fully contain the port badges (edge midpoint + 30 offset + 16
+    // badge radius = 46 beyond the boundary edges, which sit slightly inside the hex-corner
+    // bounding box used here) with a small safety margin — every extra unit trimmed here
+    // scales the whole board up proportionally within whatever container height is available.
+    const pad = 50;
     return {
       minX: minX - pad,
       minY: minY - pad,

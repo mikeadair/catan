@@ -5,6 +5,7 @@ import { generateBoard } from './game/board';
 import Board from './components/Board';
 import type { RoomState, PublicPlayer } from './game/types';
 import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from './game/types';
+import './routes/Game.css';
 
 export default function DevPreview(): JSX.Element {
   const board = generateBoard('official-beginner', 'preview-seed');
@@ -67,8 +68,16 @@ export default function DevPreview(): JSX.Element {
   room.edges[edgeIds[6]] = 'p0';
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: 'var(--color-ocean-deep)' }}>
-      <Board room={room} players={players} uid="p0" interactionMode="none" />
+    <div style={{ width: '100vw', height: '100vh' }} className="game">
+      <div className="game__board-area">
+        <Board room={room} players={players} uid="p0" interactionMode="none" />
+      </div>
+      <aside className="game__sidebar">
+        <div style={{ background: 'var(--color-panel)', padding: 12, borderRadius: 8 }}>Sidebar placeholder</div>
+      </aside>
+      <footer className="game__toolbar">
+        <div>Toolbar placeholder</div>
+      </footer>
     </div>
   );
 }
