@@ -181,15 +181,25 @@ export default function BoardView({
         const points = corners.map((p) => `${p.x},${p.y}`).join(' ');
         const fill = hex.terrain === 'desert' ? DESERT_COLOR : `var(--resource-${TERRAIN_RESOURCE[hex.terrain]})`;
         const isHotHex = hex.number === 6 || hex.number === 8;
+        const isDesert = hex.terrain === 'desert';
+        // Non-desert tiles also carry a number token dead center, so the terrain icon sits
+        // lower in the hex as a small grounded badge instead of a large image overlapping
+        // (and visually competing with) the number — desert has no number token, so its
+        // icon can stay centered and a bit larger.
+        const iconSize = isDesert ? SIZE * 1.05 : SIZE * 0.62;
+        const iconCenterY = isDesert ? center.y : center.y + SIZE * 0.54;
         return (
           <g key={hex.id}>
             <polygon points={points} fill={fill} stroke="var(--color-ocean-deep)" strokeWidth={2} />
+            {!isDesert && (
+              <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.56} fill="rgba(0,0,0,0.16)" />
+            )}
             <image
               href={TERRAIN_ICON[hex.terrain]}
-              x={center.x - SIZE * 0.7}
-              y={center.y - SIZE * 0.7}
-              width={SIZE * 1.4}
-              height={SIZE * 1.4}
+              x={center.x - iconSize / 2}
+              y={iconCenterY - iconSize / 2}
+              width={iconSize}
+              height={iconSize}
               style={{ pointerEvents: 'none' }}
               preserveAspectRatio="xMidYMid meet"
             />
