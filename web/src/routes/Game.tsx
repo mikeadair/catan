@@ -65,6 +65,10 @@ export default function Game(): JSX.Element {
   const [activePopover, setActivePopover] = useState<'devcards' | 'trade' | null>(null);
   const popoversRef = useRef<HTMLDivElement | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  // Every dispatched action is a real network round-trip; track which one (if any) is
+  // in flight so controls can show pending state instead of just going inert with no
+  // feedback until the promise settles.
+  const [pendingActionType, setPendingActionType] = useState<GameAction['type'] | null>(null);
 
   // Clear transient, per-turn UI selection state whenever the phase or the
   // active player changes underneath us (e.g. an illegal click didn't clear
@@ -146,12 +150,15 @@ export default function Game(): JSX.Element {
   const resources = ownHand?.resources ?? { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
 
   async function runAction(action: GameAction): Promise<boolean> {
+    setPendingActionType(action.type);
     try {
       await dispatch(action);
       return true;
     } catch {
       // The store surfaces dispatch errors globally via App.tsx's toast.
       return false;
+    } finally {
+      setPendingActionType(null);
     }
   }
 
@@ -355,6 +362,7 @@ export default function Game(): JSX.Element {
             diceRoll={room.diceRoll}
             canRoll={legalTypes.includes('rollDice')}
             isCurrentPlayer={isCurrentPlayer}
+            isPending={pendingActionType === 'rollDice'}
             onRoll={() => void runAction({ type: 'rollDice', uid })}
           />
           <TurnTimer turnStartedAt={room.turnStartedAt} turnTimerSeconds={room.turnTimerSeconds} />
@@ -364,6 +372,7 @@ export default function Game(): JSX.Element {
             activeMode={buildMode}
             devCardsRemaining={room.devCardDeck.length}
             isCurrentPlayer={isCurrentPlayer}
+            pendingActionType={pendingActionType}
             onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
             onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
             onEndTurn={() => void runAction({ type: 'endTurn', uid })}
@@ -389,6 +398,7 @@ export default function Game(): JSX.Element {
                   devCards={ownHand?.devCards ?? []}
                   turnNumber={room.turnNumber}
                   canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
+                  blocked={pendingActionType !== null}
                   onPlay={handlePlayDevCard}
                 />
               </div>
@@ -402,6 +412,7 @@ export default function Game(): JSX.Element {
                   ownResources={resources}
                   trades={trades}
                   canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
+                  blocked={pendingActionType !== null}
                   onBankTrade={(give, giveAmount, receive) =>
                     void runAction({ type: 'bankTrade', uid, give, giveAmount, receive })
                   }

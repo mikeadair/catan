@@ -29,6 +29,9 @@ export interface TradePanelProps {
   ownResources: ResourceCount;
   trades: TradeOffer[];
   canTrade: boolean;
+  /** True while a different action is already in flight — blocks new trade actions to
+   * avoid double-submits. */
+  blocked: boolean;
   onBankTrade: (give: Resource, giveAmount: number, receive: Resource) => void;
   onProposeTrade: (give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) => void;
   onRespondTrade: (tradeId: string, accept: boolean) => void;
@@ -42,6 +45,7 @@ export default function TradePanel({
   ownResources,
   trades,
   canTrade,
+  blocked,
   onBankTrade,
   onProposeTrade,
   onRespondTrade,
@@ -58,16 +62,22 @@ export default function TradePanel({
 
   const bankRate = rates[bankGive];
   const canBankTrade =
-    canTrade && bankGive !== bankReceive && ownResources[bankGive] >= bankRate && room.bank[bankReceive] >= 1;
-  const bankTradeReason = canBankTrade
-    ? undefined
-    : !canTrade
-      ? 'Not your turn'
-      : bankGive === bankReceive
-        ? 'Choose two different resources'
-        : ownResources[bankGive] < bankRate
-          ? `Need ${bankRate} ${bankGive}`
-          : `Bank is out of ${bankReceive}`;
+    canTrade &&
+    !blocked &&
+    bankGive !== bankReceive &&
+    ownResources[bankGive] >= bankRate &&
+    room.bank[bankReceive] >= 1;
+  const bankTradeReason = blocked
+    ? 'Waiting for previous action…'
+    : canBankTrade
+      ? undefined
+      : !canTrade
+        ? 'Not your turn'
+        : bankGive === bankReceive
+          ? 'Choose two different resources'
+          : ownResources[bankGive] < bankRate
+            ? `Need ${bankRate} ${bankGive}`
+            : `Bank is out of ${bankReceive}`;
 
   function handleBankTrade() {
     onBankTrade(bankGive, bankRate, bankReceive);
@@ -75,14 +85,16 @@ export default function TradePanel({
 
   const offerGiveTotal = RESOURCES.reduce((s, r) => s + (offerGive[r] ?? 0), 0);
   const offerReceiveTotal = RESOURCES.reduce((s, r) => s + (offerReceive[r] ?? 0), 0);
-  const canPropose = canTrade && offerGiveTotal > 0 && offerReceiveTotal > 0;
-  const proposeReason = canPropose
-    ? undefined
-    : !canTrade
-      ? 'Not your turn'
-      : offerGiveTotal === 0
-        ? 'Choose what to give'
-        : 'Choose what to receive';
+  const canPropose = canTrade && !blocked && offerGiveTotal > 0 && offerReceiveTotal > 0;
+  const proposeReason = blocked
+    ? 'Waiting for previous action…'
+    : canPropose
+      ? undefined
+      : !canTrade
+        ? 'Not your turn'
+        : offerGiveTotal === 0
+          ? 'Choose what to give'
+          : 'Choose what to receive';
 
   function handlePropose() {
     onProposeTrade(offerGive, offerReceive, targetUid || null);
@@ -159,15 +171,15 @@ export default function TradePanel({
                 </div>
                 <div className="trade-panel__trade-actions">
                   {isMine ? (
-                    <button type="button" onClick={() => onCancelTrade(t.id)}>
+                    <button type="button" onClick={() => onCancelTrade(t.id)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
                       Cancel
                     </button>
                   ) : (
                     <>
-                      <button type="button" onClick={() => onRespondTrade(t.id, true)}>
+                      <button type="button" onClick={() => onRespondTrade(t.id, true)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
                         Accept
                       </button>
-                      <button type="button" onClick={() => onRespondTrade(t.id, false)}>
+                      <button type="button" onClick={() => onRespondTrade(t.id, false)} disabled={blocked} title={blocked ? 'Waiting for previous action…' : undefined}>
                         Reject
                       </button>
                     </>

@@ -24,10 +24,12 @@ export interface DevCardPanelProps {
   devCards: DevCard[];
   turnNumber: number;
   canPlayAny: boolean;
+  /** True while a different action is already in flight — blocks playing another card. */
+  blocked: boolean;
   onPlay: (type: Exclude<DevCardType, 'victoryPoint'>, devCardId: string) => void;
 }
 
-export default function DevCardPanel({ devCards, turnNumber, canPlayAny, onPlay }: DevCardPanelProps): JSX.Element {
+export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked, onPlay }: DevCardPanelProps): JSX.Element {
   const grouped: Record<DevCardType, DevCard[]> = {
     knight: [],
     roadBuilding: [],
@@ -49,11 +51,13 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, onPlay 
           const cards = grouped[type];
           const isPlayable = PLAYABLE_TYPES.includes(type as Exclude<DevCardType, 'victoryPoint'>);
           const playableCard = isPlayable ? cards.find((c) => c.boughtTurn !== turnNumber) : undefined;
-          const disabledReason = !canPlayAny
-            ? 'Not your turn or already played a card this turn'
-            : !playableCard
-              ? 'Cannot play a card the same turn it was bought'
-              : null;
+          const disabledReason = blocked
+            ? 'Waiting for previous action…'
+            : !canPlayAny
+              ? 'Not your turn or already played a card this turn'
+              : !playableCard
+                ? 'Cannot play a card the same turn it was bought'
+                : null;
           return (
             <div key={type} className="dev-card-panel__card">
               <span className="dev-card-panel__icon">{CARD_ICON[type]}</span>
@@ -63,7 +67,7 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, onPlay 
                 <button
                   type="button"
                   className="dev-card-panel__play"
-                  disabled={!canPlayAny || !playableCard}
+                  disabled={!canPlayAny || !playableCard || blocked}
                   title={disabledReason ?? undefined}
                   onClick={() => playableCard && onPlay(type as Exclude<DevCardType, 'victoryPoint'>, playableCard.id)}
                 >
