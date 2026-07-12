@@ -14,6 +14,7 @@ import {
 } from '../firebase/rooms';
 
 const BOT_POLL_MS = 1500;
+const BOT_POLL_MAX_MS = 20000;
 const HEARTBEAT_MS = 15000;
 const LAST_ROOM_KEY = 'catan.lastRoomId';
 
@@ -36,20 +37,40 @@ interface GameStore {
 }
 
 let unsubscribers: Array<() => void> = [];
-let botPollTimer: ReturnType<typeof setInterval> | null = null;
+let botPollTimeout: ReturnType<typeof setTimeout> | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 function teardown() {
   unsubscribers.forEach((u) => u());
   unsubscribers = [];
-  if (botPollTimer) {
-    clearInterval(botPollTimer);
-    botPollTimer = null;
+  if (botPollTimeout) {
+    clearTimeout(botPollTimeout);
+    botPollTimeout = null;
   }
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+}
+
+/**
+ * Self-scheduling bot-turn poller (setTimeout, not setInterval) with exponential backoff on
+ * failure. A burst of transient errors (e.g. a Firestore rate-limit blip) previously meant
+ * every connected client kept retrying every 1.5s regardless, which only pours more load on
+ * an already-throttled backend. On success (including "nothing to do right now") the delay
+ * resets to the base cadence; on failure it doubles up to BOT_POLL_MAX_MS.
+ */
+function scheduleBotPoll(roomId: string, get: () => GameStore, delay: number): void {
+  botPollTimeout = setTimeout(() => {
+    const current = get();
+    if (current.roomId !== roomId || current.room?.status !== 'playing') {
+      scheduleBotPoll(roomId, get, BOT_POLL_MS);
+      return;
+    }
+    claimAndRunBotAction(roomId)
+      .then(() => scheduleBotPoll(roomId, get, BOT_POLL_MS))
+      .catch(() => scheduleBotPoll(roomId, get, Math.min(delay * 2, BOT_POLL_MAX_MS)));
+  }, delay);
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -89,11 +110,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // One driver per client polls to advance bot turns; claimAndRunBotAction is itself
     // transaction-safe against every other connected client doing the same thing.
-    botPollTimer = setInterval(() => {
-      const current = get();
-      if (current.roomId !== roomId || current.room?.status !== 'playing') return;
-      claimAndRunBotAction(roomId).catch(() => {});
-    }, BOT_POLL_MS);
+    scheduleBotPoll(roomId, get, BOT_POLL_MS);
   },
 
   leaveRoom: () => {

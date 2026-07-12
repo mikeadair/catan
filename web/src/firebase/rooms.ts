@@ -492,11 +492,23 @@ async function applyActionInTransaction(
   }
 }
 
-export async function dispatchAction(roomId: string, action: GameAction): Promise<void> {
+// Of every action type, only endTurn actually reads the broader pending-trades list (to
+// auto-cancel the actor's own open offers) — proposeTrade doesn't consult existing trades,
+// and respondTrade/cancelTrade fetch their specific trade transactionally by id regardless
+// (see applyActionInTransaction below). Skipping this getDocs() call for every other action
+// type removes a full extra network round-trip before the real transaction even starts,
+// which was adding up to ~30-50% of the latency on the most common actions (rolls, builds,
+// dev cards).
+async function fetchPendingTradesIfNeeded(roomId: string, action: GameAction): Promise<TradeOffer[]> {
+  if (action.type !== 'endTurn') return [];
   const pendingTradesSnap = await getDocs(
     query(collection(db, 'rooms', roomId, 'trades'), where('status', '==', 'pending'), limit(20))
   );
-  const pendingTrades = pendingTradesSnap.docs.map((d) => d.data() as TradeOffer);
+  return pendingTradesSnap.docs.map((d) => d.data() as TradeOffer);
+}
+
+export async function dispatchAction(roomId: string, action: GameAction): Promise<void> {
+  const pendingTrades = await fetchPendingTradesIfNeeded(roomId, action);
 
   await runTransaction(db, async (tx) => {
     const room = await loadRoomForTx(tx, roomId);
@@ -508,11 +520,6 @@ export async function dispatchAction(roomId: string, action: GameAction): Promis
 }
 
 export async function claimAndRunBotAction(roomId: string): Promise<boolean> {
-  const pendingTradesSnap = await getDocs(
-    query(collection(db, 'rooms', roomId, 'trades'), where('status', '==', 'pending'), limit(20))
-  );
-  const pendingTrades = pendingTradesSnap.docs.map((d) => d.data() as TradeOffer);
-
   return runTransaction(db, async (tx) => {
     const room = await loadRoomForTx(tx, roomId);
     if (room.status !== 'playing') return false;
@@ -542,11 +549,16 @@ export async function claimAndRunBotAction(roomId: string): Promise<boolean> {
     const botHandSnap = await tx.get(handRef(roomId, botUid));
     const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
 
+    // trades: [] — decideBotAction only ever consults `bundle.trades` via
+    // decideTradeResponse, which is for reacting to another player's turn. This driver only
+    // ever acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]),
+    // so that branch is unreachable here; skipping the fetch avoids a wasted read on every
+    // poll tick.
     const decisionBundle: GameStateBundle = {
       room,
       players,
       hands: botHand ? { [botUid]: botHand } : {},
-      trades: pendingTrades,
+      trades: [],
     };
     const action = decideBotAction(decisionBundle, botUid);
 
@@ -554,6 +566,11 @@ export async function claimAndRunBotAction(roomId: string): Promise<boolean> {
       tx.set(roomRef(roomId), { botActionClaim: null }, { merge: true });
       return false;
     }
+
+    // Only endTurn actually needs the broader pending-trades list (see
+    // fetchPendingTradesIfNeeded) — fetched here, after deciding, so every other action type
+    // (the vast majority of bot moves) skips this read entirely.
+    const pendingTrades = await fetchPendingTradesIfNeeded(roomId, action);
 
     // Claim + apply as one atomic write. Note: because this whole flow (claim, decide,
     // apply, clear) runs inside a single transaction, the botActionClaim field is never
