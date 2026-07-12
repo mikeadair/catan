@@ -22,6 +22,14 @@
 .resource-chip__icon {
   font-size: 15px;
   line-height: 1;
+  display: inline-flex;
+}
+
+.resource-chip__icon-img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .resource-chip__count {

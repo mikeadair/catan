@@ -61,3 +61,10 @@
   align-items: center;
   gap: 1px;
 }
+
+.build-toolbar__cost-icon {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}

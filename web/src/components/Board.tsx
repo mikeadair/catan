@@ -3,28 +3,28 @@ import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '
 import { TERRAIN_RESOURCE } from '../game/types';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '../game/board';
 import { PLAYER_COLOR_HEX } from './playerColors';
+import { RESOURCE_ICON } from './resourceIcons';
+import hillsIcon from '../assets/terrain/hills.png';
+import forestIcon from '../assets/terrain/forest.png';
+import mountainsIcon from '../assets/terrain/mountains.png';
+import fieldsIcon from '../assets/terrain/fields.png';
+import pastureIcon from '../assets/terrain/pasture.png';
+import desertIcon from '../assets/terrain/desert.png';
+import robberIcon from '../assets/terrain/robber.png';
 import './Board.css';
 
 const SIZE = 56;
 
 const TERRAIN_ICON: Record<Terrain, string> = {
-  hills: '🧱',
-  forest: '🌲',
-  mountains: '⛰️',
-  fields: '🌾',
-  pasture: '🐑',
-  desert: '',
+  hills: hillsIcon,
+  forest: forestIcon,
+  mountains: mountainsIcon,
+  fields: fieldsIcon,
+  pasture: pastureIcon,
+  desert: desertIcon,
 };
 
 const DESERT_COLOR = '#c9b57a';
-
-const RESOURCE_ICON: Record<string, string> = {
-  brick: '🧱',
-  lumber: '🌲',
-  ore: '⛰️',
-  grain: '🌾',
-  wool: '🐑',
-};
 
 export type BoardInteractionMode = 'none' | 'placeSettlement' | 'placeCity' | 'placeRoad' | 'placeRobber';
 
@@ -184,11 +184,15 @@ export default function BoardView({
         return (
           <g key={hex.id}>
             <polygon points={points} fill={fill} stroke="var(--color-ocean-deep)" strokeWidth={2} />
-            {hex.terrain !== 'desert' && (
-              <text x={center.x} y={center.y - SIZE * 0.45} textAnchor="middle" fontSize={16} className="catan-board__terrain-icon">
-                {TERRAIN_ICON[hex.terrain]}
-              </text>
-            )}
+            <image
+              href={TERRAIN_ICON[hex.terrain]}
+              x={center.x - SIZE * 0.7}
+              y={center.y - SIZE * 0.7}
+              width={SIZE * 1.4}
+              height={SIZE * 1.4}
+              style={{ pointerEvents: 'none' }}
+              preserveAspectRatio="xMidYMid meet"
+            />
             {hex.number !== null && (
               <g>
                 <circle cx={center.x} cy={center.y} r={18} fill="#f4e8cf" stroke="#2b2015" strokeWidth={1.5} />
@@ -209,10 +213,16 @@ export default function BoardView({
             )}
             {hex.id === board.robberHexId && (
               <g transform={`translate(${center.x + SIZE * 0.42}, ${center.y - SIZE * 0.5})`}>
-                <circle r={10} fill="#1c1c1c" stroke="#e8e9ec" strokeWidth={1.5} />
-                <text textAnchor="middle" y={4} fontSize={11}>
-                  🥷
-                </text>
+                <circle r={14} fill="#1c1c1c" stroke="#e8e9ec" strokeWidth={1.5} />
+                <image
+                  href={robberIcon}
+                  x={-12}
+                  y={-12}
+                  width={24}
+                  height={24}
+                  style={{ pointerEvents: 'none' }}
+                  preserveAspectRatio="xMidYMid meet"
+                />
               </g>
             )}
           </g>
@@ -229,14 +239,30 @@ export default function BoardView({
         const dist = Math.hypot(mx, my) || 1;
         const ox = mx + (mx / dist) * 30;
         const oy = my + (my / dist) * 30;
-        const label = port.type === 'generic' ? '3:1' : `2:1 ${RESOURCE_ICON[port.type] ?? port.type}`;
         return (
           <g key={port.id}>
             <line x1={mx} y1={my} x2={ox} y2={oy} stroke="var(--color-text-dim)" strokeWidth={2} />
             <circle cx={ox} cy={oy} r={16} fill="var(--color-panel)" stroke="var(--color-border)" strokeWidth={1.5} />
-            <text x={ox} y={oy + 4} textAnchor="middle" fontSize={9} fill="var(--color-text)">
-              {label}
-            </text>
+            {port.type === 'generic' ? (
+              <text x={ox} y={oy + 4} textAnchor="middle" fontSize={9} fill="var(--color-text)">
+                3:1
+              </text>
+            ) : (
+              <>
+                <image
+                  href={RESOURCE_ICON[port.type]}
+                  x={ox - 9}
+                  y={oy - 11}
+                  width={18}
+                  height={18}
+                  style={{ pointerEvents: 'none' }}
+                  preserveAspectRatio="xMidYMid meet"
+                />
+                <text x={ox} y={oy + 13} textAnchor="middle" fontSize={7} fill="var(--color-text)">
+                  2:1
+                </text>
+              </>
+            )}
           </g>
         );
       })}

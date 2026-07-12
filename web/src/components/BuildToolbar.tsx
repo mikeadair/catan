@@ -1,22 +1,15 @@
 import type { JSX } from 'react';
 import type { GameAction, ResourceCount } from '../game/types';
 import { BUILD_COSTS } from '../game/types';
+import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './BuildToolbar.css';
-
-const RESOURCE_ICON: Record<string, string> = {
-  brick: '🧱',
-  lumber: '🌲',
-  ore: '⛰️',
-  grain: '🌾',
-  wool: '🐑',
-};
 
 function CostChips({ cost }: { cost: Partial<ResourceCount> }): JSX.Element {
   return (
     <span className="build-toolbar__cost">
       {(Object.keys(cost) as (keyof ResourceCount)[]).map((r) => (
         <span key={r} className="build-toolbar__cost-chip">
-          {RESOURCE_ICON[r]}
+          <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="build-toolbar__cost-icon" />
           {cost[r]}
         </span>
       ))}

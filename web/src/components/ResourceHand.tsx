@@ -4,23 +4,8 @@
 import type { JSX } from 'react';
 import type { Resource, ResourceCount } from '../game/types';
 import { RESOURCES } from '../game/types';
+import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './ResourceHand.css';
-
-const RESOURCE_LABEL: Record<Resource, string> = {
-  brick: 'Brick',
-  lumber: 'Lumber',
-  ore: 'Ore',
-  grain: 'Grain',
-  wool: 'Wool',
-};
-
-const RESOURCE_ICON: Record<Resource, string> = {
-  brick: '🧱',
-  lumber: '🌲',
-  ore: '⛰️',
-  grain: '🌾',
-  wool: '🐑',
-};
 
 export interface ResourceHandProps {
   /** Pool of resources to display counts for / to bound selection by. */
@@ -71,7 +56,7 @@ export default function ResourceHand({
         return (
           <div key={r} className={`resource-chip resource-chip--${r}${interactive ? ' resource-chip--interactive' : ''}`}>
             <span className="resource-chip__icon" title={RESOURCE_LABEL[r]}>
-              {RESOURCE_ICON[r]}
+              <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-chip__icon-img" />
             </span>
             <span className="resource-chip__count">{count}</span>
             {interactive && (
