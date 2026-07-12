@@ -10,8 +10,9 @@
   gap: 6px;
   background: var(--color-panel-light);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   border-radius: 8px;
-  padding: 4px 8px;
+  padding: 4px 8px 4px 6px;
   min-height: 30px;
 }
 
@@ -36,13 +37,17 @@
   font-weight: 600;
   min-width: 12px;
   text-align: center;
+  /* Always high-contrast text — the resource identity is carried by the icon and the
+     chip's left-border accent color below, not by tinting small numerals (which failed
+     WCAG AA contrast for several resources against the panel background). */
+  color: var(--color-text);
 }
 
-.resource-chip--brick .resource-chip__count { color: var(--resource-brick); }
-.resource-chip--lumber .resource-chip__count { color: var(--resource-lumber); }
-.resource-chip--ore .resource-chip__count { color: var(--resource-ore); }
-.resource-chip--grain .resource-chip__count { color: var(--resource-grain); }
-.resource-chip--wool .resource-chip__count { color: var(--resource-wool); }
+.resource-chip--brick { border-left-color: var(--resource-brick); }
+.resource-chip--lumber { border-left-color: var(--resource-lumber); }
+.resource-chip--ore { border-left-color: var(--resource-ore); }
+.resource-chip--grain { border-left-color: var(--resource-grain); }
+.resource-chip--wool { border-left-color: var(--resource-wool); }
 
 .resource-chip__stepper {
   display: flex;

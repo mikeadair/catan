@@ -59,6 +59,15 @@ export default function TradePanel({
   const bankRate = rates[bankGive];
   const canBankTrade =
     canTrade && bankGive !== bankReceive && ownResources[bankGive] >= bankRate && room.bank[bankReceive] >= 1;
+  const bankTradeReason = canBankTrade
+    ? undefined
+    : !canTrade
+      ? 'Not your turn'
+      : bankGive === bankReceive
+        ? 'Choose two different resources'
+        : ownResources[bankGive] < bankRate
+          ? `Need ${bankRate} ${bankGive}`
+          : `Bank is out of ${bankReceive}`;
 
   function handleBankTrade() {
     onBankTrade(bankGive, bankRate, bankReceive);
@@ -67,6 +76,13 @@ export default function TradePanel({
   const offerGiveTotal = RESOURCES.reduce((s, r) => s + (offerGive[r] ?? 0), 0);
   const offerReceiveTotal = RESOURCES.reduce((s, r) => s + (offerReceive[r] ?? 0), 0);
   const canPropose = canTrade && offerGiveTotal > 0 && offerReceiveTotal > 0;
+  const proposeReason = canPropose
+    ? undefined
+    : !canTrade
+      ? 'Not your turn'
+      : offerGiveTotal === 0
+        ? 'Choose what to give'
+        : 'Choose what to receive';
 
   function handlePropose() {
     onProposeTrade(offerGive, offerReceive, targetUid || null);
@@ -100,7 +116,7 @@ export default function TradePanel({
               </option>
             ))}
           </select>
-          <button type="button" onClick={handleBankTrade} disabled={!canBankTrade}>
+          <button type="button" onClick={handleBankTrade} disabled={!canBankTrade} title={bankTradeReason}>
             Trade
           </button>
         </div>
@@ -121,7 +137,7 @@ export default function TradePanel({
               </option>
             ))}
           </select>
-          <button type="button" onClick={handlePropose} disabled={!canPropose}>
+          <button type="button" onClick={handlePropose} disabled={!canPropose} title={proposeReason}>
             Propose
           </button>
         </div>

@@ -41,6 +41,14 @@ function App() {
     lastErrorRef.current = error;
   }, [error]);
 
+  // Auto-dismiss the error toast so a missed click doesn't leave a stale error sitting on
+  // screen indefinitely; a new error arriving resets the timer.
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(clearError, 4000);
+    return () => clearTimeout(timer);
+  }, [error, clearError]);
+
   function toggleMute() {
     const next = !muted;
     setMuted(next);
@@ -59,7 +67,7 @@ function App() {
   return (
     <>
       {error && (
-        <div className="toast toast--error" onClick={clearError} role="alert">
+        <div key={error} className="toast toast--error" onClick={clearError} role="alert">
           {error}
         </div>
       )}

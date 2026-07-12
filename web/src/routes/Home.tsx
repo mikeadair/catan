@@ -190,6 +190,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
                     )
                   }
                 />
+                <span className="home__field-hint">{VP_MIN}–{VP_MAX}</span>
               </label>
               <label className="home__field">
                 <span className="home__label">Discard limit (hand size on a 7)</span>
@@ -204,6 +205,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
                     )
                   }
                 />
+                <span className="home__field-hint">{DISCARD_MIN}–{DISCARD_MAX} cards</span>
               </label>
               <label className="home__field home__field--checkbox">
                 <span className="home__label">Turn timer</span>

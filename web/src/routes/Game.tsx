@@ -62,8 +62,9 @@ export default function Game(): JSX.Element {
   const [yopSelection, setYopSelection] = useState<Partial<ResourceCount>>({});
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
   const [robberVictimStep, setRobberVictimStep] = useState<RobberVictimStep | null>(null);
-  const [showDevCards, setShowDevCards] = useState(false);
-  const [showTrade, setShowTrade] = useState(false);
+  const [activePopover, setActivePopover] = useState<'devcards' | 'trade' | null>(null);
+  const popoversRef = useRef<HTMLDivElement | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   // Clear transient, per-turn UI selection state whenever the phase or the
   // active player changes underneath us (e.g. an illegal click didn't clear
@@ -71,6 +72,18 @@ export default function Game(): JSX.Element {
   useEffect(() => {
     setBuildMode(null);
   }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
+
+  // Close whichever popover (Dev Cards / Trade) is open on an outside click.
+  useEffect(() => {
+    if (!activePopover) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (popoversRef.current && !popoversRef.current.contains(e.target as Node)) {
+        setActivePopover(null);
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [activePopover]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
   // robber steals, discards, dev cards, and the win announcement).
@@ -197,7 +210,7 @@ export default function Game(): JSX.Element {
     else if (type === 'roadBuilding') setRoadBuildingPending({ devCardId, edges: [] });
     else if (type === 'yearOfPlenty') setYopPending(devCardId);
     else if (type === 'monopoly') setMonopolyPending(devCardId);
-    setShowDevCards(false);
+    setActivePopover(null);
   }
 
   async function confirmYearOfPlenty() {
@@ -288,6 +301,12 @@ export default function Game(): JSX.Element {
   else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `Waiting for ${waitingOn.displayName} to set up…` : null;
+  } else if (room.phase === 'robber' && !isCurrentPlayer && !robberVictimStep) {
+    const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
+    phaseBanner = waitingOn ? `Waiting for ${waitingOn.displayName} to move the robber…` : null;
+  } else if (room.phase === 'discard' && !room.pendingDiscardUids.includes(uid) && room.pendingDiscardUids.length > 0) {
+    const names = room.pendingDiscardUids.map((u) => players[u]?.displayName ?? 'someone');
+    phaseBanner = `Waiting for ${names.join(', ')} to discard…`;
   }
 
   const showBottomBar = room.phase === 'roll' || room.phase === 'main';
@@ -310,15 +329,7 @@ export default function Game(): JSX.Element {
       </div>
 
       <aside className="game__sidebar">
-        <button
-          type="button"
-          className="game__leave-button"
-          onClick={() => {
-            if (window.confirm('Leave this game? Your seat stays active — rejoin anytime with the room code.')) {
-              leaveRoom();
-            }
-          }}
-        >
+        <button type="button" className="game__leave-button" onClick={() => setLeaveConfirmOpen(true)}>
           Leave game
         </button>
         <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeck.length} />
@@ -340,25 +351,39 @@ export default function Game(): JSX.Element {
             <div className="game__toolbar-label">Your hand</div>
             <ResourceHand resources={resources} />
           </div>
-          <DiceRoller diceRoll={room.diceRoll} canRoll={legalTypes.includes('rollDice')} onRoll={() => void runAction({ type: 'rollDice', uid })} />
+          <DiceRoller
+            diceRoll={room.diceRoll}
+            canRoll={legalTypes.includes('rollDice')}
+            isCurrentPlayer={isCurrentPlayer}
+            onRoll={() => void runAction({ type: 'rollDice', uid })}
+          />
           <TurnTimer turnStartedAt={room.turnStartedAt} turnTimerSeconds={room.turnTimerSeconds} />
           <BuildToolbar
             resources={resources}
             legalTypes={legalTypes}
             activeMode={buildMode}
             devCardsRemaining={room.devCardDeck.length}
+            isCurrentPlayer={isCurrentPlayer}
             onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
             onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
             onEndTurn={() => void runAction({ type: 'endTurn', uid })}
           />
-          <div className="game__toolbar-popovers">
-            <button type="button" className="game__toolbar-toggle" onClick={() => setShowDevCards((v) => !v)}>
+          <div className="game__toolbar-popovers" ref={popoversRef}>
+            <button
+              type="button"
+              className="game__toolbar-toggle"
+              onClick={() => setActivePopover((v) => (v === 'devcards' ? null : 'devcards'))}
+            >
               Dev Cards ({ownHand?.devCards.length ?? 0})
             </button>
-            <button type="button" className="game__toolbar-toggle" onClick={() => setShowTrade((v) => !v)}>
+            <button
+              type="button"
+              className="game__toolbar-toggle"
+              onClick={() => setActivePopover((v) => (v === 'trade' ? null : 'trade'))}
+            >
               Trade
             </button>
-            {showDevCards && (
+            {activePopover === 'devcards' && (
               <div className="game__popover game__popover--devcards">
                 <DevCardPanel
                   devCards={ownHand?.devCards ?? []}
@@ -368,7 +393,7 @@ export default function Game(): JSX.Element {
                 />
               </div>
             )}
-            {showTrade && (
+            {activePopover === 'trade' && (
               <div className="game__popover game__popover--trade">
                 <TradePanel
                   room={room}
@@ -452,6 +477,23 @@ export default function Game(): JSX.Element {
             <div className="modal__actions">
               <button type="button" onClick={() => setMonopolyPending(null)}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {leaveConfirmOpen && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>Leave game?</h3>
+            <p>Your seat stays active — you can rejoin anytime with the room code.</p>
+            <div className="modal__actions">
+              <button type="button" onClick={() => setLeaveConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="modal__confirm" onClick={() => leaveRoom()}>
+                Leave
               </button>
             </div>
           </div>

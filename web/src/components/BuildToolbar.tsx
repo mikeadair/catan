@@ -24,6 +24,7 @@ export interface BuildToolbarProps {
   legalTypes: GameAction['type'][];
   activeMode: BuildMode;
   devCardsRemaining: number;
+  isCurrentPlayer: boolean;
   onToggleMode: (mode: 'road' | 'settlement' | 'city') => void;
   onBuyDevCard: () => void;
   onEndTurn: () => void;
@@ -33,21 +34,51 @@ function canAfford(resources: ResourceCount, cost: Partial<ResourceCount>): bool
   return (Object.keys(cost) as (keyof ResourceCount)[]).every((r) => resources[r] >= (cost[r] ?? 0));
 }
 
+function costLabel(cost: Partial<ResourceCount>): string {
+  return (Object.keys(cost) as (keyof ResourceCount)[])
+    .map((r) => `${cost[r]} ${RESOURCE_LABEL[r].toLowerCase()}`)
+    .join(', ');
+}
+
+/** Best-effort explanation for why a build/buy button is disabled — legalTypes already
+ * bakes affordability into its check, so an unaffordable hand and "not your turn" both
+ * just show up as "not in legalTypes"; disambiguate using what we can see client-side. */
+function disabledReason(
+  legal: boolean,
+  isCurrentPlayer: boolean,
+  afford: boolean,
+  cost: Partial<ResourceCount>,
+): string | undefined {
+  if (legal) return undefined;
+  if (!isCurrentPlayer) return 'Not your turn';
+  if (!afford) return `Need ${costLabel(cost)}`;
+  return 'Not available right now';
+}
+
 export default function BuildToolbar({
   resources,
   legalTypes,
   activeMode,
   devCardsRemaining,
+  isCurrentPlayer,
   onToggleMode,
   onBuyDevCard,
   onEndTurn,
 }: BuildToolbarProps): JSX.Element {
-  const canRoad = legalTypes.includes('buildRoad') && canAfford(resources, BUILD_COSTS.road);
-  const canSettlement = legalTypes.includes('buildSettlement') && canAfford(resources, BUILD_COSTS.settlement);
-  const canCity = legalTypes.includes('buildCity') && canAfford(resources, BUILD_COSTS.city);
-  const canBuyDevCard =
-    legalTypes.includes('buyDevCard') && canAfford(resources, BUILD_COSTS.devCard) && devCardsRemaining > 0;
+  const affordRoad = canAfford(resources, BUILD_COSTS.road);
+  const affordSettlement = canAfford(resources, BUILD_COSTS.settlement);
+  const affordCity = canAfford(resources, BUILD_COSTS.city);
+  const affordDevCard = canAfford(resources, BUILD_COSTS.devCard);
+
+  const canRoad = legalTypes.includes('buildRoad') && affordRoad;
+  const canSettlement = legalTypes.includes('buildSettlement') && affordSettlement;
+  const canCity = legalTypes.includes('buildCity') && affordCity;
+  const canBuyDevCard = legalTypes.includes('buyDevCard') && affordDevCard && devCardsRemaining > 0;
   const canEndTurn = legalTypes.includes('endTurn');
+
+  const devCardReason = devCardsRemaining <= 0 && legalTypes.includes('buyDevCard')
+    ? 'No development cards left in the deck'
+    : disabledReason(canBuyDevCard, isCurrentPlayer, affordDevCard, BUILD_COSTS.devCard);
 
   return (
     <div className="build-toolbar">
@@ -55,6 +86,7 @@ export default function BuildToolbar({
         type="button"
         className={`build-toolbar__button${activeMode === 'road' ? ' build-toolbar__button--active' : ''}`}
         disabled={!canRoad}
+        title={disabledReason(canRoad, isCurrentPlayer, affordRoad, BUILD_COSTS.road)}
         onClick={() => onToggleMode('road')}
       >
         <span className="build-toolbar__label">Road</span>
@@ -64,6 +96,7 @@ export default function BuildToolbar({
         type="button"
         className={`build-toolbar__button${activeMode === 'settlement' ? ' build-toolbar__button--active' : ''}`}
         disabled={!canSettlement}
+        title={disabledReason(canSettlement, isCurrentPlayer, affordSettlement, BUILD_COSTS.settlement)}
         onClick={() => onToggleMode('settlement')}
       >
         <span className="build-toolbar__label">Settlement</span>
@@ -73,12 +106,19 @@ export default function BuildToolbar({
         type="button"
         className={`build-toolbar__button${activeMode === 'city' ? ' build-toolbar__button--active' : ''}`}
         disabled={!canCity}
+        title={disabledReason(canCity, isCurrentPlayer, affordCity, BUILD_COSTS.city)}
         onClick={() => onToggleMode('city')}
       >
         <span className="build-toolbar__label">City</span>
         <CostChips cost={BUILD_COSTS.city} />
       </button>
-      <button type="button" className="build-toolbar__button" disabled={!canBuyDevCard} onClick={onBuyDevCard}>
+      <button
+        type="button"
+        className="build-toolbar__button"
+        disabled={!canBuyDevCard}
+        title={devCardReason}
+        onClick={onBuyDevCard}
+      >
         <span className="build-toolbar__label">Dev Card</span>
         <CostChips cost={BUILD_COSTS.devCard} />
       </button>
@@ -86,6 +126,7 @@ export default function BuildToolbar({
         type="button"
         className="build-toolbar__button build-toolbar__button--end-turn"
         disabled={!canEndTurn}
+        title={canEndTurn ? undefined : !isCurrentPlayer ? 'Not your turn' : 'Roll the dice first'}
         onClick={onEndTurn}
       >
         End Turn

@@ -3,18 +3,10 @@ import { useGameStore } from '../state/store';
 import { addBot, removeSeat, startGame } from '../firebase/rooms';
 import { MAP_PRESETS } from '../game/mapPresets';
 import { PLAYER_COLORS } from '../game/types';
+import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import './Lobby.css';
 
 const MAX_SEATS = PLAYER_COLORS.length;
-
-const COLOR_SWATCH: Record<string, string> = {
-  red: '#c0392b',
-  blue: '#2d6cdf',
-  white: '#e8e9ec',
-  orange: '#e07b1f',
-  green: '#2f7a3d',
-  brown: '#7a5230',
-};
 
 export default function Lobby(): JSX.Element {
   const uid = useGameStore((s) => s.uid);
@@ -104,7 +96,7 @@ export default function Lobby(): JSX.Element {
             <li key={p.uid} className="lobby__seat">
               <span
                 className="lobby__swatch"
-                style={{ background: COLOR_SWATCH[p.color] ?? '#888' }}
+                style={{ background: PLAYER_COLOR_HEX[p.color] }}
               />
               <span className="lobby__seat-name">{p.displayName}</span>
               {p.isBot && <span className="lobby__badge">bot</span>}
