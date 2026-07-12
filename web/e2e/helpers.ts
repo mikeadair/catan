@@ -47,10 +47,20 @@ export async function playThroughSetupForSelf(page: Page, maxRounds = 60): Promi
       // near-transparent circle (opacity 0.001, used to widen the edge hit-area) sits
       // exactly at the point Playwright's actionability check probes, which it reports
       // as "intercepting" even though both elements share the same click handler.
-      if (banner.includes('settlement') && (await vertexHotspot.count()) > 0) {
-        await vertexHotspot.click({ force: true });
-      } else if ((await edgeHotspot.count()) > 0) {
-        await edgeHotspot.click({ force: true });
+      //
+      // Wrapped in try/catch with a short per-click timeout: with bots polling and
+      // applying their own moves concurrently, the board can re-render (detaching the
+      // located SVG element) between locate and click. Playwright's built-in retry can
+      // spin on that for the test's full timeout; on failure here we just loop and
+      // re-locate against the fresh DOM instead.
+      try {
+        if (banner.includes('settlement') && (await vertexHotspot.count()) > 0) {
+          await vertexHotspot.click({ force: true, timeout: 5000 });
+        } else if ((await edgeHotspot.count()) > 0) {
+          await edgeHotspot.click({ force: true, timeout: 5000 });
+        }
+      } catch {
+        // transient detach/re-render race — retry on the next loop iteration
       }
       await page.waitForTimeout(300);
     } else {

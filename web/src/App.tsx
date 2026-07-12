@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuthUid } from './firebase/auth';
 import { useGameStore, getLastRoomId } from './state/store';
+import { unlockAudio, isMuted, setMuted, playSfx } from './audio/sfx';
 import Home from './routes/Home';
 import Lobby from './routes/Lobby';
 import Game from './routes/Game';
@@ -14,6 +15,7 @@ function App() {
   const enterRoom = useGameStore((s) => s.enterRoom);
   const error = useGameStore((s) => s.error);
   const clearError = useGameStore((s) => s.clearError);
+  const [muted, setMutedState] = useState(isMuted);
 
   useEffect(() => {
     if (uid) setUid(uid);
@@ -25,6 +27,25 @@ function App() {
     const last = getLastRoomId();
     if (last) enterRoom(last);
   }, [uid, roomId, enterRoom]);
+
+  // Browsers suspend AudioContext until a user gesture; unlock on the first one.
+  useEffect(() => {
+    const handler = () => unlockAudio();
+    window.addEventListener('pointerdown', handler, { once: true });
+    return () => window.removeEventListener('pointerdown', handler);
+  }, []);
+
+  const lastErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (error && error !== lastErrorRef.current) playSfx('error');
+    lastErrorRef.current = error;
+  }, [error]);
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
+  }
 
   if (loading || !uid) {
     return (
@@ -42,6 +63,15 @@ function App() {
           {error}
         </div>
       )}
+      <button
+        type="button"
+        className="sound-toggle"
+        onClick={toggleMute}
+        aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+        title={muted ? 'Unmute sound' : 'Mute sound'}
+      >
+        {muted ? '🔇' : '🔊'}
+      </button>
       {!roomId || !room ? <Home uid={uid} /> : room.status === 'lobby' ? <Lobby /> : <Game />}
     </>
   );

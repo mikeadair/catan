@@ -1,8 +1,9 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { legalActionTypes, type GameStateBundle } from '../game/rules';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '../game/types';
 import { RESOURCES } from '../game/types';
+import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
 import PlayerRoster from '../components/PlayerRoster';
 import BankPanel from '../components/BankPanel';
@@ -25,6 +26,21 @@ interface RobberVictimStep {
   hexId: string;
   eligible: string[];
   viaCardId?: string;
+}
+
+/** Maps a game/rules.ts log message to the sound it should trigger, if any. */
+function sfxForLogMessage(message: string): SfxKind | null {
+  if (/ wins the game!$/.test(message)) return 'win';
+  if (/ stole a card from /.test(message)) return 'robber';
+  if (/ discarded \d+ cards\.$/.test(message)) return 'discard';
+  if (/ rolled \d+\.$/.test(message)) return 'dice';
+  if (/ built a (road|settlement|city)\.$/.test(message)) return 'build';
+  if (/ placed a settlement\.$/.test(message)) return 'build';
+  if (/ bought a development card\.$/.test(message)) return 'card';
+  if (/ played (Road Building|Year of Plenty|Monopoly)/.test(message)) return 'card';
+  if (/ traded .* with the bank\.$/.test(message)) return 'trade';
+  if (/ accepted a trade from /.test(message)) return 'trade';
+  return null;
 }
 
 export default function Game(): JSX.Element {
@@ -54,6 +70,37 @@ export default function Game(): JSX.Element {
   useEffect(() => {
     setBuildMode(null);
   }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
+
+  // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
+  // robber steals, discards, dev cards, and the win announcement).
+  const lastLogIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const log = room?.log;
+    if (!log || log.length === 0) return;
+    const newest = log[log.length - 1];
+    if (lastLogIdRef.current === null) {
+      lastLogIdRef.current = newest.id; // don't sound off for history on first mount
+      return;
+    }
+    if (newest.id !== lastLogIdRef.current) {
+      lastLogIdRef.current = newest.id;
+      const kind = sfxForLogMessage(newest.message);
+      if (kind) playSfx(kind);
+    }
+  }, [room?.log]);
+
+  // Sound effect: a short chime whenever it becomes this player's turn.
+  const wasCurrentPlayerRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!room || !uid) return;
+    const isNowCurrent = room.turnOrder[room.currentPlayerIndex] === uid;
+    if (wasCurrentPlayerRef.current === null) {
+      wasCurrentPlayerRef.current = isNowCurrent; // no sound on first mount
+      return;
+    }
+    if (isNowCurrent && !wasCurrentPlayerRef.current) playSfx('yourTurn');
+    wasCurrentPlayerRef.current = isNowCurrent;
+  }, [room?.turnOrder, room?.currentPlayerIndex, uid]);
 
   if (!uid || !room) {
     return <div className="game-loading">Loading game…</div>;
