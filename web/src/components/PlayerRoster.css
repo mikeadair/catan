@@ -1,0 +1,112 @@
+.player-roster {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-roster__header {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  font-weight: 600;
+}
+
+.player-roster__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.player-roster__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.player-roster__row--active {
+  border-color: var(--color-accent);
+  background: rgba(242, 177, 52, 0.08);
+}
+
+.player-roster__row--disconnected {
+  opacity: 0.5;
+}
+
+.player-roster__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.player-roster__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.player-roster__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-roster__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-roster__badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: var(--color-text-dim);
+}
+
+.player-roster__badge--you {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.player-roster__badge--offline {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.player-roster__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+
+.player-roster__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.player-roster__icon-badge {
+  margin-left: 2px;
+}

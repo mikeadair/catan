@@ -1,0 +1,76 @@
+.resource-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.resource-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  min-height: 30px;
+}
+
+.resource-chip--interactive {
+  padding-right: 4px;
+}
+
+.resource-chip__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.resource-chip__count {
+  font-weight: 600;
+  min-width: 12px;
+  text-align: center;
+}
+
+.resource-chip--brick .resource-chip__count { color: var(--resource-brick); }
+.resource-chip--lumber .resource-chip__count { color: var(--resource-lumber); }
+.resource-chip--ore .resource-chip__count { color: var(--resource-ore); }
+.resource-chip--grain .resource-chip__count { color: var(--resource-grain); }
+.resource-chip--wool .resource-chip__count { color: var(--resource-wool); }
+
+.resource-chip__stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--color-border);
+}
+
+.resource-chip__stepper button {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.resource-chip__stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.resource-chip__stepper button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.resource-chip__selected {
+  min-width: 16px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--color-accent);
+}

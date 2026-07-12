@@ -1,0 +1,63 @@
+.build-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.build-toolbar__button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: var(--color-text);
+  min-width: 92px;
+}
+
+.build-toolbar__button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.build-toolbar__button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.build-toolbar__button--active {
+  border-color: var(--color-accent);
+  background: rgba(242, 177, 52, 0.15);
+}
+
+.build-toolbar__button--end-turn {
+  background: var(--color-accent);
+  color: #1c1c1c;
+  font-weight: 700;
+  justify-content: center;
+}
+
+.build-toolbar__button--end-turn:disabled {
+  background: var(--color-panel-light);
+  color: var(--color-text-dim);
+}
+
+.build-toolbar__label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.build-toolbar__cost {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-dim);
+}
+
+.build-toolbar__cost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}

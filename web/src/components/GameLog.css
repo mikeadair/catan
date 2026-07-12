@@ -1,0 +1,84 @@
+.game-log {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.game-log__header {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  font-weight: 600;
+}
+
+.game-log__scroll {
+  flex: 1;
+  min-height: 120px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+
+.game-log__empty {
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.game-log__entry {
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.game-log__entry--system {
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.game-log__entry--chat {
+  color: var(--color-text);
+}
+
+.game-log__chat-name {
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.game-log__form {
+  display: flex;
+  gap: 6px;
+}
+
+.game-log__input {
+  flex: 1;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.game-log__send {
+  background: var(--color-accent);
+  color: #1c1c1c;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-weight: 600;
+}
+
+.game-log__send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

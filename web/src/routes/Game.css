@@ -1,0 +1,174 @@
+@import '../components/modal.css';
+
+.game {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+  height: 100svh;
+  box-sizing: border-box;
+}
+
+.game__board-area {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-ocean-deep);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.game__phase-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-panel);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 8px 16px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.game__sidebar {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.game__toolbar {
+  grid-column: 1;
+  grid-row: 2;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+.game__toolbar-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.game__toolbar-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  font-weight: 600;
+}
+
+.game__toolbar-popovers {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.game__toolbar-toggle {
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.game__toolbar-toggle:hover {
+  border-color: var(--color-accent);
+}
+
+.game__popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  z-index: 200;
+}
+
+.game__monopoly-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.game__monopoly-choices button {
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.game__monopoly-choices button:hover {
+  border-color: var(--color-accent);
+}
+
+.game-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-dim);
+}
+
+.game-over {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.game-over__card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.game-over__button {
+  margin-top: 16px;
+  background: var(--color-accent);
+  color: #1c1c1c;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 700;
+}
+
+@media (max-width: 1000px) {
+  .game {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 1fr) auto auto;
+  }
+  .game__sidebar {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: 260px;
+  }
+  .game__toolbar {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}

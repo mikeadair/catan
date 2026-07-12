@@ -1,0 +1,45 @@
+.catan-board {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+.catan-board__terrain-icon {
+  pointer-events: none;
+}
+
+.catan-board__hotspot {
+  cursor: pointer;
+}
+
+.catan-board__hotspot--vertex {
+  fill: var(--color-accent);
+  fill-opacity: 0.55;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.catan-board__hotspot--vertex:hover {
+  fill-opacity: 0.9;
+}
+
+.catan-board__hotspot--edge {
+  stroke: var(--color-accent);
+  stroke-opacity: 0.4;
+}
+
+.catan-board__hotspot--edge:hover {
+  stroke-opacity: 0.85;
+}
+
+.catan-board__hotspot--hex {
+  fill: var(--color-accent);
+  fill-opacity: 0.15;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+.catan-board__hotspot--hex:hover {
+  fill-opacity: 0.35;
+}

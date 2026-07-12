@@ -1,0 +1,237 @@
+.lobby {
+  flex: 1;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background:
+    radial-gradient(circle at 50% -10%, var(--color-ocean) 0%, transparent 60%),
+    var(--color-ocean-deep);
+}
+
+.lobby-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lobby-loading__spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  animation: lobby-spin 0.8s linear infinite;
+}
+
+@keyframes lobby-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.lobby__card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.lobby__card--code {
+  align-items: center;
+  text-align: center;
+}
+
+.lobby__code-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.lobby__code {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  color: var(--color-accent);
+}
+
+.lobby__seats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby__seat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.lobby__seat--open {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.lobby__swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.lobby__swatch--empty {
+  background: transparent;
+  border: 2px dashed var(--color-border);
+}
+
+.lobby__seat-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.lobby__seat-name--empty {
+  font-weight: 400;
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
+.lobby__badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: var(--color-border);
+  color: var(--color-text-dim);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.lobby__badge--host {
+  background: var(--color-accent);
+  color: #1c1a12;
+}
+
+.lobby__seat-remove {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.lobby__seat-remove:hover {
+  background: rgba(229, 72, 77, 0.15);
+}
+
+.lobby__error {
+  color: var(--color-danger);
+  font-size: 13px;
+  background: rgba(229, 72, 77, 0.12);
+  border: 1px solid var(--color-danger);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.lobby__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.lobby__hint {
+  font-size: 13px;
+  color: var(--color-text-dim);
+  width: 100%;
+}
+
+.lobby__button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--color-panel-light);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  transition: opacity 0.15s ease, transform 0.05s ease;
+}
+
+.lobby__button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.lobby__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lobby__button--primary {
+  background: var(--color-accent);
+  color: #1c1a12;
+  border-color: var(--color-accent);
+}
+
+.lobby__button--danger {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+}
+
+.lobby__settings {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby__settings-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 8px;
+}
+
+.lobby__settings-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.lobby__settings-row dt {
+  color: var(--color-text-dim);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.lobby__settings-row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.lobby__settings-desc {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  font-weight: 400;
+  margin-top: 2px;
+}

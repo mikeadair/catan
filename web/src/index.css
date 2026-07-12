@@ -1,0 +1,60 @@
+:root {
+  --color-ocean: #1c5d8c;
+  --color-ocean-deep: #164a70;
+  --color-panel: #2b2f38;
+  --color-panel-light: #383d48;
+  --color-border: #454b58;
+  --color-text: #e8e9ec;
+  --color-text-dim: #9aa0ab;
+  --color-accent: #f2b134;
+  --color-danger: #e5484d;
+  --color-success: #3ba55d;
+
+  --resource-brick: #c1652f;
+  --resource-lumber: #2f7a3d;
+  --resource-ore: #6b7280;
+  --resource-grain: #d9a441;
+  --resource-wool: #8fbf5f;
+
+  font: 15px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+  color: var(--color-text);
+  background: var(--color-ocean-deep);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3 {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input, select {
+  font: inherit;
+}

@@ -1,0 +1,45 @@
+@import './modal.css';
+
+.robber-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-panel);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  padding: 8px 16px;
+  border-radius: 8px;
+  z-index: 800;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.robber-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.robber-modal__victim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--color-text);
+  font-weight: 600;
+  text-align: left;
+}
+
+.robber-modal__victim:hover {
+  border-color: var(--color-accent);
+}
+
+.robber-modal__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}

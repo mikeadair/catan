@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function room(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
+    function isMember(roomId) {
+      return signedIn() && request.auth.uid in room(roomId).turnOrder;
+    }
+
+    function isHost(roomId) {
+      return signedIn() && request.auth.uid == room(roomId).hostUid;
+    }
+
+    // Bots have no auth principal of their own — any of these UIDs get acted on behalf of
+    // by whichever real, signed-in room member's client is currently driving them (adding
+    // them, running their turn via claimAndRunBotAction, proposing/accepting trades for
+    // them, etc). Used below wherever the literal spec's "owner writes their own doc" rule
+    // would otherwise make bot data permanently unwritable.
+    function isBotUid(roomId, uid) {
+      return uid != null &&
+        get(/databases/$(database)/documents/rooms/$(roomId)/players/$(uid)).data.isBot == true;
+    }
+
+    match /rooms/{roomId} {
+      // Anyone signed in who is already a member can read; anyone signed in can also read
+      // a still-open lobby, so joining-by-code can validate the room before the join write.
+      allow read: if signedIn() && (request.auth.uid in resource.data.turnOrder || resource.data.status == 'lobby');
+
+      // Creation: any signed-in user may create a room doc for themselves as host (this is
+      // how createRoom's initial writeBatch succeeds before they're a "member" of anything).
+      allow create: if signedIn() && request.auth.uid == request.resource.data.hostUid;
+
+      // Updates: a seated member may update the shared game-state doc (this is the accepted
+      // client-authoritative trade-off — we don't enforce full per-field game legality here,
+      // that's game/rules.ts's job; we only gate *who* may touch a room they're not part of).
+      // The host additionally gets write access pre-game for lobby management (add/remove
+      // seats, start the game) while the room is still in 'lobby'. A fourth, narrow case:
+      // a signed-in non-member may update a lobby room if the only membership change is
+      // adding themselves — this is joinRoom's self-service seat write, which by definition
+      // happens before they're in turnOrder.
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.turnOrder ||
+        (isHost(roomId) && resource.data.status == 'lobby') ||
+        (
+          resource.data.status == 'lobby' &&
+          request.auth.uid in request.resource.data.turnOrder &&
+          !(request.auth.uid in resource.data.turnOrder)
+        )
+      );
+
+      allow delete: if false;
+    }
+
+    match /rooms/{roomId}/players/{uid} {
+      allow read: if isMember(roomId);
+
+      // A player writes their own seat. The host may also write a *bot* seat (add/kick/
+      // update), since bots have no auth principal of their own to satisfy `uid == auth.uid`.
+      // "Is a bot doc" is judged from whichever of incoming/existing data has isBot == true,
+      // so this covers create (no existing doc), update, and delete (no incoming data).
+      allow write: if signedIn() && (
+        request.auth.uid == uid ||
+        (isHost(roomId) && (
+          (request.resource != null && request.resource.data.isBot == true) ||
+          (resource != null && resource.data.isBot == true)
+        ))
+      );
+
+      match /private/hand {
+        // A player's own hand is private to them, both to read and write. Two necessary
+        // extensions beyond that baseline, both required for the app to actually function:
+        //  1. Bot hands have no real auth principal behind them, so any room member may
+        //     read/write a hand doc whose parent player doc is a bot — needed for whichever
+        //     client's UI layer executes a bot's turn (claimAndRunBotAction) to decide/apply
+        //     on the bot's behalf.
+        //  2. startGame deals every seated player's starting hand (including OTHER humans',
+        //     not just the host's own) in a single host-run batch. The literal spec text
+        //     ("readable/writable ONLY by uid==auth.uid, except bot docs") doesn't carve out
+        //     room for this, so we add a narrowly-scoped exception: the host may CREATE
+        //     (never overwrite an existing) a hand doc while the room is still 'lobby' —
+        //     i.e. exactly the lobby -> playing deal, and never again afterward.
+        function parentIsBot() {
+          return get(/databases/$(database)/documents/rooms/$(roomId)/players/$(uid)).data.isBot == true;
+        }
+
+        allow read, write: if signedIn() && (
+          request.auth.uid == uid ||
+          (isMember(roomId) && parentIsBot()) ||
+          (isHost(roomId) && resource == null && room(roomId).status == 'lobby')
+        );
+      }
+    }
+
+    match /rooms/{roomId}/trades/{tradeId} {
+      allow read: if isMember(roomId);
+
+      // proposerUid may be a bot's synthetic uid (a bot proposing a trade via
+      // claimAndRunBotAction) — see isBotUid() above for why that needs its own clause.
+      allow create: if isMember(roomId) && (
+        request.auth.uid == request.resource.data.proposerUid ||
+        isBotUid(roomId, request.resource.data.proposerUid)
+      );
+
+      // Accept/reject/cancel/counter: either side of a targeted offer, any room member for
+      // an open offer (targetUid == null), or any room member acting on behalf of a bot that
+      // is the proposer or the target.
+      allow update: if isMember(roomId) && (
+        request.auth.uid == resource.data.proposerUid ||
+        request.auth.uid == resource.data.targetUid ||
+        resource.data.targetUid == null ||
+        isBotUid(roomId, resource.data.proposerUid) ||
+        isBotUid(roomId, resource.data.targetUid)
+      );
+
+      allow delete: if false;
+    }
+
+    match /rooms/{roomId}/chat/{msgId} {
+      allow read: if isMember(roomId);
+      allow create: if isMember(roomId) && request.auth.uid == request.resource.data.uid;
+      allow update, delete: if false;
+    }
+  }
+}
