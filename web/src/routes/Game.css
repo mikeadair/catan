@@ -41,6 +41,38 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
+.game__resource-grant {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-success);
+  color: #0c1c12;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 6px 14px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: resource-grant-in 0.25s ease-out, resource-grant-out 0.3s ease-in 2.5s forwards;
+}
+
+@keyframes resource-grant-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes resource-grant-out {
+  to {
+    opacity: 0;
+  }
+}
+
 .game__sidebar {
   grid-column: 2;
   grid-row: 1 / span 2;

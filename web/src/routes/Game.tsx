@@ -3,6 +3,7 @@ import { useGameStore } from '../state/store';
 import { legalActionTypes, type GameStateBundle } from '../game/rules';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '../game/types';
 import { RESOURCES } from '../game/types';
+import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
 import PlayerRoster from '../components/PlayerRoster';
@@ -69,6 +70,7 @@ export default function Game(): JSX.Element {
   // in flight so controls can show pending state instead of just going inert with no
   // feedback until the promise settles.
   const [pendingActionType, setPendingActionType] = useState<GameAction['type'] | null>(null);
+  const [resourceGrantMessage, setResourceGrantMessage] = useState<string | null>(null);
 
   // Clear transient, per-turn UI selection state whenever the phase or the
   // active player changes underneath us (e.g. an illegal click didn't clear
@@ -106,6 +108,24 @@ export default function Game(): JSX.Element {
       if (kind) playSfx(kind);
     }
   }, [room?.log]);
+
+  // Callout when the setup-phase second-settlement resource grant lands — otherwise it's a
+  // silent, easy-to-miss state change (the resource hand isn't even shown during setup).
+  const prevResourcesRef = useRef<ResourceCount | null>(null);
+  useEffect(() => {
+    const current = ownHand?.resources ?? null;
+    const prev = prevResourcesRef.current;
+    prevResourcesRef.current = current;
+    if (!current || !prev) return;
+    if (room?.phase !== 'setup1' && room?.phase !== 'setup2') return;
+    const gains = RESOURCES.filter((r) => current[r] > prev[r]).map(
+      (r) => `+${current[r] - prev[r]} ${RESOURCE_LABEL[r]}`,
+    );
+    if (gains.length === 0) return;
+    setResourceGrantMessage(gains.join(', '));
+    const timer = setTimeout(() => setResourceGrantMessage(null), 2800);
+    return () => clearTimeout(timer);
+  }, [ownHand, room?.phase]);
 
   // Sound effect: a short chime whenever it becomes this player's turn.
   const wasCurrentPlayerRef = useRef<boolean | null>(null);
@@ -302,12 +322,16 @@ export default function Game(): JSX.Element {
 
   const robberStep: RobberStep = robberVictimStep ? 'victim' : interactionMode === 'placeRobber' ? 'hex' : null;
 
+  const setupRoundLabel = room.setupRound
+    ? `Round ${room.setupRound} of 2${room.setupRound === 2 ? ' (reversed order)' : ''} — `
+    : '';
+
   let phaseBanner: string | null = null;
-  if (setupNeedsSettlement) phaseBanner = 'Place your first settlement.';
-  else if (setupNeedsRoad) phaseBanner = 'Place a road connected to your new settlement.';
+  if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
+  else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
   else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
-    phaseBanner = waitingOn ? `Waiting for ${waitingOn.displayName} to set up…` : null;
+    phaseBanner = waitingOn ? `${setupRoundLabel}Waiting for ${waitingOn.displayName} to set up…` : null;
   } else if (room.phase === 'robber' && !isCurrentPlayer && !robberVictimStep) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `Waiting for ${waitingOn.displayName} to move the robber…` : null;
@@ -322,6 +346,11 @@ export default function Game(): JSX.Element {
     <div className="game">
       <div className="game__board-area">
         {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
+        {resourceGrantMessage && (
+          <div key={resourceGrantMessage} className="game__resource-grant">
+            {resourceGrantMessage}
+          </div>
+        )}
         <Board
           room={room}
           players={players}
