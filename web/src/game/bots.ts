@@ -178,12 +178,14 @@ function decideDiscard(bundle: GameStateBundle, botUid: string): GameAction {
 // ---------------------------------------------------------------------------
 
 function decideRobberMove(bundle: GameStateBundle, botUid: string, devCardId: string | null): GameAction {
-  const { room, players, hands } = bundle;
+  const { room, players } = bundle;
   const board = room.board!;
   const opponents = room.turnOrder.filter((u) => u !== botUid);
 
-  const opponentScore = (u: string) =>
-    players[u].visibleVictoryPoints * 3 + RESOURCES.reduce((s, r) => s + hands[u].resources[r], 0);
+  // Uses each opponent's public resourceCount rather than their private hand — the bot
+  // (like a human player) can only see how many cards someone holds, not what they are,
+  // and the decision bundle for a bot's turn only ever loads the bot's own private hand.
+  const opponentScore = (u: string) => players[u].visibleVictoryPoints * 3 + players[u].resourceCount;
 
   let leader: string | null = null;
   for (const u of opponents) {
@@ -216,8 +218,8 @@ function decideRobberMove(bundle: GameStateBundle, botUid: string, devCardId: st
   );
   let stealFromUid: string | null = null;
   for (const u of victims) {
-    const n = RESOURCES.reduce((s, r) => s + hands[u].resources[r], 0);
-    if (stealFromUid === null || n > RESOURCES.reduce((s, r) => s + hands[stealFromUid!].resources[r], 0)) {
+    const n = players[u].resourceCount;
+    if (stealFromUid === null || n > players[stealFromUid].resourceCount) {
       stealFromUid = u;
     }
   }

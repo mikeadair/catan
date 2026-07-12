@@ -51,6 +51,22 @@
   overflow-y: auto;
 }
 
+.game__leave-button {
+  align-self: flex-end;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.game__leave-button:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
 .game__toolbar {
   grid-column: 1;
   grid-row: 2;

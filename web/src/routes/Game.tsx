@@ -310,6 +310,17 @@ export default function Game(): JSX.Element {
       </div>
 
       <aside className="game__sidebar">
+        <button
+          type="button"
+          className="game__leave-button"
+          onClick={() => {
+            if (window.confirm('Leave this game? Your seat stays active — rejoin anytime with the room code.')) {
+              leaveRoom();
+            }
+          }}
+        >
+          Leave game
+        </button>
         <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeck.length} />
         <PlayerRoster
           players={players}
