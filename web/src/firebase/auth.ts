@@ -4,6 +4,7 @@ import {
   isSignInWithEmailLink,
   linkWithCredential,
   onAuthStateChanged,
+  onIdTokenChanged,
   sendSignInLinkToEmail,
   signInAnonymously,
   signInWithCredential,
@@ -64,7 +65,12 @@ export function useAuthUid(): { uid: string | null; loading: boolean } {
   const [loading, setLoading] = useState<boolean>(!auth.currentUser);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // onIdTokenChanged (not onAuthStateChanged) — it also fires on linkWithCredential/
+    // signInWithCredential's in-place user upgrades (anonymous -> real account keeps the
+    // same uid/session, so onAuthStateChanged doesn't reliably refire for it; it eventually
+    // catches up on the next unrelated token refresh, which read as the UI "just sitting
+    // there" for a while after a successful sign-in).
+    const unsubscribe = onIdTokenChanged(auth, (user) => {
       setUid(user ? user.uid : null);
       setLoading(false);
     });
@@ -104,7 +110,10 @@ export function useAuthUser(): AuthUserInfo {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // See useAuthUid's comment — onIdTokenChanged catches the linkWithCredential/
+    // signInWithCredential upgrade immediately instead of leaving the UI showing "guest"
+    // for a while after a real sign-in actually succeeded.
+    const unsubscribe = onIdTokenChanged(auth, (user) => {
       setInfo({
         uid: user?.uid ?? null,
         email: user && !user.isAnonymous ? user.email : null,

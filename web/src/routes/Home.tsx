@@ -325,25 +325,26 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       <div className="home__card home__card--name">
         <div className="home__card-header">
           <h2>Play as</h2>
-          <div className="home__account-row">
-            {!authUser.isAnonymous && authUser.email ? (
-              <div className="home__account-status">
-                <span>Signed in as {authUser.email}</span>
-                <button type="button" className="home__link-button" onClick={handleSignOut} disabled={authBusy}>
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="home__link-button"
-                onClick={() => setAuthOpen((v) => !v)}
-                aria-expanded={authOpen}
-              >
-                Sign in / create account
+          {!authUser.isAnonymous && authUser.email ? (
+            <div className="home__account-badge">
+              <span className="home__account-badge-label">Signed in as</span>
+              <span className="home__account-badge-email" title={authUser.email}>
+                {authUser.email}
+              </span>
+              <button type="button" className="home__link-button" onClick={handleSignOut} disabled={authBusy}>
+                Sign out
               </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="home__link-button"
+              onClick={() => setAuthOpen((v) => !v)}
+              aria-expanded={authOpen}
+            >
+              Sign in / create account
+            </button>
+          )}
         </div>
 
         {authOpen && authUser.isAnonymous && (
