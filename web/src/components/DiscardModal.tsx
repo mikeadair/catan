@@ -31,7 +31,7 @@ export default function DiscardModal({ visible, resources, onDiscard }: DiscardM
         <p>
           You must discard {required} card{required === 1 ? '' : 's'} ({selectedTotal}/{required} selected).
         </p>
-        <ResourceHand resources={resources} selected={selected} onChange={setSelected} max={required} />
+        <ResourceHand resources={resources} variant="cards" selected={selected} onChange={setSelected} max={required} />
         <div className="modal__actions">
           <button type="button" className="modal__confirm" onClick={handleConfirm} disabled={selectedTotal !== required}>
             Discard
