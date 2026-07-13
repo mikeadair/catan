@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { GameAction } from '@catan/engine';
-import { devDeckRef, handRef, playerRef, roomRef } from './db';
+import { TRADE_EXPIRY_MS, type GameAction, type TradeOffer } from '@catan/engine';
+import { devDeckRef, handRef, playerRef, roomRef, tradeRef } from './db';
 import { submitActionHandler, type SubmitActionRequest } from './submitAction';
 import { freshRoomId, seedPlayingRoom } from './testHelpers';
 
@@ -207,6 +207,68 @@ describe('submitActionHandler', () => {
       const target = bundle.room.turnOrder.find((u) => u !== 'p1' && u !== bundle.room.hostUid)!;
       const action: GameAction = { type: 'removeSeat', uid: 'ignored', targetUid: target };
       await expectHttpsErrorCode(submitActionHandler(fakeRequest({ roomId, action }, 'p1')), 'failed-precondition');
+    });
+  });
+
+  describe('expireTrades', () => {
+    // Regression coverage for fetchPendingTradesIfNeeded (roomIO.ts): only endTurn used to
+    // read the broader pending-trades list into the transaction bundle, which would have
+    // silently made expireTrades a no-op against a live Firestore-backed room (it only ever
+    // "saw" a single trade doc when the action type was respondTrade/cancelTrade). This
+    // exercises the real submitAction path end to end against the emulator, not just
+    // rules.ts's pure reducer.
+    it('flips an aged-out pending trade to expired, and leaves a fresh one alone', async () => {
+      const bundle = await seedPlayingRoom(roomId, [
+        { uid: 'p0', displayName: 'Host', isBot: false },
+        { uid: 'p1', displayName: 'Two', isBot: false },
+      ]);
+      const [uidA, uidB] = bundle.room.turnOrder;
+
+      const staleTrade: TradeOffer = {
+        id: 'stale-trade',
+        proposerUid: uidA,
+        targetUid: uidB,
+        give: { brick: 1 },
+        receive: { ore: 1 },
+        status: 'pending',
+        counterOf: null,
+        createdAt: Date.now() - TRADE_EXPIRY_MS - 1000,
+        interestedUids: [],
+      };
+      const freshTrade: TradeOffer = {
+        id: 'fresh-trade',
+        proposerUid: uidA,
+        targetUid: null,
+        give: { lumber: 1 },
+        receive: { wool: 1 },
+        status: 'pending',
+        counterOf: null,
+        createdAt: Date.now(),
+        interestedUids: [],
+      };
+      await tradeRef(roomId, staleTrade.id).set(staleTrade);
+      await tradeRef(roomId, freshTrade.id).set(freshTrade);
+
+      const action: GameAction = { type: 'expireTrades', uid: uidB };
+      const res = await submitActionHandler(fakeRequest({ roomId, action }, uidB));
+      expect(res).toEqual({ ok: true });
+
+      const [staleSnap, freshSnap] = await Promise.all([
+        tradeRef(roomId, staleTrade.id).get(),
+        tradeRef(roomId, freshTrade.id).get(),
+      ]);
+      expect(staleSnap.data()!.status).toBe('expired');
+      expect(freshSnap.data()!.status).toBe('pending');
+    });
+
+    it('rejects when no pending trade has actually aged out yet', async () => {
+      const bundle = await seedPlayingRoom(roomId, [
+        { uid: 'p0', displayName: 'Host', isBot: false },
+        { uid: 'p1', displayName: 'Two', isBot: false },
+      ]);
+      const [uidA] = bundle.room.turnOrder;
+      const action: GameAction = { type: 'expireTrades', uid: uidA };
+      await expectHttpsErrorCode(submitActionHandler(fakeRequest({ roomId, action }, uidA)), 'failed-precondition');
     });
   });
 });

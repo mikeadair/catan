@@ -3,7 +3,7 @@ import { applyAction, computeRollGains, createGame, legalActionTypes, recalcLarg
 import { initialFogRevealHexIds } from './board';
 import type { GameStateBundle } from './rules';
 import type { Building, PrivateHand, PublicPlayer, VertexId } from './types';
-import { RESOURCES } from './types';
+import { RESOURCES, TRADE_EXPIRY_MS } from './types';
 
 function makeGame(
   playerCount = 4,
@@ -859,6 +859,89 @@ describe('timeoutEndTurn', () => {
 
     bundle.room.turnStartedAt = Date.now() - 61_000;
     expect(legalActionTypes(bundle, uid)).toContain('timeoutEndTurn');
+  });
+});
+
+describe('expireTrades', () => {
+  it('rejects when no pending trade has aged past TRADE_EXPIRY_MS yet', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+
+    expect(() => applyAction(bundle, { type: 'expireTrades', uid: other })).toThrow(/have expired/i);
+  });
+
+  it('flips an aged-out pending trade to expired, reportable by any room member', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+    bundle.trades[0].createdAt = Date.now() - TRADE_EXPIRY_MS - 1000;
+
+    // Reported by the target, not the proposer — expiry isn't gated to any particular caller.
+    bundle = applyAction(bundle, { type: 'expireTrades', uid: other });
+    expect(bundle.trades.find((t) => t.id === tradeId)?.status).toBe('expired');
+    expect(bundle.room.log.at(-1)?.message).toContain('expired');
+  });
+
+  it('leaves a still-fresh pending trade untouched even when an older one in the same batch expires', () => {
+    let bundle = makeGame(3);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const [otherA, otherB] = bundle.room.turnOrder.filter((u) => u !== uid);
+    bundle.hands[uid].resources = { brick: 1, lumber: 1, ore: 0, grain: 0, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: otherA });
+    const staleId = bundle.trades[0].id;
+    bundle.trades[0].createdAt = Date.now() - TRADE_EXPIRY_MS - 1000;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { lumber: 1 }, receive: { wool: 1 }, targetUid: otherB });
+    const freshId = bundle.trades.find((t) => t.id !== staleId)!.id;
+
+    bundle = applyAction(bundle, { type: 'expireTrades', uid });
+    expect(bundle.trades.find((t) => t.id === staleId)?.status).toBe('expired');
+    expect(bundle.trades.find((t) => t.id === freshId)?.status).toBe('pending');
+  });
+
+  it('an expired trade can no longer be responded to', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle.hands[other].resources.grain = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+    bundle.trades[0].createdAt = Date.now() - TRADE_EXPIRY_MS - 1000;
+    bundle = applyAction(bundle, { type: 'expireTrades', uid });
+
+    expect(() => applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true })).toThrow(
+      /no longer pending/i,
+    );
+  });
+
+  it('is offered via legalActionTypes only once a pending trade has actually aged out', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    expect(legalActionTypes(bundle, other)).not.toContain('expireTrades');
+
+    bundle.trades[0].createdAt = Date.now() - TRADE_EXPIRY_MS - 1000;
+    expect(legalActionTypes(bundle, other)).toContain('expireTrades');
   });
 });
 

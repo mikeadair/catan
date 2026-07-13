@@ -484,6 +484,19 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
 // Responding to trades on someone else's turn
 // ---------------------------------------------------------------------------
 
+/**
+ * Called once per "beat" a bot is off-turn with an eligible trade — the delay before this
+ * actually gets invoked (so the bot doesn't respond instantly) is the caller's
+ * responsibility (see BOT_TRADE_RESPONSE_DELAY_*_MS in web/src/state/store.ts), since this
+ * function is stateless and has no notion of elapsed time.
+ *
+ * A trade *targeted* at this bot always gets a definitive answer — accept or explicit
+ * reject via respondTrade — so it never sits pending waiting on a bot that was never going
+ * to take it. An *open* trade (targetUid null) the bot doesn't want is left alone (returns
+ * null) rather than rejected: rejecting there would just clear this bot's own entry from
+ * interestedUids, which it never added in the first place, so there's nothing to do besides
+ * simply not registering interest.
+ */
 function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
   const { hands, trades } = bundle;
   const hand = hands[botUid];
@@ -491,33 +504,40 @@ function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty
     (t) => t.status === 'pending' && t.proposerUid !== botUid && (t.targetUid === botUid || t.targetUid === null),
   );
   if (!candidate) return null;
-  if (!canAffordLocal(hand.resources, candidate.receive)) return null;
-  const giveValue = RESOURCES.reduce((s, r) => s + (candidate.receive[r] ?? 0), 0);
-  const getValue = RESOURCES.reduce((s, r) => s + (candidate.give[r] ?? 0), 0);
+  const isTargeted = candidate.targetUid === botUid;
 
-  let accept: boolean;
-  if (difficulty === 'easy') {
-    // Weaker judgment: also takes trades that are a little unfavorable.
-    accept = getValue >= giveValue - 1;
-  } else if (difficulty === 'hard') {
-    // Pickier: strictly favorable trades are always fine; an even trade is only taken if
-    // it doesn't cut into a resource the bot is already low on (protects scarce cards).
-    if (getValue > giveValue) {
-      accept = true;
-    } else if (getValue === giveValue) {
-      const givingScarce = RESOURCES.some(
-        (r) => (candidate.receive[r] ?? 0) > 0 && hand.resources[r] - (candidate.receive[r] ?? 0) <= 1,
-      );
-      accept = !givingScarce;
+  const canAffordTrade = canAffordLocal(hand.resources, candidate.receive);
+  let accept = false;
+  if (canAffordTrade) {
+    const giveValue = RESOURCES.reduce((s, r) => s + (candidate.receive[r] ?? 0), 0);
+    const getValue = RESOURCES.reduce((s, r) => s + (candidate.give[r] ?? 0), 0);
+
+    if (difficulty === 'easy') {
+      // Weaker judgment: also takes trades that are a little unfavorable.
+      accept = getValue >= giveValue - 1;
+    } else if (difficulty === 'hard') {
+      // Pickier: strictly favorable trades are always fine; an even trade is only taken if
+      // it doesn't cut into a resource the bot is already low on (protects scarce cards).
+      if (getValue > giveValue) {
+        accept = true;
+      } else if (getValue === giveValue) {
+        const givingScarce = RESOURCES.some(
+          (r) => (candidate.receive[r] ?? 0) > 0 && hand.resources[r] - (candidate.receive[r] ?? 0) <= 1,
+        );
+        accept = !givingScarce;
+      } else {
+        accept = false;
+      }
     } else {
-      accept = false;
+      accept = getValue >= giveValue;
     }
-  } else {
-    accept = getValue >= giveValue;
   }
 
   if (accept) {
     return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept: true };
+  }
+  if (isTargeted) {
+    return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept: false };
   }
   return null;
 }

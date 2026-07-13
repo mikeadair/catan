@@ -142,7 +142,13 @@ export interface LogEntry {
   message: string;
 }
 
-export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'countered';
+export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'countered' | 'expired';
+
+// How long a trade offer may sit 'pending' before it's eligible for server-side expiry (see
+// the 'expireTrades' action in rules.ts). Generous enough that human players have time to
+// notice and respond, but bounded so an open offer with no interest doesn't sit forever —
+// there's otherwise no other TTL on a trade beyond the proposer's own next endTurn/timeout.
+export const TRADE_EXPIRY_MS = 90_000;
 
 export interface TradeOffer {
   id: string;
@@ -272,6 +278,11 @@ export type GameAction =
   // server-side (re-validated in rules.ts, never trusted from the client) — advances the
   // turn exactly like endTurn, crediting the timeout to whoever was current, not the caller.
   | { type: 'timeoutEndTurn'; uid: string }
+  // Any room member may submit this at any time; rules.ts re-validates that at least one
+  // pending trade has actually aged past TRADE_EXPIRY_MS server-side (never trusted from the
+  // client) and flips only those to 'expired'. Mirrors timeoutEndTurn's "any connected client
+  // may report it" pattern — see web/src/state/store.ts for the polling that drives this.
+  | { type: 'expireTrades'; uid: string }
   // uid casts (or withdraws) a vote to flip `paused` the opposite way of its current value.
   // Bots never vote; majority is computed over non-bot turnOrder members only.
   | { type: 'voteToPause'; uid: string }
