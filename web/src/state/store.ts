@@ -27,8 +27,8 @@ const LAST_ROOM_KEY = 'catan.lastRoomId';
 // randomized within this window so several bots eligible for the same open trade don't all
 // answer in the same instant. Reuses the same reactive-listener + low-frequency-fallback
 // pattern as the current-turn bot driver above, just with a much longer, randomized delay.
-const BOT_TRADE_RESPONSE_DELAY_MIN_MS = 5000;
-const BOT_TRADE_RESPONSE_DELAY_MAX_MS = 10000;
+const BOT_TRADE_RESPONSE_DELAY_MIN_MS = 15000;
+const BOT_TRADE_RESPONSE_DELAY_MAX_MS = 20000;
 // Small buffer added past a trade's exact TTL deadline before we report its expiry, purely
 // so the scheduled check reliably fires after (never right at/just before) the deadline.
 const TRADE_EXPIRY_CHECK_BUFFER_MS = 250;
