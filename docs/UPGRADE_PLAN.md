@@ -51,7 +51,7 @@ Legend: `todo` / `in-progress` / `done` / `blocked`
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 5.A | Fix Functions-emulator crash in CI `capture-screenshots` job | todo | Revisit only after Phases 1-4 are done. |
+| 5.A | Fix Functions-emulator crash in CI `capture-screenshots` job | investigated, deferred | Reproduced locally (same sandbox class as CLAUDE.md's original WSL2 note) with `firebase-tools --debug`: the Functions emulator's worker process for `startGame` dies with only a generic "killed because it raised an unhandled error" — no stack trace surfaces through firebase-tools' own logging (`firebase-debug.log` is deleted on clean shutdown; `--debug` verbose mode still doesn't forward the worker's own stdout/stderr for this failure). `npm run test -w functions` (same `startGameHandler`, called directly, no Functions Framework HTTP layer) passes 100% both locally and in CI — confirms this is an emulator/worker-process infrastructure issue, not application logic. Checked the one previously-noted workaround (`firebase-tools` 15.x needs Java 21+): still only Java 11 available here, so unverifiable locally; whether GH Actions' own runner image has Java 21 (making the upgrade viable there even if not locally) is unconfirmed and would need its own iterate-on-CI cycle. Left deferred per explicit low-priority instruction — this does not block `deploy` (separate parallel job). |
 
 ## Decisions made unilaterally (to avoid round-tripping questions)
 
