@@ -392,7 +392,23 @@ export async function removeSeat(roomId: string, uid: string): Promise<void> {
       // Function) has run, which also flips status to 'playing' in the same transaction —
       // so a hand never exists while status is still 'lobby'. (It also couldn't succeed
       // anymore: private/hand's write rule is now unconditionally `false` for clients.)
-      tx.update(ref, { turnOrder: roomTx.turnOrder.filter((u) => u !== uid) });
+      const remaining = roomTx.turnOrder.filter((u) => u !== uid);
+      if (remaining.length === 0) {
+        // Last seat leaving an empty pre-game lobby — nothing left to host, so there's
+        // nothing to keep around.
+        tx.delete(ref);
+        tx.delete(pRef);
+        return;
+      }
+      // The host leaving doesn't dissolve the room if others are still here — hand hosting
+      // to whoever's been seated longest (turnOrder is join order), otherwise every
+      // remaining player is permanently locked out of settings/start (isHost === false for
+      // everyone, since hostUid would point at a uid no longer in the room).
+      const roomPatch: Partial<RoomState> = { turnOrder: remaining };
+      if (uid === roomTx.hostUid) {
+        roomPatch.hostUid = remaining[0];
+      }
+      tx.update(ref, roomPatch);
       tx.delete(pRef);
     });
     return;

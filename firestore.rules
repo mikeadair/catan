@@ -42,7 +42,13 @@ service cloud.firestore {
         )
       );
 
-      allow delete: if false;
+      // Only the sole remaining seat, leaving a still-open lobby, may delete the room —
+      // this is removeSeat's "last one out" case (see web/src/firebase/rooms.ts): nothing
+      // left to host once they're gone, so the room doc itself gets cleaned up instead of
+      // orphaned. Never legal once a game has actually started.
+      allow delete: if signedIn() && resource.data.status == 'lobby'
+        && resource.data.turnOrder.size() == 1
+        && request.auth.uid in resource.data.turnOrder;
     }
 
     match /rooms/{roomId}/players/{uid} {

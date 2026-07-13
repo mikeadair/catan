@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 
 let testEnv: RulesTestEnvironment;
 
@@ -259,5 +259,58 @@ describe('firestore.rules — users/{uid} preference doc', () => {
   it('denies an unauthenticated write', async () => {
     const db = testEnv.unauthenticatedContext().firestore();
     await assertFails(setDoc(doc(db, 'users', 'p0'), { displayName: 'Nobody', color: 'brown' }));
+  });
+});
+
+describe('firestore.rules — leaving a lobby (removeSeat\'s room-doc deletion path)', () => {
+  it('lets the sole remaining seat delete the room when they leave', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM_ID), {
+        hostUid: 'p0',
+        status: 'lobby',
+        turnOrder: ['p0'],
+        code: 'ABCDE',
+      });
+    });
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertSucceeds(deleteDoc(doc(db, 'rooms', ROOM_ID)));
+  });
+
+  it('denies deleting a lobby room that still has other seats', async () => {
+    await seedLobbyRoom(); // turnOrder: ['p0', 'p1'] + a bot
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertFails(deleteDoc(doc(db, 'rooms', ROOM_ID)));
+  });
+
+  it('denies deleting a room once the game has started', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM_ID), {
+        hostUid: 'p0',
+        status: 'playing',
+        turnOrder: ['p0'],
+        code: 'ABCDE',
+      });
+    });
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertFails(deleteDoc(doc(db, 'rooms', ROOM_ID)));
+  });
+
+  it('denies a non-member deleting a solo lobby', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'rooms', ROOM_ID), {
+        hostUid: 'p0',
+        status: 'lobby',
+        turnOrder: ['p0'],
+        code: 'ABCDE',
+      });
+    });
+    const db = testEnv.authenticatedContext('outsider').firestore();
+    await assertFails(deleteDoc(doc(db, 'rooms', ROOM_ID)));
+  });
+
+  it('lets the host reassign hostUid to another seat when leaving (host-reassignment update)', async () => {
+    await seedLobbyRoom(); // hostUid: 'p0', turnOrder: ['p0', 'p1'] + a bot
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertSucceeds(updateDoc(doc(db, 'rooms', ROOM_ID), { hostUid: 'p1', turnOrder: ['p1', 'bot1'] }));
   });
 });

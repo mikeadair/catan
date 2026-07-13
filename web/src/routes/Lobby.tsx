@@ -214,6 +214,9 @@ export default function Lobby(): JSX.Element {
                   Start game
                 </button>
                 {!canStart && <div className="lobby__hint">Need at least 2 players to start.</div>}
+                <button className="lobby__button lobby__button--danger" onClick={handleLeave} disabled={busy}>
+                  Leave
+                </button>
               </>
             ) : (
               <button className="lobby__button lobby__button--danger" onClick={handleLeave} disabled={busy}>
