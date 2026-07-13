@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '@catan/engine';
 import { TERRAIN_RESOURCE } from '@catan/engine';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
@@ -9,6 +18,18 @@ import robberIcon from '../assets/terrain/robber.png';
 import './Board.css';
 
 const SIZE = 56;
+
+// Pointer movement (in screen px) past which a pointer-down is treated as a drag/pan rather
+// than a tap — keeps small hand-tremor/touch jitter from hijacking clicks on hexes/edges/
+// vertices while still letting an intentional drag start panning immediately.
+const DRAG_THRESHOLD_PX = 6;
+
+// Shifts the number-token circle (+ digit + pips) up from dead-center so it doesn't visually
+// overlap the terrain icon anchored below it (iconCenterY = center.y + SIZE * 0.5, see below)
+// — the icon's own top edge sits just a hair below hex-center, so with no offset the token's
+// bottom edge cuts straight across the icon's top instead of leaving a clean gap. Doesn't
+// touch the icon's own position, only the token's.
+const NUMBER_TOKEN_Y_OFFSET = -14;
 
 const DESERT_COLOR = '#c9b57a';
 const GOLD_COLOR = '#d9b64e';
@@ -208,9 +229,121 @@ export default function BoardView({
     setArmed(null);
   }, [interactionMode]);
 
+  // --- Click-and-drag / touch-drag panning. The viewBox is translated by `pan` (in the SVG's
+  // own user-space units, not screen px) rather than wrapping the content in a CSS transform,
+  // so panning composes for free with the existing viewBox-based scaling and doesn't need its
+  // own separate coordinate conversion for hit-testing (hotspots stay in the same user-space
+  // coordinates either way).
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const dragRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startPan: { x: number; y: number };
+    scale: number;
+    dragged: boolean;
+  } | null>(null);
+  // A click fires right after pointerup for the same gesture; if that gesture just panned the
+  // board, suppress the one click it would otherwise generate on whatever hotspot happens to
+  // sit under the pointer at the drop point (so dragging never accidentally builds/selects).
+  const suppressNextClickRef = useRef(false);
+
+  // New board (fresh game) -> forget any prior pan offset.
+  useEffect(() => {
+    setPan({ x: 0, y: 0 });
+  }, [board]);
+
+  function clampPan(next: { x: number; y: number }): { x: number; y: number } {
+    if (!layout) return next;
+    // Generous but finite bounds: keeps the board draggable well past its own edges (so you
+    // can, e.g., center a corner hex) without letting it disappear off-screen entirely.
+    const maxX = layout.width * 0.9;
+    const maxY = layout.height * 0.9;
+    return {
+      x: Math.max(-maxX, Math.min(maxX, next.x)),
+      y: Math.max(-maxY, Math.min(maxY, next.y)),
+    };
+  }
+
+  function handlePointerDown(e: ReactPointerEvent<SVGSVGElement>): void {
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // left-click/primary touch only
+    const svg = svgRef.current;
+    if (!svg || !layout) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startPan: pan,
+      scale: layout.width / rect.width, // viewBox user-space units per screen px
+      dragged: false,
+    };
+    svg.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: ReactPointerEvent<SVGSVGElement>): void {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    const dxScreen = e.clientX - drag.startClientX;
+    const dyScreen = e.clientY - drag.startClientY;
+    if (!drag.dragged) {
+      if (Math.hypot(dxScreen, dyScreen) < DRAG_THRESHOLD_PX) return;
+      drag.dragged = true;
+      setIsPanning(true);
+    }
+    // Dragging right/down should move the visible content right/down (follow the pointer),
+    // which means the viewBox's own min-x/min-y must move left/up by the same amount.
+    setPan(
+      clampPan({
+        x: drag.startPan.x - dxScreen * drag.scale,
+        y: drag.startPan.y - dyScreen * drag.scale,
+      }),
+    );
+  }
+
+  function endDrag(e: ReactPointerEvent<SVGSVGElement>): void {
+    const drag = dragRef.current;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (svgRef.current?.hasPointerCapture(e.pointerId)) {
+      svgRef.current.releasePointerCapture(e.pointerId);
+    }
+    if (drag.dragged) suppressNextClickRef.current = true;
+    dragRef.current = null;
+    setIsPanning(false);
+  }
+
+  function handleClickCapture(e: ReactMouseEvent<SVGSVGElement>): void {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }
+
+  // Road-render bug fix (see investigation notes in the PR/commit message): confirming a tap
+  // used to call `setArmed(null)` *synchronously*, right before firing onVertexClick/
+  // onEdgeClick — which only *starts* the server round trip (submitAction), it doesn't wait
+  // for it. That cleared the armed preview (the only thing drawing the piece in the player's
+  // own color) immediately, while the real committed piece can't render until room.edges/
+  // room.vertices actually reflects the build, which arrives later via the Firestore
+  // listener. Between those two points the piece was 100% invisible — not flaky, just a
+  // deterministic gap sized by network round-trip time, long enough on a slow connection for
+  // a player to notice nothing happened and tap the same spot again, which the server then
+  // (correctly) rejects as "already exists" since the first tap's build did land.
+  //
+  // Fix: don't clear `armed` here at all. Leave the preview showing continuously from the
+  // moment of confirmation until the candidate actually falls out of candidateVertices/
+  // candidateEdges — which happens in the very same render where the real piece starts being
+  // drawn from room.vertices/room.edges (the effect below, keyed on those candidate sets,
+  // already existed to un-arm a candidate that disappears for *other* reasons, e.g. another
+  // player taking the same spot first; it now also covers this path for free). That
+  // guarantees zero gap: the hand-off from "preview" to "real piece" is atomic in React's eyes
+  // because both are derived from the same `room` prop update.
   function tapVertex(vertexId: VertexId): void {
     if (armed?.kind === 'vertex' && armed.id === vertexId) {
-      setArmed(null);
       onVertexClick?.(vertexId);
     } else {
       setArmed({ kind: 'vertex', id: vertexId });
@@ -219,7 +352,6 @@ export default function BoardView({
 
   function tapEdge(edgeId: EdgeId): void {
     if (armed?.kind === 'edge' && armed.id === edgeId) {
-      setArmed(null);
       onEdgeClick?.(edgeId);
     } else {
       setArmed({ kind: 'edge', id: edgeId });
@@ -230,7 +362,6 @@ export default function BoardView({
     if (!armed) return;
     if (armed.kind === 'vertex') onVertexClick?.(armed.id);
     else onEdgeClick?.(armed.id);
-    setArmed(null);
   }
 
   const layout = useMemo(() => {
@@ -321,10 +452,22 @@ export default function BoardView({
 
   if (!board || !layout) return null;
 
-  const viewBox = `${layout.minX} ${layout.minY} ${layout.width} ${layout.height}`;
+  const viewBox = `${layout.minX - pan.x} ${layout.minY - pan.y} ${layout.width} ${layout.height}`;
 
   return (
-    <svg className="catan-board" viewBox={viewBox} role="img" aria-label="Catan board">
+    <svg
+      ref={svgRef}
+      className="catan-board"
+      viewBox={viewBox}
+      role="img"
+      aria-label="Catan board"
+      style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onClickCapture={handleClickCapture}
+    >
       <defs>
         {/* Soft dark halo behind roads/settlements/cities so player-colored pieces stay
             legible regardless of what terrain/token color sits directly behind them —
@@ -333,9 +476,20 @@ export default function BoardView({
         <filter id="piece-shadow" x="-60%" y="-60%" width="220%" height="220%">
           <feDropShadow dx="0" dy="0" stdDeviation="1.4" floodColor="#000000" floodOpacity="0.65" />
         </filter>
+        {/* Sea gradient: ocean (lighter) immediately around the hex/port ring fading out to
+            ocean-deep by the edges of this rect — so the water reads as one continuous sea
+            with the surrounding .game__board-area (which is already ocean-deep) instead of a
+            visibly-bordered rectangle of flat lighter blue floating on top of it. A flat fill
+            here left a hard seam exactly at this rect's edge (see Game.css's board-area
+            background); the radius is sized so the gradient has already fully reached
+            ocean-deep well before the rect's own corners, so the seam disappears. */}
+        <radialGradient id="sea-gradient" cx="50%" cy="50%" r="65%">
+          <stop offset="0%" style={{ stopColor: 'var(--color-ocean)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--color-ocean-deep)' }} />
+        </radialGradient>
       </defs>
 
-      <rect x={layout.minX} y={layout.minY} width={layout.width} height={layout.height} fill="var(--color-ocean)" />
+      <rect x={layout.minX} y={layout.minY} width={layout.width} height={layout.height} fill="url(#sea-gradient)" />
 
       {/* Hex tiles */}
       {board.hexes.map((hex) => {
@@ -406,10 +560,17 @@ export default function BoardView({
             )}
             {hex.number !== null && (
               <g>
-                <circle cx={center.x} cy={center.y} r={18} fill="#f4e8cf" stroke="#2b2015" strokeWidth={1.5} />
+                <circle
+                  cx={center.x}
+                  cy={center.y + NUMBER_TOKEN_Y_OFFSET}
+                  r={18}
+                  fill="#f4e8cf"
+                  stroke="#2b2015"
+                  strokeWidth={1.5}
+                />
                 <text
                   x={center.x}
-                  y={center.y + 6}
+                  y={center.y + NUMBER_TOKEN_Y_OFFSET + 6}
                   textAnchor="middle"
                   fontSize={16}
                   fontWeight={700}
@@ -423,7 +584,7 @@ export default function BoardView({
                   <circle
                     key={i}
                     cx={center.x + offset * 4.6}
-                    cy={center.y + 14}
+                    cy={center.y + NUMBER_TOKEN_Y_OFFSET + 14}
                     r={1.8}
                     fill={isHotHex ? '#c0392b' : '#6b5b3a'}
                   />
