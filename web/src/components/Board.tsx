@@ -203,6 +203,16 @@ export default function BoardView({
 
   return (
     <svg className="catan-board" viewBox={viewBox} role="img" aria-label="Catan board">
+      <defs>
+        {/* Soft dark halo behind roads/settlements/cities so player-colored pieces stay
+            legible regardless of what terrain/token color sits directly behind them —
+            light colors (white especially) otherwise wash out against fields/pasture
+            tiles and the cream number-token circles. */}
+        <filter id="piece-shadow" x="-60%" y="-60%" width="220%" height="220%">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.4" floodColor="#000000" floodOpacity="0.65" />
+        </filter>
+      </defs>
+
       <rect x={layout.minX} y={layout.minY} width={layout.width} height={layout.height} fill="var(--color-ocean)" />
 
       {/* Hex tiles */}
@@ -323,35 +333,38 @@ export default function BoardView({
         const pb = vertexPixel(b, board, SIZE);
         const color = players[ownerUid] ? PLAYER_COLOR_HEX[players[ownerUid].color] : '#888';
         return (
-          <g key={edgeId}>
-            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={9} strokeLinecap="round" />
-            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={6} strokeLinecap="round" />
+          <g key={edgeId} filter="url(#piece-shadow)">
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={5} strokeLinecap="round" />
           </g>
         );
       })}
 
-      {/* Settlements & cities */}
+      {/* Settlements & cities. Sized up and outlined heavier than a first pass, plus the
+          drop-shadow filter above — smaller/thinner versions of these were hard to spot at
+          a glance, especially light colors (white) against light terrain. */}
       {Object.entries(room.vertices).map(([vertexId, building]) => {
         const p = vertexPixel(vertexId, board, SIZE);
         const color = players[building.uid] ? PLAYER_COLOR_HEX[players[building.uid].color] : '#888';
         if (building.type === 'city') {
           return (
-            <g key={vertexId} transform={`translate(${p.x}, ${p.y})`}>
+            <g key={vertexId} transform={`translate(${p.x}, ${p.y})`} filter="url(#piece-shadow)">
               {/* City: a taller main house plus a smaller wing, reading as "grown" from a
                   single settlement house without needing a second color/legend. */}
-              <path d={housePath(6, 10)} transform="translate(-3, -1)" fill={color} stroke="#1c1c1c" strokeWidth={1.3} />
-              <path d={housePath(4.5, 7)} transform="translate(6, 2)" fill={color} stroke="#1c1c1c" strokeWidth={1.2} />
+              <path d={housePath(7.5, 12.5)} transform="translate(-3.5, -1)" fill={color} stroke="#1c1c1c" strokeWidth={2} />
+              <path d={housePath(5.5, 9)} transform="translate(7, 2.5)" fill={color} stroke="#1c1c1c" strokeWidth={1.8} />
             </g>
           );
         }
         return (
           <path
             key={vertexId}
-            d={housePath(6.5, 9)}
+            d={housePath(8, 11)}
+            filter="url(#piece-shadow)"
             transform={`translate(${p.x}, ${p.y})`}
             fill={color}
             stroke="#1c1c1c"
-            strokeWidth={1.3}
+            strokeWidth={2}
           />
         );
       })}
@@ -436,14 +449,14 @@ export default function BoardView({
       {previewVertexId &&
         (() => {
           const p = vertexPixel(previewVertexId, board, SIZE);
-          const size = interactionMode === 'placeCity' ? housePath(6, 10) : housePath(6.5, 9);
+          const size = interactionMode === 'placeCity' ? housePath(7.5, 12.5) : housePath(8, 11);
           return (
             <path
               d={size}
               transform={`translate(${p.x}, ${p.y})`}
               fill={ownColor}
               stroke="#1c1c1c"
-              strokeWidth={1.3}
+              strokeWidth={2}
               opacity={0.55}
               style={{ pointerEvents: 'none' }}
             />
@@ -462,7 +475,7 @@ export default function BoardView({
               x2={pb.x}
               y2={pb.y}
               stroke={ownColor}
-              strokeWidth={6}
+              strokeWidth={5}
               strokeLinecap="round"
               opacity={0.55}
               style={{ pointerEvents: 'none' }}
