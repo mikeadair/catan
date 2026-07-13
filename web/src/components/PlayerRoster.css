@@ -27,53 +27,125 @@
 
 .player-roster__row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .player-roster__row--active {
   border-color: var(--color-accent);
-  background: rgba(242, 177, 52, 0.08);
+  background: rgba(242, 177, 52, 0.09);
+  box-shadow: 0 0 0 1px rgba(242, 177, 52, 0.25), 0 2px 10px rgba(242, 177, 52, 0.12);
 }
 
 .player-roster__row--disconnected {
   opacity: 0.5;
 }
 
-.player-roster__swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  margin-top: 3px;
-  flex-shrink: 0;
-  border: 1px solid rgba(0, 0, 0, 0.3);
-}
+/* --- Avatar + VP ribbon --- */
 
-.player-roster__info {
+.player-roster__avatar-col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+  width: 40px;
+}
+
+.player-roster__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2.5px solid var(--player-color);
+  background: var(--color-panel-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-roster__row--active .player-roster__avatar {
+  box-shadow: 0 0 0 2px rgba(242, 177, 52, 0.55), 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.player-roster__row--you .player-roster__avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.player-roster__avatar-initial {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.player-roster__row--you .player-roster__avatar-initial {
+  font-size: 15px;
+}
+
+.player-roster__vp-ribbon {
+  margin-top: -7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 1px 5px 1px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text);
+  z-index: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.player-roster__vp-ribbon-icon {
+  width: 9px;
+  height: 9px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+/* --- Body: name + badges + card counts + stats --- */
+
+.player-roster__body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   min-width: 0;
+  flex: 1;
 }
 
 .player-roster__name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 
 .player-roster__name {
   font-weight: 600;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
+}
+
+.player-roster__row--you .player-roster__name {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .player-roster__badge {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   background: var(--color-panel-light);
@@ -81,6 +153,7 @@
   border-radius: 4px;
   padding: 1px 4px;
   color: var(--color-text-dim);
+  flex-shrink: 0;
 }
 
 .player-roster__badge--you {
@@ -93,34 +166,86 @@
   border-color: var(--color-danger);
 }
 
-.player-roster__stats {
+.player-roster__cards-row {
   display: flex;
+  align-items: center;
+  gap: 5px;
   flex-wrap: wrap;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--color-text-dim);
 }
 
-.player-roster__stat {
+.player-roster__card-badge {
+  width: 24px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.player-roster__card-badge--resource {
+  background: rgba(74, 144, 226, 0.18);
+  border-color: rgba(74, 144, 226, 0.45);
+}
+
+.player-roster__card-badge--dev {
+  background: rgba(155, 89, 182, 0.2);
+  border-color: rgba(155, 89, 182, 0.5);
+}
+
+.player-roster__card-badge-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.player-roster__card-badge--resource .player-roster__card-badge-icon {
+  color: #6fa4ec;
+}
+
+.player-roster__card-badge--dev .player-roster__card-badge-icon {
+  color: #c48bd9;
+}
+
+.player-roster__card-badge-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.player-roster__mini-stats {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 2px;
+}
+
+.player-roster__mini-stat {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-}
-
-.player-roster__stat-icon {
-  width: 13px;
-  height: 13px;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--color-text-dim);
   flex-shrink: 0;
 }
 
-.player-roster__icon-badge {
-  margin-left: 2px;
-  display: inline-flex;
+.player-roster__mini-stat-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
 }
 
-.player-roster__badge-icon {
-  width: 13px;
-  height: 13px;
+.player-roster__award-icon {
+  width: 11px;
+  height: 11px;
   color: var(--color-accent);
+  margin-left: 1px;
+  flex-shrink: 0;
 }

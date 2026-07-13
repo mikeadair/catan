@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { CSSProperties, JSX } from 'react';
 import type { PrivateHand, PublicPlayer } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { KnightIcon, LargestArmyIcon, LongestRoadIcon, ResourceCardsIcon, DevCardIcon, RoadIcon, VictoryPointIcon } from './gameIcons';
@@ -34,48 +34,61 @@ export default function PlayerRoster({
           if (!p) return null;
           const isTurn = uid === currentUid;
           const isYou = uid === localUid;
+          const color = PLAYER_COLOR_HEX[p.color];
+          const vpTotal = p.visibleVictoryPoints + (isYou ? hiddenVp : 0);
+          const rowStyle = { '--player-color': color } as CSSProperties;
           return (
             <li
               key={uid}
               className={`player-roster__row${isTurn ? ' player-roster__row--active' : ''}${
-                p.connected ? '' : ' player-roster__row--disconnected'
-              }`}
+                isYou ? ' player-roster__row--you' : ''
+              }${p.connected ? '' : ' player-roster__row--disconnected'}`}
+              style={rowStyle}
             >
-              <span className="player-roster__swatch" style={{ background: PLAYER_COLOR_HEX[p.color] }} />
-              <div className="player-roster__info">
+              <div className="player-roster__avatar-col">
+                <div className="player-roster__avatar" title={p.displayName}>
+                  <span className="player-roster__avatar-initial">{p.displayName.trim().charAt(0).toUpperCase() || '?'}</span>
+                </div>
+                <div className="player-roster__vp-ribbon" title="Victory points">
+                  <VictoryPointIcon className="player-roster__vp-ribbon-icon" />
+                  <span>{vpTotal}</span>
+                </div>
+              </div>
+
+              <div className="player-roster__body">
                 <div className="player-roster__name-row">
                   <span className="player-roster__name">{p.displayName}</span>
                   {p.isBot && <span className="player-roster__badge">bot</span>}
                   {isYou && <span className="player-roster__badge player-roster__badge--you">you</span>}
                   {!p.connected && <span className="player-roster__badge player-roster__badge--offline">offline</span>}
                 </div>
-                <div className="player-roster__stats">
-                  <span className="player-roster__stat" title="Resource cards">
-                    <ResourceCardsIcon className="player-roster__stat-icon" /> {p.resourceCount}
-                  </span>
-                  <span className="player-roster__stat" title="Development cards">
-                    <DevCardIcon className="player-roster__stat-icon" /> {p.devCardCount}
-                  </span>
-                  <span className="player-roster__stat" title="Victory points">
-                    <VictoryPointIcon className="player-roster__stat-icon" /> {p.visibleVictoryPoints}
-                    {isYou && hiddenVp > 0 ? ` (+${hiddenVp} hidden)` : ''}
-                  </span>
-                  <span className="player-roster__stat" title="Knights played">
-                    <KnightIcon className="player-roster__stat-icon" /> {p.knightsPlayed}
-                    {largestArmyUid === uid && (
-                      <span className="player-roster__icon-badge" title="Largest Army">
-                        <LargestArmyIcon className="player-roster__badge-icon" />
-                      </span>
-                    )}
-                  </span>
-                  <span className="player-roster__stat" title="Roads built">
-                    <RoadIcon className="player-roster__stat-icon" /> {p.roadsBuilt}
-                    {longestRoadUid === uid && (
-                      <span className="player-roster__icon-badge" title="Longest Road">
-                        <LongestRoadIcon className="player-roster__badge-icon" />
-                      </span>
-                    )}
-                  </span>
+
+                <div className="player-roster__cards-row">
+                  <div className="player-roster__card-badge player-roster__card-badge--resource" title="Resource cards in hand">
+                    <ResourceCardsIcon className="player-roster__card-badge-icon" />
+                    <span className="player-roster__card-badge-count">{p.resourceCount}</span>
+                  </div>
+                  <div className="player-roster__card-badge player-roster__card-badge--dev" title="Development cards in hand">
+                    <DevCardIcon className="player-roster__card-badge-icon" />
+                    <span className="player-roster__card-badge-count">{p.devCardCount}</span>
+                  </div>
+
+                  <div className="player-roster__mini-stats">
+                    <span className="player-roster__mini-stat" title="Knights played">
+                      <KnightIcon className="player-roster__mini-stat-icon" />
+                      {p.knightsPlayed}
+                      {largestArmyUid === uid && (
+                        <LargestArmyIcon className="player-roster__award-icon" aria-label="Largest Army" />
+                      )}
+                    </span>
+                    <span className="player-roster__mini-stat" title="Roads built">
+                      <RoadIcon className="player-roster__mini-stat-icon" />
+                      {p.roadsBuilt}
+                      {longestRoadUid === uid && (
+                        <LongestRoadIcon className="player-roster__award-icon" aria-label="Longest Road" />
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
             </li>
