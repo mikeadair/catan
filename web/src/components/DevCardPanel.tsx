@@ -18,6 +18,14 @@ const CARD_ICON: Record<DevCardType, string> = {
   victoryPoint: '🏆',
 };
 
+const CARD_DESCRIPTION: Record<DevCardType, string> = {
+  knight: 'Move the robber and steal a resource from an adjacent player.',
+  roadBuilding: 'Build 2 roads for free.',
+  yearOfPlenty: 'Take any 2 resources from the bank.',
+  monopoly: 'Take all of one resource type from every other player.',
+  victoryPoint: 'Worth 1 hidden victory point.',
+};
+
 const PLAYABLE_TYPES: Exclude<DevCardType, 'victoryPoint'>[] = ['knight', 'roadBuilding', 'yearOfPlenty', 'monopoly'];
 
 export interface DevCardPanelProps {
@@ -61,7 +69,10 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked
           return (
             <div key={type} className="dev-card-panel__card">
               <span className="dev-card-panel__icon">{CARD_ICON[type]}</span>
-              <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
+              <div className="dev-card-panel__info">
+                <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
+                <span className="dev-card-panel__desc">{CARD_DESCRIPTION[type]}</span>
+              </div>
               <span className="dev-card-panel__count">×{cards.length}</span>
               {isPlayable && (
                 <button
