@@ -107,6 +107,25 @@ describe('createGame', () => {
     expect(bundle.room.victoryPointsToWin).toBe(6);
     expect(bundle.room.discardLimit).toBe(5);
   });
+
+  it('creates a full 6-player game on the extended-5-6p board', () => {
+    const seatedPlayers = Array.from({ length: 6 }, (_, i) => ({
+      uid: `p${i}`,
+      displayName: `Player ${i}`,
+      isBot: false,
+    }));
+    const bundle = createGame(
+      { id: 'r6', code: 'BIGGY', hostUid: 'p0', mapPreset: 'extended-5-6p', seed: 'six-player-seed' },
+      seatedPlayers,
+    );
+    expect(bundle.room.turnOrder).toHaveLength(6);
+    expect(bundle.room.board!.hexes).toHaveLength(30);
+    expect(Object.keys(bundle.players)).toHaveLength(6);
+    // Bank/dev-card deck sizing is player-count-based, not board-size-based — unaffected by
+    // the bigger board.
+    expect(bundle.room.bank).toEqual({ brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 });
+    expect(bundle.room.devCardDeckCount).toBe(25);
+  });
 });
 
 describe('setup phase', () => {

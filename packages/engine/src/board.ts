@@ -33,6 +33,25 @@ export function standardHexCoords(): AxialCoord[] {
   return coords;
 }
 
+// 5-6 player extension: 30 hexes in 7 rows of 3,4,5,6,5,4,3 — an elongated hexagon rather
+// than a scaled-up regular one (a true radius-3 hexagon would be 7 rows of 4,5,6,7,6,5,4 =
+// 37, peaking at 7 wide; the real board peaks at 6). Built the same way as
+// standardHexCoords() but with two different left/right radii instead of one, which is what
+// produces the asymmetric-looking (but still row-symmetric) width sequence.
+export function extendedHexCoords(): AxialCoord[] {
+  const coords: AxialCoord[] = [];
+  const radiusLeft = 3;
+  const radiusRight = 2;
+  for (let r = -3; r <= 3; r++) {
+    const qMin = Math.max(-radiusLeft, -r - radiusLeft);
+    const qMax = Math.min(radiusRight, -r + radiusRight);
+    for (let q = qMin; q <= qMax; q++) {
+      coords.push({ q, r });
+    }
+  }
+  return coords;
+}
+
 const AXIAL_DIRS: AxialCoord[] = [
   { q: 1, r: 0 },
   { q: 1, r: -1 },
@@ -84,6 +103,22 @@ const TERRAIN_POOL: Terrain[] = [
 
 const NUMBER_POOL = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
 
+// 30-hex extended (5-6 player) pool, scaled from the base distribution: 5 hills, 6 forest,
+// 5 mountains, 6 fields, 6 pasture, 2 desert = 30. 28 number tokens for the 28 non-desert
+// hexes: 2 and 12 stay rare (2 copies each, same as the base pool), everything else gets a
+// 3rd copy (28 = 2+2 + 8*3... i.e. 3,4,5,6,8,9,10,11 at 3 copies + 2,12 at 2 copies).
+const EXTENDED_TERRAIN_POOL: Terrain[] = [
+  'hills', 'hills', 'hills', 'hills', 'hills',
+  'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+  'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+  'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+  'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
+  'desert', 'desert',
+];
+const EXTENDED_NUMBER_POOL = [
+  2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
+];
+
 // Fixed official-beginner layout (row order matches standardHexCoords()).
 const OFFICIAL_TERRAIN: Terrain[] = [
   'mountains', 'pasture', 'forest',
@@ -122,15 +157,19 @@ function buildTerrainNumberAssignment(
     return { terrains: OFFICIAL_TERRAIN.slice(), numbers: OFFICIAL_NUMBERS.slice() };
   }
 
-  const requireFair = presetId === 'balanced-random';
+  // extended-5-6p has no authored "official" arrangement (unlike official-beginner) — it's
+  // always randomized, same as balanced-random/chaos, just from the bigger pool.
+  const terrainPool = presetId === 'extended-5-6p' ? EXTENDED_TERRAIN_POOL : TERRAIN_POOL;
+  const numberPool = presetId === 'extended-5-6p' ? EXTENDED_NUMBER_POOL : NUMBER_POOL;
+  const requireFair = presetId === 'balanced-random' || presetId === 'extended-5-6p';
   let terrains: Terrain[] = [];
   let numbers: (number | null)[] = [];
   let attempts = 0;
   const MAX_ATTEMPTS = 2000;
 
   do {
-    terrains = shuffle(TERRAIN_POOL, rng);
-    const nums = shuffle(NUMBER_POOL, rng);
+    terrains = shuffle(terrainPool, rng);
+    const nums = shuffle(numberPool, rng);
     numbers = [];
     let ni = 0;
     for (const t of terrains) {
@@ -312,7 +351,7 @@ function buildPorts(presetId: MapPresetId, edges: Record<EdgeId, EdgeInfo>, rng:
 
 export function generateBoard(presetId: MapPresetId, seed: string): Board {
   const rng = createRng(`${seed}:board`);
-  const coords = standardHexCoords();
+  const coords = presetId === 'extended-5-6p' ? extendedHexCoords() : standardHexCoords();
   const { terrains, numbers } = buildTerrainNumberAssignment(presetId, coords, rng);
 
   const hexes: HexTile[] = coords.map((coord, i) => ({

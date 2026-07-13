@@ -65,7 +65,7 @@ export interface Board {
   robberHexId: string;
 }
 
-export type MapPresetId = 'official-beginner' | 'balanced-random' | 'chaos';
+export type MapPresetId = 'official-beginner' | 'balanced-random' | 'chaos' | 'extended-5-6p';
 
 export interface MapPreset {
   id: MapPresetId;

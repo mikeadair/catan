@@ -53,6 +53,85 @@ describe('generateBoard: counts', () => {
   }
 });
 
+describe('generateBoard: extended-5-6p', () => {
+  const EXPECTED_EXTENDED_NUMBERS = [
+    2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
+  ].sort((a, b) => a - b);
+
+  it('has 30 hexes with correct terrain/number/port counts', () => {
+    const board = generateBoard('extended-5-6p', 'seed-extended');
+    expect(board.hexes).toHaveLength(30);
+
+    const counts = terrainCounts(board);
+    expect(counts.hills).toBe(5);
+    expect(counts.forest).toBe(6);
+    expect(counts.mountains).toBe(5);
+    expect(counts.fields).toBe(6);
+    expect(counts.pasture).toBe(6);
+    expect(counts.desert).toBe(2);
+
+    expect(numberMultiset(board)).toEqual(EXPECTED_EXTENDED_NUMBERS);
+
+    const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
+    expect(desertHexes).toHaveLength(2);
+    for (const d of desertHexes) expect(d.number).toBeNull();
+    expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
+
+    // Row widths 3,4,5,6,5,4,3 (7 rows) is the shape signature — verify it directly rather
+    // than just trusting the hex count, since a bug could still produce 30 hexes in the
+    // wrong (e.g. disconnected, or wrong-shaped) arrangement.
+    const rowWidths = new Map<number, number>();
+    for (const h of board.hexes) rowWidths.set(h.coord.r, (rowWidths.get(h.coord.r) ?? 0) + 1);
+    expect([...rowWidths.entries()].sort(([a], [b]) => a - b)).toEqual([
+      [-3, 3], [-2, 4], [-1, 5], [0, 6], [1, 5], [2, 4], [3, 3],
+    ]);
+
+    expect(board.ports).toHaveLength(9);
+    for (const port of board.ports) {
+      expect(new Set(port.vertexIds).size).toBe(2);
+    }
+  });
+
+  it('is fully connected — every hex reachable from any other via shared edges', () => {
+    const board = generateBoard('extended-5-6p', 'connectivity-seed');
+    const key = (c: { q: number; r: number }) => `${c.q},${c.r}`;
+    const byKey = new Map(board.hexes.map((h) => [key(h.coord), h]));
+    const DIRS = [
+      [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1],
+    ];
+    const seen = new Set<string>([key(board.hexes[0].coord)]);
+    const queue = [board.hexes[0]];
+    while (queue.length > 0) {
+      const cur = queue.pop()!;
+      for (const [dq, dr] of DIRS) {
+        const nk = key({ q: cur.coord.q + dq, r: cur.coord.r + dr });
+        const neighbor = byKey.get(nk);
+        if (neighbor && !seen.has(nk)) {
+          seen.add(nk);
+          queue.push(neighbor);
+        }
+      }
+    }
+    expect(seen.size).toBe(board.hexes.length);
+  });
+
+  it('never places two 6/8 tokens hex-adjacent, across many seeds', () => {
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('extended-5-6p', `extended-fair-seed-${i}`);
+      const hot = board.hexes.filter((h) => h.number === 6 || h.number === 8);
+      for (let a = 0; a < hot.length; a++) {
+        for (let b = a + 1; b < hot.length; b++) {
+          const dq = Math.abs(hot[a].coord.q - hot[b].coord.q);
+          const dr = Math.abs(hot[a].coord.r - hot[b].coord.r);
+          const ds = Math.abs(hot[a].coord.q + hot[a].coord.r - (hot[b].coord.q + hot[b].coord.r));
+          const isAdjacent = Math.max(dq, dr, ds) === 1;
+          expect(isAdjacent).toBe(false);
+        }
+      }
+    }
+  });
+});
+
 describe('generateBoard: determinism', () => {
   it('same preset+seed produces an identical board', () => {
     const a = generateBoard('chaos', 'my-seed-123');
