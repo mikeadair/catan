@@ -67,7 +67,7 @@ export async function applyActionInTransaction(
   });
 
   const tradesById = new Map(pendingTrades.map((t) => [t.id, t]));
-  if (action.type === 'respondTrade' || action.type === 'cancelTrade') {
+  if (action.type === 'respondTrade' || action.type === 'cancelTrade' || action.type === 'finalizeTrade') {
     const specificSnap = await tx.get(tradeRef(roomId, action.tradeId));
     if (specificSnap.exists) {
       tradesById.set(action.tradeId, specificSnap.data() as TradeOffer);

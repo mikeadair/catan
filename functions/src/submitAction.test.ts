@@ -271,4 +271,49 @@ describe('submitActionHandler', () => {
       await expectHttpsErrorCode(submitActionHandler(fakeRequest({ roomId, action }, uidA)), 'failed-precondition');
     });
   });
+
+  describe('finalizeTrade', () => {
+    // Regression coverage: applyActionInTransaction (roomIO.ts) only fetched the specific
+    // trade doc into the transaction bundle for respondTrade/cancelTrade, never
+    // finalizeTrade — so a real proposer finalizing an open trade a bot (or any player) had
+    // expressed interest in would hit rules.ts's `trades.find(...)` against an empty array
+    // and fail with "Unknown trade", even though the trade genuinely existed in Firestore.
+    // This exercises the real submitAction path end to end against the emulator.
+    it('resolves an open trade with the chosen interested player', async () => {
+      const bundle = await seedPlayingRoom(roomId, [
+        { uid: 'p0', displayName: 'Host', isBot: false },
+        { uid: 'p1', displayName: 'Two', isBot: false },
+      ]);
+      const [uidA, uidB] = bundle.room.turnOrder;
+
+      await handRef(roomId, uidA).set({ resources: { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 }, devCards: [] });
+      await handRef(roomId, uidB).set({ resources: { brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 }, devCards: [] });
+
+      const openTrade: TradeOffer = {
+        id: 'open-trade',
+        proposerUid: uidA,
+        targetUid: null,
+        give: { brick: 1 },
+        receive: { grain: 1 },
+        status: 'pending',
+        counterOf: null,
+        createdAt: Date.now(),
+        interestedUids: [uidB],
+      };
+      await tradeRef(roomId, openTrade.id).set(openTrade);
+
+      const action: GameAction = { type: 'finalizeTrade', uid: uidA, tradeId: openTrade.id, withUid: uidB };
+      const res = await submitActionHandler(fakeRequest({ roomId, action }, uidA));
+      expect(res).toEqual({ ok: true });
+
+      const [handASnap, handBSnap, tradeSnap] = await Promise.all([
+        handRef(roomId, uidA).get(),
+        handRef(roomId, uidB).get(),
+        tradeRef(roomId, openTrade.id).get(),
+      ]);
+      expect(handASnap.data()!.resources).toEqual({ brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 });
+      expect(handBSnap.data()!.resources).toEqual({ brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 });
+      expect(tradeSnap.data()!.status).toBe('accepted');
+    });
+  });
 });
