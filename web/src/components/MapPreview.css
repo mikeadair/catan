@@ -6,3 +6,9 @@
   background: var(--color-ocean-deep);
   border: 1px solid var(--color-border);
 }
+
+.map-preview--thumbnail {
+  height: 88px;
+  border-radius: 6px;
+  pointer-events: none;
+}
