@@ -83,7 +83,10 @@
 }
 
 .home__subtitle {
-  color: var(--color-text-dim);
+  /* --color-text-dim is tuned for use on --color-panel; against the ocean
+     background here it falls under WCAG AA contrast (~3.6:1), so a lighter
+     tint is used instead. */
+  color: #c7cdd6;
   margin: 0;
 }
 
@@ -192,53 +195,6 @@
   gap: 8px;
 }
 
-.home__preset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.home__preset-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  background: var(--color-panel-light);
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.home__preset-card:hover {
-  border-color: var(--color-accent);
-}
-
-.home__preset-card--selected {
-  border-color: var(--color-accent);
-  background: rgba(242, 177, 52, 0.1);
-}
-
-.home__preset-card input[type='radio'] {
-  margin-top: 3px;
-  accent-color: var(--color-accent);
-}
-
-.home__preset-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.home__preset-card-name {
-  font-weight: 600;
-}
-
-.home__preset-card-desc {
-  font-size: 13px;
-  color: var(--color-text-dim);
-}
-
 .home__advanced-toggle {
   align-self: flex-start;
   background: none;
@@ -288,9 +244,20 @@
   color: #1c1a12;
 }
 
+.home__card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.home__card-header h2 {
+  margin: 0;
+}
+
 .home__account-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
 }
 
 .home__account-status {

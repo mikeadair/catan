@@ -33,6 +33,13 @@
   box-shadow: 0 0 0 2px var(--color-accent) inset;
 }
 
+.map-picker-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .map-picker-card__name {
   font-size: 13px;
   font-weight: 600;
@@ -42,4 +49,26 @@
   font-size: 11px;
   line-height: 1.35;
   color: var(--color-text-dim);
+}
+
+/* When the preset count is odd, the last card would otherwise sit alone in
+   column 1 with an empty gap beside it. Let it span the full row instead, with
+   the thumbnail and text side by side — with more room, the thumbnail can also
+   grow a bit, so it reads as a deliberately featured card rather than an
+   orphaned one. */
+.map-picker-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.map-picker-card:last-child:nth-child(odd) .map-preview--thumbnail {
+  width: 160px;
+  height: 100px;
+  flex: none;
+}
+
+.map-picker-card:last-child:nth-child(odd) .map-picker-card__desc {
+  font-size: 12px;
 }

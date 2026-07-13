@@ -14,7 +14,6 @@ import {
 import { getUserProfile, saveUserProfile } from '../firebase/users';
 import { useGameStore } from '../state/store';
 import {
-  MAP_PRESETS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
   DEFAULT_TURN_TIMER_SECONDS,
@@ -23,6 +22,7 @@ import {
   type PlayerColor,
 } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
+import MapPickerGrid from '../components/MapPickerGrid';
 import shipIcon from '../assets/decor/ship.png';
 import './Home.css';
 
@@ -323,24 +323,27 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       </div>
 
       <div className="home__card home__card--name">
-        <div className="home__account-row">
-          {!authUser.isAnonymous && authUser.email ? (
-            <div className="home__account-status">
-              <span>Signed in as {authUser.email}</span>
-              <button type="button" className="home__link-button" onClick={handleSignOut} disabled={authBusy}>
-                Sign out
+        <div className="home__card-header">
+          <h2>Play as</h2>
+          <div className="home__account-row">
+            {!authUser.isAnonymous && authUser.email ? (
+              <div className="home__account-status">
+                <span>Signed in as {authUser.email}</span>
+                <button type="button" className="home__link-button" onClick={handleSignOut} disabled={authBusy}>
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="home__link-button"
+                onClick={() => setAuthOpen((v) => !v)}
+                aria-expanded={authOpen}
+              >
+                Sign in / create account
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="home__link-button"
-              onClick={() => setAuthOpen((v) => !v)}
-              aria-expanded={authOpen}
-            >
-              Sign in / create account
-            </button>
-          )}
+            )}
+          </div>
         </div>
 
         {authOpen && authUser.isAnonymous && (
@@ -467,31 +470,10 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
         <form className="home__card" onSubmit={handleCreate}>
           <h2>Create a room</h2>
 
-          <fieldset className="home__fieldset">
-            <legend className="home__label">Map</legend>
-            <div className="home__preset-list">
-              {MAP_PRESETS.map((preset) => (
-                <label
-                  key={preset.id}
-                  className={`home__preset-card${
-                    selectedPreset === preset.id ? ' home__preset-card--selected' : ''
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="map-preset"
-                    value={preset.id}
-                    checked={selectedPreset === preset.id}
-                    onChange={() => setSelectedPreset(preset.id)}
-                  />
-                  <div className="home__preset-card-body">
-                    <div className="home__preset-card-name">{preset.name}</div>
-                    <div className="home__preset-card-desc">{preset.description}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <div className="home__fieldset">
+            <span className="home__label">Map</span>
+            <MapPickerGrid selected={selectedPreset} onSelect={setSelectedPreset} />
+          </div>
 
           <button
             type="button"

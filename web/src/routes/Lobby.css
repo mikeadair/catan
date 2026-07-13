@@ -216,6 +216,12 @@
 }
 
 .lobby__swatch--pickable {
+  /* Slightly larger than a plain display swatch (18px) — this one is actually
+     clickable (opens the color picker), so it gets a bit more touch target,
+     matching the 26px swatches used for the same "pick your color" affordance
+     on the Home screen. */
+  width: 24px;
+  height: 24px;
   cursor: pointer;
   padding: 0;
 }
