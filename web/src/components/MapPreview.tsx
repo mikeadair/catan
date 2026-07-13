@@ -46,6 +46,7 @@ export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewPr
       victoryPointsToWin: 10,
       discardLimit: 7,
       turnTimerSeconds: null,
+      safeMode: false,
       paused: false,
       pausedAt: null,
       pauseVotes: [],

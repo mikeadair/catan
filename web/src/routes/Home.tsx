@@ -83,6 +83,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
   const [discardLimit, setDiscardLimit] = useState(DEFAULT_DISCARD_LIMIT);
   const [turnTimerEnabled, setTurnTimerEnabled] = useState(true);
   const [turnTimerSeconds, setTurnTimerSeconds] = useState(DEFAULT_TURN_TIMER_SECONDS);
+  const [safeMode, setSafeMode] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -208,6 +209,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
         victoryPointsToWin,
         discardLimit,
         turnTimerSeconds: turnTimerEnabled ? turnTimerSeconds : null,
+        safeMode,
         preferredColor: color,
       });
       await saveProfileIfSignedIn(finalName);
@@ -538,8 +540,15 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
                       )
                     }
                   />
-                  <span className="home__field-hint">seconds (shown as a countdown, not enforced)</span>
+                  <span className="home__field-hint">seconds per turn</span>
                 </span>
+              </label>
+              <label className="home__field home__field--checkbox">
+                <span className="home__checkbox-row">
+                  <input type="checkbox" checked={safeMode} onChange={(e) => setSafeMode(e.target.checked)} />
+                  <span className="home__label">Safe mode</span>
+                </span>
+                <span className="home__field-hint">The robber can't target a player with fewer than 3 victory points.</span>
               </label>
             </div>
           )}

@@ -66,6 +66,7 @@ export async function startGameHandler(request: CallableRequest<StartGameRequest
           victoryPointsToWin: room.victoryPointsToWin,
           discardLimit: room.discardLimit,
           turnTimerSeconds: room.turnTimerSeconds,
+          safeMode: room.safeMode,
         },
         seatedPlayers,
       );
@@ -80,6 +81,7 @@ export async function startGameHandler(request: CallableRequest<StartGameRequest
         victoryPointsToWin: room.victoryPointsToWin,
         discardLimit: room.discardLimit,
         turnTimerSeconds: room.turnTimerSeconds,
+        safeMode: room.safeMode,
       };
 
       tx.set(roomRef(roomId), roomToWrite);

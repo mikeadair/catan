@@ -113,6 +113,10 @@ export default function Lobby(): JSX.Element {
     run(() => updateRoomSettings(roomId!, { turnTimerSeconds: clamp(value, TURN_TIMER_MIN, TURN_TIMER_MAX) }));
   }
 
+  function handleToggleSafeMode(enabled: boolean) {
+    run(() => updateRoomSettings(roomId!, { safeMode: enabled }));
+  }
+
   const seats = room.turnOrder
     .map((seatUid) => players[seatUid])
     .filter((p): p is NonNullable<typeof p> => !!p)
@@ -311,6 +315,15 @@ export default function Lobby(): JSX.Element {
                 />
               </label>
             )}
+            <label className="lobby__field lobby__field--checkbox">
+              <input
+                type="checkbox"
+                checked={room.safeMode}
+                disabled={fieldsDisabled}
+                onChange={(e) => handleToggleSafeMode(e.target.checked)}
+              />
+              <span title="The robber can't target a player with fewer than 3 victory points">Safe mode</span>
+            </label>
           </div>
         </div>
       </div>

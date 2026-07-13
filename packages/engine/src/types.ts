@@ -198,6 +198,11 @@ export interface RoomState {
   victoryPointsToWin: number; // default DEFAULT_VICTORY_POINTS_TO_WIN
   discardLimit: number; // hand size that triggers a discard on a rolled 7; default DEFAULT_DISCARD_LIMIT
   turnTimerSeconds: number | null; // countdown shown per turn; null = disabled. Enforced server-side via 'timeoutEndTurn'.
+  // When on, the robber can't target a hex touching any player's settlement/city while that
+  // player has fewer than 3 visible victory points — see hexProtectsWeakPlayer in rules.ts
+  // ('moveRobber'/'playKnight'). Fails open rather than leaving the robber with no legal
+  // target if every hex happens to be protected.
+  safeMode: boolean;
   // Non-bot majority vote to freeze/unfreeze the game — see voteToPause/voteToUnpause in
   // rules.ts. While paused, the turn timer and AFK auto-roll both stop counting elapsed time.
   paused: boolean;

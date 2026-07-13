@@ -162,6 +162,7 @@ export async function createRoom(
     victoryPointsToWin?: number;
     discardLimit?: number;
     turnTimerSeconds?: number | null;
+    safeMode?: boolean;
     preferredColor?: PlayerColor;
   }
 ): Promise<{ roomId: string; code: string }> {
@@ -213,6 +214,7 @@ export async function createRoom(
     victoryPointsToWin: settings?.victoryPointsToWin ?? DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: settings?.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: settings?.turnTimerSeconds !== undefined ? settings.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    safeMode: settings?.safeMode ?? false,
     paused: false,
     pausedAt: null,
     pauseVotes: [],
@@ -352,6 +354,7 @@ export interface RoomSettingsUpdate {
   victoryPointsToWin?: number;
   discardLimit?: number;
   turnTimerSeconds?: number | null;
+  safeMode?: boolean;
 }
 
 /** Host-only (enforced in the UI, same pattern as addBot/startGame — the underlying

@@ -57,6 +57,8 @@ export interface CreateGameRoomBase {
   discardLimit?: number;
   /** Per-turn countdown, enforced via 'timeoutEndTurn'. undefined = default; null = disabled. */
   turnTimerSeconds?: number | null;
+  /** Robber can't target a hex touching a sub-3-VP player's settlement/city. Default false. */
+  safeMode?: boolean;
 }
 
 export interface CreateGameSeatedPlayer {
@@ -146,6 +148,18 @@ function verticesAdjacentToHex(room: RoomState, hexId: string): VertexId[] {
   return Object.values(board.vertices)
     .filter((v) => v.adjacentHexIds.includes(hexId))
     .map((v) => v.id);
+}
+
+/** Safe Mode: true if any settlement/city on this hex belongs to a player with fewer than 3
+ * visible victory points — such a hex is off-limits for the robber while Safe Mode is on.
+ * (Deliberately visibleVictoryPoints, not the hidden-VP-inclusive total: this is a targeting
+ * rule based on public information, not a way to leak someone's hidden VP dev cards.) */
+function hexProtectsWeakPlayer(room: RoomState, players: Record<string, PublicPlayer>, hexId: string): boolean {
+  return verticesAdjacentToHex(room, hexId).some((vId) => {
+    const building = room.vertices[vId];
+    const owner = building && players[building.uid];
+    return !!owner && owner.visibleVictoryPoints < 3;
+  });
 }
 
 function hexResource(terrain: Terrain): Resource | null {
@@ -505,6 +519,7 @@ export function createGame(
     discardLimit: roomBase.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     // undefined (unspecified) -> default; null (explicitly disabled) stays null.
     turnTimerSeconds: roomBase.turnTimerSeconds !== undefined ? roomBase.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    safeMode: roomBase.safeMode ?? false,
     paused: false,
     pausedAt: null,
     pauseVotes: [],
@@ -674,6 +689,18 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       }
       if (action.robberHexId === board.robberHexId) {
         throw new Error('Robber must move to a different hex');
+      }
+      if (room.safeMode && hexProtectsWeakPlayer(room, players, action.robberHexId)) {
+        // Fail open rather than soft-lock the game: if literally every other hex is also
+        // protected (common early on, when most players still only have their two starting
+        // settlements = 2 VP each), allow the placement anyway instead of leaving the robber
+        // with nowhere legal to go.
+        const anyUnprotected = board.hexes.some(
+          (h) => h.id !== board.robberHexId && !hexProtectsWeakPlayer(room, players, h.id),
+        );
+        if (anyUnprotected) {
+          throw new Error('Safe mode: cannot target a player with fewer than 3 victory points');
+        }
       }
       board.robberHexId = action.robberHexId;
 

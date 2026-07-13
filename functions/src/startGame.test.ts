@@ -69,6 +69,7 @@ async function seedLobbyRoom(roomId: string, hostUid: string, otherUids: string[
     victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+    safeMode: false,
     paused: false,
     pausedAt: null,
     pauseVotes: [],

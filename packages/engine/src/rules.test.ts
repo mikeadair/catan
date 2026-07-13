@@ -474,6 +474,87 @@ describe('longest road and largest army', () => {
   });
 });
 
+describe('safe mode', () => {
+  function setupRobberScenario(safeMode: boolean) {
+    const bundle = makeGame(2);
+    const board = bundle.room.board!;
+    const actingUid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const weakUid = bundle.room.turnOrder.find((u) => u !== actingUid)!;
+
+    const protectedHex = board.hexes.find((h) => h.id !== bundle.room.robberHexId)!;
+    const protectedVertex = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(protectedHex.id))!;
+    bundle.room.vertices[protectedVertex.id] = { type: 'settlement', uid: weakUid };
+    bundle.players[weakUid].visibleVictoryPoints = 2; // below the 3-point safe-mode threshold
+
+    bundle.room.phase = 'robber';
+    bundle.room.safeMode = safeMode;
+    return { bundle, protectedHex, actingUid };
+  }
+
+  it('rejects targeting a hex touching a player with fewer than 3 VP', () => {
+    const { bundle, protectedHex, actingUid } = setupRobberScenario(true);
+    expect(() =>
+      applyAction(bundle, { type: 'moveRobber', uid: actingUid, robberHexId: protectedHex.id, stealFromUid: null }),
+    ).toThrow(/[Ss]afe mode/);
+  });
+
+  it('allows the same move when safe mode is off', () => {
+    const { bundle, protectedHex, actingUid } = setupRobberScenario(false);
+    const next = applyAction(bundle, {
+      type: 'moveRobber',
+      uid: actingUid,
+      robberHexId: protectedHex.id,
+      stealFromUid: null,
+    });
+    expect(next.room.board!.robberHexId).toBe(protectedHex.id);
+  });
+
+  it('still allows targeting a hex with no low-VP player nearby', () => {
+    const { bundle, actingUid } = setupRobberScenario(true);
+    const board = bundle.room.board!;
+    const emptyHex = board.hexes.find((h) => {
+      if (h.id === bundle.room.robberHexId) return false;
+      const vertices = Object.values(board.vertices).filter((v) => v.adjacentHexIds.includes(h.id));
+      return vertices.every((v) => !bundle.room.vertices[v.id]);
+    })!;
+    expect(emptyHex).toBeTruthy();
+    const next = applyAction(bundle, {
+      type: 'moveRobber',
+      uid: actingUid,
+      robberHexId: emptyHex.id,
+      stealFromUid: null,
+    });
+    expect(next.room.board!.robberHexId).toBe(emptyHex.id);
+  });
+
+  it('fails open (allows the move) if every other hex is also protected', () => {
+    const bundle = makeGame(2);
+    const board = bundle.room.board!;
+    const actingUid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const weakUid = bundle.room.turnOrder.find((u) => u !== actingUid)!;
+    // Give every non-robber hex at least one adjacent vertex, and put a low-VP player's
+    // settlement on all of them, so literally nowhere is a legal safe-mode target.
+    bundle.players[weakUid].visibleVictoryPoints = 2;
+    for (const hex of board.hexes) {
+      if (hex.id === bundle.room.robberHexId) continue;
+      const vertex = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(hex.id));
+      if (vertex && !bundle.room.vertices[vertex.id]) {
+        bundle.room.vertices[vertex.id] = { type: 'settlement', uid: weakUid };
+      }
+    }
+    bundle.room.phase = 'robber';
+    bundle.room.safeMode = true;
+    const target = board.hexes.find((h) => h.id !== bundle.room.robberHexId)!;
+    const next = applyAction(bundle, {
+      type: 'moveRobber',
+      uid: actingUid,
+      robberHexId: target.id,
+      stealFromUid: null,
+    });
+    expect(next.room.board!.robberHexId).toBe(target.id);
+  });
+});
+
 describe('trading', () => {
   it('proposes, accepts, and swaps resources between players', () => {
     let bundle = makeGame(2);
