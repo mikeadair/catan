@@ -44,6 +44,14 @@ function hexCornerPoints(center: { x: number; y: number }, size: number): { x: n
   return pts;
 }
 
+/** x-offsets (in dot-spacing units) for a row of `count` evenly-spaced pip dots, centered on
+ * 0 — used for the number-token probability pips (1-5 dots depending on the roll). */
+function pipDotOffsets(count: number): number[] {
+  const offsets: number[] = [];
+  for (let i = 0; i < count; i++) offsets.push(i - (count - 1) / 2);
+  return offsets;
+}
+
 /** Path for a simple house pictogram (roof + walls, roof peak up), centered on its own
  * origin so it can be positioned purely via a `transform="translate(...)"` on the caller. */
 function housePath(halfWidth: number, height: number): string {
@@ -409,9 +417,17 @@ export default function BoardView({
                 >
                   {hex.number}
                 </text>
-                <text x={center.x} y={center.y + 16} textAnchor="middle" fontSize={7} letterSpacing={1} fill="#6b5b3a">
-                  {'•'.repeat(pipCount(hex.number))}
-                </text>
+                {/* Probability pips as real dots rather than a tiny bullet-character string —
+                    reads more clearly at a glance, especially for the 4-5 pip hot numbers. */}
+                {pipDotOffsets(pipCount(hex.number)).map((offset, i) => (
+                  <circle
+                    key={i}
+                    cx={center.x + offset * 4.6}
+                    cy={center.y + 14}
+                    r={1.8}
+                    fill={isHotHex ? '#c0392b' : '#6b5b3a'}
+                  />
+                ))}
               </g>
             )}
             {hex.id === board.robberHexId && (
