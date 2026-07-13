@@ -134,9 +134,10 @@ export default function TradeBar({
             <span className="trade-bar__row-label">You want</span>
             <ResourceHand resources={UNLIMITED_POOL} unlimited selected={receive} onChange={setReceive} />
           </div>
-          <div className="trade-bar__row">
-            <span className="trade-bar__row-label">You give</span>
-            <ResourceHand resources={ownResources} selected={give} onChange={setGive} />
+          <div className="trade-bar__divider" />
+          <div className="trade-bar__row trade-bar__row--give">
+            <span className="trade-bar__row-label">Your hand — tap cards to give</span>
+            <ResourceHand resources={ownResources} variant="cards" selected={give} onChange={setGive} />
           </div>
           <div className="trade-bar__actions">
             <select value={targetUid} onChange={(e) => setTargetUid(e.target.value)}>
