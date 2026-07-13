@@ -4,13 +4,11 @@
   gap: 10px;
   flex-wrap: wrap;
   width: 100%;
-  /* This bar sits directly in the toolbar's height budget, which competes with the board for
-     vertical space (see .game grid-template-rows: 1fr auto in Game.css) — every extra row
-     here is a row taken from the board. Cards are kept deliberately compact (see
-     .trade-bar__want-card below) and .trade-bar__want-cards never wraps internally, so this
-     bar is reliably one row tall; if the actions genuinely don't fit alongside it at very
-     narrow widths, the whole bar wraps as two rows (want, then actions) rather than the want
-     row silently growing to two-plus rows on its own. */
+  /* Rendered as a floating panel positioned above .game__toolbar (see Game.css's
+     `.game__toolbar > .trade-bar`), not a layout-participating row — so unlike before, it no
+     longer competes with the board for vertical space, and growing taller (e.g. the want row
+     wrapping to two lines at the larger ~2x card size below) just overlays a bit more of the
+     board instead of pushing anything around. */
 }
 
 .trade-bar__want {
@@ -19,6 +17,7 @@
   gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: wrap;
 }
 
 .trade-bar__want-label {
@@ -32,23 +31,26 @@
 
 .trade-bar__want-cards {
   display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
+  gap: 8px;
+  /* Now that this bar floats free of the board (see .trade-bar above), there's no more reason
+     to force all 5 resource cards into one scrolling row at the larger ~2x size below — wrap
+     onto a second row instead, so every resource stays visible without needing to scroll. */
+  flex-wrap: wrap;
   min-width: 0;
-  /* Safety valve rather than a second wrapped row: at very narrow widths this scrolls
-     horizontally instead of growing taller. */
-  overflow-x: auto;
 }
 
+/* ~2x the original footprint (icon/text/stepper all scaled together below) — these are the
+   primary controls for composing a trade, so they read better as clearly-tappable cards
+   rather than compact chips now that the bar floats free of the board (see Game.css). */
 .trade-bar__want-card {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   background: var(--color-panel-light);
   border: 1px solid rgba(0, 0, 0, 0.35);
-  border-radius: 7px;
-  padding: 3px 5px;
+  border-radius: 14px;
+  padding: 6px 10px;
   flex-shrink: 0;
 }
 
@@ -68,15 +70,15 @@
 .trade-bar__want-card--wool::before { background: var(--resource-wool); }
 
 .trade-bar__want-icon {
-  width: 15px;
-  height: 15px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   image-rendering: pixelated;
   z-index: 1;
 }
 
 .trade-bar__want-name {
-  font-size: 10.5px;
+  font-size: 21px;
   font-weight: 600;
   color: var(--color-text);
   z-index: 1;
@@ -86,17 +88,17 @@
 .trade-bar__want-stepper {
   display: flex;
   align-items: center;
-  gap: 1px;
-  margin-left: 2px;
-  padding-left: 4px;
+  gap: 2px;
+  margin-left: 4px;
+  padding-left: 8px;
   border-left: 1px solid var(--color-border);
   z-index: 1;
 }
 
 .trade-bar__want-stepper button {
-  width: 17px;
-  height: 17px;
-  border-radius: 4px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
   background: var(--color-panel);
   color: var(--color-text);
@@ -105,7 +107,7 @@
   justify-content: center;
   padding: 0;
   line-height: 1;
-  font-size: 11px;
+  font-size: 22px;
 }
 
 .trade-bar__want-stepper button:disabled {
@@ -118,10 +120,10 @@
 }
 
 .trade-bar__want-count {
-  min-width: 12px;
+  min-width: 24px;
   text-align: center;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 22px;
   color: var(--color-accent);
 }
 

@@ -5,7 +5,7 @@
 // (see Game.tsx, which lifts the shared `give`/`receive`/`targetUid` composer state so both
 // this component and the hand's <ResourceHand variant="cards"> can read/write it). Bank
 // Trade only lights up once the current give/receive selection is a valid N:1 offer.
-import type { JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import type { PublicPlayer, Resource, ResourceCount, RoomState } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
@@ -73,16 +73,41 @@ export default function TradeBar({
   const giveTotal = RESOURCES.reduce((s, r) => s + (give[r] ?? 0), 0);
   const receiveTotal = RESOURCES.reduce((s, r) => s + (receive[r] ?? 0), 0);
 
-  const canPropose = canTrade && !blocked && giveTotal > 0 && receiveTotal > 0;
+  // A player-to-player trade never actually touches the bank, but "how much of a resource you
+  // could possibly want" is still capped by what's in it (see stepReceive below and the Bank
+  // Trade gate this mirrors) — if the bank's already run dry on something, that's surfaced here
+  // rather than only failing silently once nobody can afford to fulfil it.
+  const bankShortResource = RESOURCES.find((r) => (receive[r] ?? 0) > (room.bank[r] ?? 0));
+
+  // If the bank's supply of an already-selected "want" resource shrinks out from under a
+  // staged trade (e.g. someone else drains it via a bank trade while this composer sits open),
+  // clamp the selection down instead of leaving a phantom count the bank can no longer back.
+  useEffect(() => {
+    let changed = false;
+    const next: Partial<ResourceCount> = { ...receive };
+    for (const r of RESOURCES) {
+      const avail = room.bank[r] ?? 0;
+      if ((receive[r] ?? 0) > avail) {
+        next[r] = avail;
+        changed = true;
+      }
+    }
+    if (changed) onReceiveChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.bank]);
+
+  const canPropose = canTrade && !blocked && giveTotal > 0 && receiveTotal > 0 && !bankShortResource;
   const proposeReason = blocked
     ? 'Waiting for previous action…'
     : canPropose
       ? undefined
       : !canTrade
         ? 'Not your turn'
-        : giveTotal === 0
-          ? 'Tap cards in your hand below to choose what to give'
-          : 'Choose what you want';
+        : bankShortResource
+          ? `Not enough ${RESOURCE_LABEL[bankShortResource]} available in the bank`
+          : giveTotal === 0
+            ? 'Tap cards in your hand below to choose what to give'
+            : 'Choose what you want';
 
   const givenOne = singleSelection(give);
   const receivedOne = singleSelection(receive);
@@ -115,7 +140,11 @@ export default function TradeBar({
   }
 
   function stepReceive(r: Resource, delta: number) {
-    onReceiveChange({ ...receive, [r]: Math.max(0, (receive[r] ?? 0) + delta) });
+    const uncapped = Math.max(0, (receive[r] ?? 0) + delta);
+    // Reuse the same `room.bank[...] >= 1` style check the Bank Trade button already gates
+    // on — refuse to select more of a "want" resource than the bank actually holds.
+    const next = delta > 0 ? Math.min(uncapped, room.bank[r] ?? 0) : uncapped;
+    onReceiveChange({ ...receive, [r]: next });
   }
 
   return (
@@ -142,7 +171,9 @@ export default function TradeBar({
                   <button
                     type="button"
                     onClick={() => stepReceive(r, 1)}
+                    disabled={count >= (room.bank[r] ?? 0)}
                     aria-label={`Add ${RESOURCE_LABEL[r]} to what you want`}
+                    title={count >= (room.bank[r] ?? 0) ? `Bank is out of ${RESOURCE_LABEL[r]}` : undefined}
                   >
                     +
                   </button>

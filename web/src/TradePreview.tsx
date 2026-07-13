@@ -139,6 +139,22 @@ export default function TradePreview(): JSX.Element {
         createdAt: Date.now(),
         interestedUids: ['p2'],
       },
+      // Demonstrates the per-responder status circles for an open trade with a mixed
+      // response (p1 hasn't answered, p2 has rejected) plus the "everyone rejected" red
+      // flash-then-dismiss: both other players have rejected this one, so it should show
+      // red and disappear shortly after mount (see TradeOffers.tsx's ALL_REJECTED_FLASH_MS).
+      {
+        id: 't3',
+        proposerUid: 'p1',
+        targetUid: null,
+        give: { grain: 1 },
+        receive: { ore: 1 },
+        status: 'pending',
+        counterOf: null,
+        createdAt: Date.now(),
+        interestedUids: [],
+        rejectedUids: ['p0', 'p2'],
+      },
     ];
 
     useGameStore.setState({

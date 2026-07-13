@@ -170,3 +170,80 @@
   color: var(--color-text-dim);
   align-self: center;
 }
+
+/* Every responder said no — a brief, unmissable red state before the card auto-dismisses
+   (see TradeOffers.tsx's ALL_REJECTED_FLASH_MS) rather than the card just vanishing outright. */
+.trade-offers__trade--all-rejected {
+  border-color: var(--color-danger);
+  background: rgba(192, 57, 43, 0.14);
+  animation: trade-offers-reject-pulse 0.5s ease-in-out 2;
+}
+
+@keyframes trade-offers-reject-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(192, 57, 43, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.4);
+  }
+}
+
+/* One small circle per player who needs to respond to this trade — their color, their
+   initial, and (once they've answered) a check/x mark overlaid on the circle's edge. */
+.trade-offers__responders {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.trade-offers__responder {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--player-color);
+  background: var(--color-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trade-offers__responder--pending {
+  opacity: 0.65;
+}
+
+.trade-offers__responder-initial {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.trade-offers__responder-badge {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.trade-offers__responder-badge--accept {
+  background: var(--color-success);
+  color: #0c1c12;
+}
+
+.trade-offers__responder-badge--reject {
+  background: var(--color-danger);
+  color: #2c0c0c;
+}

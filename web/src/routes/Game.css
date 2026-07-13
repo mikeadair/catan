@@ -207,13 +207,26 @@
   position: relative;
 }
 
-/* The trade bar sits as its own full-width row directly above the hand/build row (see
-   TradeBar.tsx) — no more expand/collapse popover, so it needs a visual separator from the
-   row below rather than just being one more inline item among the hand/dev-cards/build
-   controls. */
+/* The trade composer used to render as a normal flow child stacked above the hand/build row —
+   but .game__toolbar sits in the grid's `auto`-sized row (see .game grid-template-rows above),
+   so mounting/unmounting it inside the toolbar's own flex column changed the toolbar's height,
+   which in turn resized the board's `1fr` row and visibly pushed the board up/down every time
+   the trade composer opened or closed. It's now taken out of flow entirely and floats directly
+   above the toolbar instead — same trick .game__trades-overlay uses for the board area — so
+   opening/closing it never touches the toolbar's or board's box size. .game__toolbar already
+   has `position: relative` (below) to anchor it. */
 .game__toolbar > .trade-bar {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border);
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 100%;
+  margin-bottom: 10px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 40;
 }
 
 .game__toolbar-main {

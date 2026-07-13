@@ -52,13 +52,49 @@ export default function ResourceHand({
   // "which visual face(s) currently represent that count" bookkeeping.
   const [faceSelection, setFaceSelection] = useState<Partial<Record<Resource, number[]>>>({});
 
-  // External resets (a "Clear" button, closing the trade composer, confirming a discard) always
-  // zero out the whole `selected` map at once — reconcile our per-face tracking to match rather
-  // than leaving stale highlighted faces behind after the count they represented is gone.
+  // `resources` (the actual hand) can shrink out from under an in-progress selection — e.g. a
+  // player has cards staged for a trade proposal, then spends those exact cards on a build, or
+  // loses them to a robber/discard/another trade, all while the composer stays open. Without
+  // this, `selected` (owned by the parent, e.g. Game.tsx's tradeGive) would keep claiming a
+  // count the hand no longer actually has — a phantom selection. Clamp it down to whatever's
+  // still there. Skipped for `unlimited` pickers (Year of Plenty draws from the bank, not this
+  // hand, so there's nothing to clamp against).
   useEffect(() => {
-    if (selectedTotal > 0) return;
-    setFaceSelection((cur) => (Object.values(cur).some((faces) => faces && faces.length > 0) ? {} : cur));
-  }, [selectedTotal]);
+    if (unlimited || !onChange) return;
+    let changed = false;
+    const next: Partial<ResourceCount> = { ...sel };
+    for (const r of RESOURCES) {
+      const avail = resources[r] ?? 0;
+      if ((sel[r] ?? 0) > avail) {
+        next[r] = avail;
+        changed = true;
+      }
+    }
+    if (changed) onChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resources]);
+
+  // Once `selected` counts are clamped above, make sure the per-face bookkeeping (cards variant)
+  // never keeps more faces toggled than the (possibly just-reduced) count actually calls for.
+  useEffect(() => {
+    setFaceSelection((cur) => {
+      let changed = false;
+      const next: Partial<Record<Resource, number[]>> = {};
+      for (const r of RESOURCES) {
+        const faces = cur[r];
+        if (!faces || faces.length === 0) continue;
+        const want = sel[r] ?? 0;
+        if (faces.length > want) {
+          next[r] = faces.slice(0, want);
+          changed = true;
+        } else {
+          next[r] = faces;
+        }
+      }
+      return changed ? next : cur;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [RESOURCES.map((r) => sel[r] ?? 0).join(',')]);
 
   if (variant === 'cards') {
     function toggleCardFace(r: Resource, faceIndex: number) {

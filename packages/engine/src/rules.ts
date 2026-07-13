@@ -1114,6 +1114,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         counterOf: null,
         createdAt: Date.now(),
         interestedUids: [],
+        rejectedUids: [],
       };
       trades.push(offer);
       extendTurnTimerForTrade(room);
@@ -1136,6 +1137,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       // still executes immediately, same as before this branch existed.
       if (trade.targetUid === null) {
         trade.interestedUids ??= [];
+        trade.rejectedUids ??= [];
         if (action.accept) {
           if (!canAfford(requireHand(hands, action.uid).resources, trade.receive)) {
             throw new Error('You cannot afford this trade');
@@ -1144,8 +1146,10 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
             trade.interestedUids.push(action.uid);
             addLog(room, `${players[action.uid].displayName} is interested in a trade from ${players[trade.proposerUid].displayName}.`);
           }
+          trade.rejectedUids = trade.rejectedUids.filter((u) => u !== action.uid);
         } else {
           trade.interestedUids = trade.interestedUids.filter((u) => u !== action.uid);
+          if (!trade.rejectedUids.includes(action.uid)) trade.rejectedUids.push(action.uid);
         }
         break;
       }
@@ -1232,6 +1236,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       players[action.withUid].resourceCount = handSize(responderHand);
       trade.status = 'accepted';
       trade.interestedUids = [];
+      trade.rejectedUids = [];
       addLog(room, `${players[action.uid].displayName} traded with ${players[action.withUid].displayName}.`, {
         kind: 'resourceTrade',
         fromUid: action.uid,
@@ -1307,6 +1312,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         if (trade.status !== 'pending' || now - trade.createdAt < TRADE_EXPIRY_MS) continue;
         trade.status = 'expired';
         trade.interestedUids = [];
+        trade.rejectedUids = [];
         expiredAny = true;
         addLog(room, `${players[trade.proposerUid]?.displayName ?? 'A player'}'s trade offer expired.`);
       }

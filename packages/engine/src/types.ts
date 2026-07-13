@@ -193,6 +193,12 @@ export interface TradeOffer {
   // immediately (see respondTrade in rules.ts) since there's only ever one possible
   // responder, so this stays empty for those. Optional so older-shaped docs still typecheck.
   interestedUids?: string[];
+  // Open trades (targetUid === null) only: uids who've explicitly rejected this offer.
+  // Mirrors interestedUids so clients can render a per-responder accepted/rejected status
+  // (see TradeOffers.tsx) for open trades, not just targeted ones (where a single responder's
+  // rejection is already captured by `status` flipping to 'rejected'). A uid moves back out of
+  // here if they later accept. Optional so older-shaped docs still typecheck.
+  rejectedUids?: string[];
 }
 
 // --- Room / shared game state document ---
