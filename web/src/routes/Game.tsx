@@ -513,19 +513,25 @@ export default function Game(): JSX.Element {
             onRoll={() => void runAction({ type: 'rollDice', uid })}
           />
         )}
-      </div>
-
-      <div className="game__trades-column">
-        <TradeOffers
-          uid={uid}
-          players={players}
-          ownResources={resources}
-          trades={trades}
-          blocked={pendingActionType !== null}
-          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
-          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
-          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
-        />
+        {/* Rendered as an overlay anchored in the board's own empty water margin (the `pad`
+            space around the hex grid in Board.tsx) rather than a layout-participating grid
+            column — a grid column's width changes with its content (zero when no trades are
+            pending, real width once one appears), which used to visibly resize/reflow the
+            board every time a trade appeared or disappeared. Positioned absolutely, so it
+            never affects the board's or toolbar's layout regardless of how many trades are
+            showing. Still returns null internally when there's nothing pending. */}
+        <div className="game__trades-overlay">
+          <TradeOffers
+            uid={uid}
+            players={players}
+            ownResources={resources}
+            trades={trades}
+            blocked={pendingActionType !== null}
+            onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
+            onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+            onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
+          />
+        </div>
       </div>
 
       <aside className="game__sidebar">
