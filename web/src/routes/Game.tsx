@@ -71,6 +71,17 @@ export default function Game(): JSX.Element {
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
   const [robberVictimStep, setRobberVictimStep] = useState<RobberVictimStep | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  // Trade composer state, lifted up here (rather than owned inside TradeBar) because the
+  // "give" side is staged by tapping cards in the hand — a sibling rendered separately below
+  // TradeBar in the toolbar — so both components need to read/write the same selection.
+  const [tradeGive, setTradeGive] = useState<Partial<ResourceCount>>({});
+  const [tradeReceive, setTradeReceive] = useState<Partial<ResourceCount>>({});
+  const [tradeTargetUid, setTradeTargetUid] = useState<string>('');
+  function resetTradeComposer() {
+    setTradeGive({});
+    setTradeReceive({});
+    setTradeTargetUid('');
+  }
   const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
     try {
       return localStorage.getItem('catan.sidebarSide') === 'left' ? 'left' : 'right';
@@ -101,6 +112,8 @@ export default function Game(): JSX.Element {
   // it, or the turn simply moved on).
   useEffect(() => {
     setBuildMode(null);
+    setTradeGive({});
+    setTradeReceive({});
   }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
@@ -258,6 +271,7 @@ export default function Game(): JSX.Element {
   const bundle: GameStateBundle = { room, players, hands: ownHand ? { [uid]: ownHand } : {}, trades };
   const legalTypes = legalActionTypes(bundle, uid);
   const resources = ownHand?.resources ?? { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+  const tradeGiveTotal = RESOURCES.reduce((s, r) => s + (tradeGive[r] ?? 0), 0);
 
   async function runAction(action: GameAction): Promise<boolean> {
     setPendingActionType(action.type);
@@ -270,6 +284,16 @@ export default function Game(): JSX.Element {
     } finally {
       setPendingActionType(null);
     }
+  }
+
+  async function handleProposeTrade(give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) {
+    const ok = await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
+    if (ok) resetTradeComposer();
+  }
+
+  async function handleBankTrade(give: Resource, giveAmount: number, receive: Resource) {
+    const ok = await runAction({ type: 'bankTrade', uid: uid!, give, giveAmount, receive });
+    if (ok) resetTradeComposer();
   }
 
   function computeEligibleVictims(hexId: string): string[] {
@@ -491,6 +515,19 @@ export default function Game(): JSX.Element {
         )}
       </div>
 
+      <div className="game__trades-column">
+        <TradeOffers
+          uid={uid}
+          players={players}
+          ownResources={resources}
+          trades={trades}
+          blocked={pendingActionType !== null}
+          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
+          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
+        />
+      </div>
+
       <aside className="game__sidebar">
         <div className="game__sidebar-top">
           <button
@@ -513,16 +550,6 @@ export default function Game(): JSX.Element {
             Leave game
           </button>
         </div>
-        <TradeOffers
-          uid={uid}
-          players={players}
-          ownResources={resources}
-          trades={trades}
-          blocked={pendingActionType !== null}
-          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
-          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
-          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
-        />
         <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeckCount} />
         <PlayerRoster
           players={players}
@@ -537,23 +564,33 @@ export default function Game(): JSX.Element {
       </aside>
 
       <footer className="game__toolbar">
-          <TradeBar
-            room={room}
-            players={players}
-            uid={uid}
-            ownResources={resources}
-            canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
-            blocked={pendingActionType !== null}
-            onBankTrade={(give, giveAmount, receive) =>
-              void runAction({ type: 'bankTrade', uid, give, giveAmount, receive })
-            }
-            onProposeTrade={(give, receive, targetUid) =>
-              void runAction({ type: 'proposeTrade', uid, give, receive, targetUid })
-            }
-          />
+        <TradeBar
+          room={room}
+          players={players}
+          uid={uid}
+          give={tradeGive}
+          receive={tradeReceive}
+          onReceiveChange={setTradeReceive}
+          targetUid={tradeTargetUid}
+          onTargetUidChange={setTradeTargetUid}
+          canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
+          blocked={pendingActionType !== null}
+          onBankTrade={(give, giveAmount, receive) => void handleBankTrade(give, giveAmount, receive)}
+          onProposeTrade={(give, receive, targetUid) => void handleProposeTrade(give, receive, targetUid)}
+        />
+        <div className="game__toolbar-main">
           <div className="game__toolbar-hand">
-            <div className="game__toolbar-label">Your hand</div>
-            <ResourceHand resources={resources} variant="cards" />
+            <div className="game__toolbar-label-row">
+              <span className="game__toolbar-label">
+                {tradeGiveTotal > 0 ? 'Your hand — tap to add/remove from trade' : 'Your hand — tap cards to give in a trade'}
+              </span>
+              {tradeGiveTotal > 0 && (
+                <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
+                  Clear ({tradeGiveTotal})
+                </button>
+              )}
+            </div>
+            <ResourceHand resources={resources} variant="cards" selected={tradeGive} onChange={setTradeGive} />
           </div>
           <DevCardPanel
             devCards={ownHand?.devCards ?? []}
@@ -587,6 +624,7 @@ export default function Game(): JSX.Element {
               onEndTurn={() => void runAction({ type: 'endTurn', uid })}
             />
           </div>
+        </div>
       </footer>
 
       <DiscardModal

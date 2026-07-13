@@ -1,10 +1,11 @@
-// Pending trades relevant to the current player, shown persistently in the sidebar (not
-// tucked behind a popover) so they're impossible to miss and directly actionable by
-// whoever proposed them (Cancel, or finalize with a chosen interested player) or anyone
-// else who could accept/reject them.
+// Pending trades relevant to the current player, shown persistently in their own column
+// next to the board (not tucked behind a popover) so they're impossible to miss and
+// directly actionable by whoever proposed them (Cancel, or finalize with a chosen
+// interested player) or anyone else who could accept/reject them.
 import type { JSX } from 'react';
-import type { PublicPlayer, ResourceCount, TradeOffer } from '@catan/engine';
+import type { PublicPlayer, Resource, ResourceCount, TradeOffer } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
+import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './TradeOffers.css';
 
 function canAffordCost(resources: ResourceCount, cost: Partial<ResourceCount>): boolean {
@@ -14,6 +15,26 @@ function canAffordCost(resources: ResourceCount, cost: Partial<ResourceCount>): 
 function describeResources(r: Partial<ResourceCount>): string {
   const parts = RESOURCES.filter((res) => (r[res] ?? 0) > 0).map((res) => `${r[res]} ${res}`);
   return parts.length > 0 ? parts.join(', ') : 'nothing';
+}
+
+/** Compact row of small resource-card icons + counts, in the spirit of BankPanel/ResourceHand's
+ * card faces but scaled down to fit a narrow trade-offer line. Used for both the "give" and
+ * "receive" side of an offer. */
+function ResourceIconRow({ resources }: { resources: Partial<ResourceCount> }): JSX.Element {
+  const entries = RESOURCES.filter((r) => (resources[r] ?? 0) > 0);
+  if (entries.length === 0) {
+    return <span className="trade-offers__resource-row trade-offers__resource-row--empty">nothing</span>;
+  }
+  return (
+    <span className="trade-offers__resource-row">
+      {entries.map((r: Resource) => (
+        <span key={r} className={`trade-offers__resource-chip trade-offers__resource-chip--${r}`}>
+          <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="trade-offers__resource-icon" />
+          <span className="trade-offers__resource-count">{resources[r]}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 export interface TradeOffersProps {
@@ -60,9 +81,17 @@ export default function TradeOffers({
           return (
             <div key={t.id} className="trade-offers__trade">
               <div className="trade-offers__desc">
-                <strong>{isMine ? 'You' : (proposer?.displayName ?? 'Someone')}</strong> offer
-                {isMine ? '' : 's'} {describeResources(t.give)} for {describeResources(t.receive)}
-                {isOpen && !isMine ? ' (open to all)' : ''}
+                <div className="trade-offers__desc-who">
+                  <strong>{isMine ? 'You' : (proposer?.displayName ?? 'Someone')}</strong> offer{isMine ? '' : 's'}
+                  {isOpen && !isMine ? <span className="trade-offers__open-tag">open to all</span> : null}
+                </div>
+                <div className="trade-offers__exchange">
+                  <ResourceIconRow resources={t.give} />
+                  <span className="trade-offers__arrow" aria-hidden>
+                    →
+                  </span>
+                  <ResourceIconRow resources={t.receive} />
+                </div>
               </div>
 
               {isMine && isOpen && interested.length > 0 && (
