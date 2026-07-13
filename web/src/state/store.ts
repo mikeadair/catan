@@ -34,6 +34,11 @@ interface GameStore {
   enterRoom: (roomId: string) => void;
   leaveRoom: () => void;
   dispatch: (action: GameAction) => Promise<void>;
+  /** Same wire call as dispatch, but for background/best-effort actions any connected
+   * client may fire on someone else's behalf (AFK auto-roll, turn-timeout skip) — races
+   * where another client already won are expected and must never surface as a user-facing
+   * error toast. */
+  dispatchQuiet: (action: GameAction) => Promise<void>;
   sendChatMessage: (text: string) => Promise<void>;
   clearError: () => void;
 }
@@ -170,6 +175,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ error: err instanceof Error ? err.message : String(err) });
       throw err;
     }
+  },
+
+  dispatchQuiet: async (action) => {
+    const { roomId } = get();
+    if (!roomId) return;
+    await fbDispatchAction(roomId, action).catch(() => {});
   },
 
   sendChatMessage: async (text) => {

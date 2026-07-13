@@ -189,7 +189,12 @@ export interface RoomState {
   // Host-configurable house rules, set at room creation, fixed once status leaves 'lobby'.
   victoryPointsToWin: number; // default DEFAULT_VICTORY_POINTS_TO_WIN
   discardLimit: number; // hand size that triggers a discard on a rolled 7; default DEFAULT_DISCARD_LIMIT
-  turnTimerSeconds: number | null; // countdown shown per turn; null = disabled. Informational only, not enforced.
+  turnTimerSeconds: number | null; // countdown shown per turn; null = disabled. Enforced server-side via 'timeoutEndTurn'.
+  // Non-bot majority vote to freeze/unfreeze the game — see voteToPause/voteToUnpause in
+  // rules.ts. While paused, the turn timer and AFK auto-roll both stop counting elapsed time.
+  paused: boolean;
+  pausedAt: number | null; // Date.now() when `paused` flipped true; used to shift turnStartedAt forward by the pause duration on unpause, so elapsed-time math resumes where it left off.
+  pauseVotes: string[]; // uids currently voting to flip `paused` the opposite way of its current value
   // Added by game/rules.ts (additive, optional so other constructors aren't broken):
   devCardPlayedThisTurn?: boolean; // at most one dev card may be played per turn
   lastSetupSettlementVertexId?: VertexId | null; // anchors the free setup road to the settlement just placed
@@ -238,4 +243,12 @@ export type GameAction =
   // uid === targetUid is a self-leave; otherwise uid must be the host removing a bot seat.
   // Only legal outside setup1/setup2 (see rules.ts) — the snake-ordered setup turn sequence
   // doesn't generalize cleanly to a mutating turnOrder mid-snake.
-  | { type: 'removeSeat'; uid: string; targetUid: string };
+  | { type: 'removeSeat'; uid: string; targetUid: string }
+  // Any room member may submit this once the current turn's clock has actually run out
+  // server-side (re-validated in rules.ts, never trusted from the client) — advances the
+  // turn exactly like endTurn, crediting the timeout to whoever was current, not the caller.
+  | { type: 'timeoutEndTurn'; uid: string }
+  // uid casts (or withdraws) a vote to flip `paused` the opposite way of its current value.
+  // Bots never vote; majority is computed over non-bot turnOrder members only.
+  | { type: 'voteToPause'; uid: string }
+  | { type: 'voteToUnpause'; uid: string };

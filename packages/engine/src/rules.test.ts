@@ -4,7 +4,10 @@ import type { GameStateBundle } from './rules';
 import type { Building, PrivateHand, PublicPlayer, VertexId } from './types';
 import { RESOURCES } from './types';
 
-function makeGame(playerCount = 4, opts: { victoryPointsToWin?: number; discardLimit?: number } = {}): GameStateBundle {
+function makeGame(
+  playerCount = 4,
+  opts: { victoryPointsToWin?: number; discardLimit?: number; turnTimerSeconds?: number | null } = {},
+): GameStateBundle {
   const seatedPlayers = Array.from({ length: playerCount }, (_, i) => ({
     uid: `p${i}`,
     displayName: `Player ${i}`,
@@ -653,7 +656,7 @@ describe('legalActionTypes', () => {
   it('offers buildSettlement then buildRoad in setup order', () => {
     const bundle = makeGame(2);
     const uid = bundle.room.turnOrder[0];
-    expect(legalActionTypes(bundle, uid)).toEqual(['buildSettlement']);
+    expect(legalActionTypes(bundle, uid)).toEqual(['voteToPause', 'buildSettlement']);
   });
 
   it('offers rollDice at the start of a normal turn', () => {
@@ -661,6 +664,116 @@ describe('legalActionTypes', () => {
     bundle = driveSetup(bundle);
     const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
     expect(legalActionTypes(bundle, uid)).toContain('rollDice');
+  });
+});
+
+describe('pause voting', () => {
+  it('pauses once at least half of non-bot players vote, freezing all other actions', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const [uidA] = bundle.room.turnOrder;
+
+    bundle = applyAction(bundle, { type: 'voteToPause', uid: uidA });
+    expect(bundle.room.paused).toBe(true); // 1 of 2 players is already "at least half"
+    expect(bundle.room.pausedAt).not.toBeNull();
+    expect(bundle.room.pauseVotes).toEqual([]);
+
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    expect(() => applyAction(bundle, { type: 'endTurn', uid })).toThrow(/paused/);
+  });
+
+  it('does not pause below the majority threshold', () => {
+    let bundle = makeGame(4);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const [uidA] = bundle.room.turnOrder;
+
+    bundle = applyAction(bundle, { type: 'voteToPause', uid: uidA });
+    expect(bundle.room.paused).toBe(false); // 1 of 4 is not yet half
+    expect(bundle.room.pauseVotes).toEqual([uidA]);
+  });
+
+  it('excludes bots from the vote denominator', () => {
+    const seatedPlayers = [
+      { uid: 'p0', displayName: 'Human', isBot: false },
+      { uid: 'p1', displayName: 'Bot A', isBot: true },
+      { uid: 'p2', displayName: 'Bot B', isBot: true },
+    ];
+    let bundle = createGame(
+      { id: 'room1', code: 'ABCDE', hostUid: 'p0', mapPreset: 'official-beginner', seed: 'pause-bots-seed' },
+      seatedPlayers,
+    );
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+
+    expect(() => applyAction(bundle, { type: 'voteToPause', uid: 'p1' })).toThrow(/[Bb]ots cannot vote/);
+    bundle = applyAction(bundle, { type: 'voteToPause', uid: 'p0' });
+    expect(bundle.room.paused).toBe(true); // the lone human is 100% of the non-bot denominator
+  });
+
+  it('unpause shifts turnStartedAt forward by the paused duration', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const startedAt = bundle.room.turnStartedAt;
+    const [uidA] = bundle.room.turnOrder;
+
+    bundle = applyAction(bundle, { type: 'voteToPause', uid: uidA });
+    bundle.room.pausedAt = startedAt + 5000; // simulate 5s elapsed before pausing
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(startedAt + 30000); // 25s paused
+    try {
+      bundle = applyAction(bundle, { type: 'voteToUnpause', uid: uidA });
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(bundle.room.paused).toBe(false);
+    expect(bundle.room.pausedAt).toBeNull();
+    expect(bundle.room.turnStartedAt).toBe(startedAt + 25000);
+  });
+});
+
+describe('timeoutEndTurn', () => {
+  it('rejects a timeout before the configured timer has actually elapsed', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 120 });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    expect(() => applyAction(bundle, { type: 'timeoutEndTurn', uid })).toThrow(/not expired/);
+  });
+
+  it('rejects a timeout when no timer is configured for the room', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: null });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.room.turnStartedAt = Date.now() - 999_999;
+    expect(() => applyAction(bundle, { type: 'timeoutEndTurn', uid })).toThrow(/No turn timer/);
+  });
+
+  it('advances the turn once expired, crediting the timed-out player even if reported by someone else', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 30 });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    bundle.room.turnStartedAt = Date.now() - 31_000;
+    const timedOutUid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const reporterUid = bundle.room.turnOrder.find((u) => u !== timedOutUid)!;
+
+    bundle = applyAction(bundle, { type: 'timeoutEndTurn', uid: reporterUid });
+    expect(bundle.room.turnOrder[bundle.room.currentPlayerIndex]).not.toBe(timedOutUid);
+    expect(bundle.room.phase).toBe('roll');
+    expect(bundle.room.log.at(-1)?.message).toContain('timed out');
+  });
+
+  it('is offered via legalActionTypes only once the timer has actually elapsed', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 60 });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    expect(legalActionTypes(bundle, uid)).not.toContain('timeoutEndTurn');
+
+    bundle.room.turnStartedAt = Date.now() - 61_000;
+    expect(legalActionTypes(bundle, uid)).toContain('timeoutEndTurn');
   });
 });
 

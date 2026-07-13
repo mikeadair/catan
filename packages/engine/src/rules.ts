@@ -55,7 +55,7 @@ export interface CreateGameRoomBase {
   /** House rules, fixed once the game starts. Defaults to the DEFAULT_* constants. */
   victoryPointsToWin?: number;
   discardLimit?: number;
-  /** Per-turn countdown, informational only (not enforced). undefined = default; null = disabled. */
+  /** Per-turn countdown, enforced via 'timeoutEndTurn'. undefined = default; null = disabled. */
   turnTimerSeconds?: number | null;
 }
 
@@ -126,6 +126,14 @@ function requirePhase(room: RoomState, phases: RoomState['phase'][]): void {
   if (!phases.includes(room.phase)) {
     throw new Error(`Illegal action during phase '${room.phase}'`);
   }
+}
+
+/** "At least half" of non-bot seats — bots never vote and are excluded from the denominator. */
+function nonBotMajorityReached(room: RoomState, players: Record<string, PublicPlayer>, votes: string[]): boolean {
+  const nonBotUids = room.turnOrder.filter((uid) => !players[uid]?.isBot);
+  if (nonBotUids.length === 0) return false;
+  const eligibleVotes = votes.filter((uid) => nonBotUids.includes(uid));
+  return eligibleVotes.length * 2 >= nonBotUids.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -444,6 +452,9 @@ export function createGame(
     discardLimit: roomBase.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     // undefined (unspecified) -> default; null (explicitly disabled) stays null.
     turnTimerSeconds: roomBase.turnTimerSeconds !== undefined ? roomBase.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    paused: false,
+    pausedAt: null,
+    pauseVotes: [],
     devCardPlayedThisTurn: false,
     lastSetupSettlementVertexId: null,
   };
@@ -498,6 +509,12 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
   const next: GameStateBundle = structuredClone(bundle);
   const { room, players, hands, trades } = next;
   const board = room.board;
+
+  // Everything freezes while paused except the vote to resume — enforced centrally here
+  // rather than in every individual case.
+  if (room.paused && action.type !== 'voteToUnpause') {
+    throw new Error('Game is paused');
+  }
 
   switch (action.type) {
     case 'rollDice': {
@@ -986,6 +1003,62 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       break;
     }
 
+    case 'timeoutEndTurn': {
+      requirePhase(room, ['roll', 'main']);
+      if (room.turnTimerSeconds === null) throw new Error('No turn timer is configured for this room');
+      const elapsedMs = Date.now() - room.turnStartedAt;
+      if (elapsedMs < room.turnTimerSeconds * 1000) {
+        throw new Error('Turn timer has not expired yet');
+      }
+      // The reporting caller (action.uid) may be a different player than whoever timed
+      // out — credit/advance the actual current player, not the reporter.
+      const timedOutUid = room.turnOrder[room.currentPlayerIndex];
+      for (const trade of trades) {
+        if (trade.proposerUid === timedOutUid && trade.status === 'pending') {
+          trade.status = 'cancelled';
+        }
+      }
+      room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.turnOrder.length;
+      room.turnNumber += 1;
+      room.phase = 'roll';
+      room.diceRoll = null;
+      room.devCardPlayedThisTurn = false;
+      room.turnStartedAt = Date.now();
+      addLog(room, `${players[timedOutUid].displayName}'s turn timed out.`);
+      break;
+    }
+
+    case 'voteToPause': {
+      const player = requirePlayer(players, action.uid);
+      if (player.isBot) throw new Error('Bots cannot vote');
+      if (!room.pauseVotes.includes(action.uid)) room.pauseVotes.push(action.uid);
+      if (nonBotMajorityReached(room, players, room.pauseVotes)) {
+        room.paused = true;
+        room.pausedAt = Date.now();
+        room.pauseVotes = [];
+        addLog(room, 'Game paused by player vote.');
+      }
+      break;
+    }
+
+    case 'voteToUnpause': {
+      const player = requirePlayer(players, action.uid);
+      if (player.isBot) throw new Error('Bots cannot vote');
+      if (!room.paused) throw new Error('Game is not paused');
+      if (!room.pauseVotes.includes(action.uid)) room.pauseVotes.push(action.uid);
+      if (nonBotMajorityReached(room, players, room.pauseVotes)) {
+        // Shift turnStartedAt forward by however long the game sat paused, so the turn
+        // timer (and AFK auto-roll) resume with the same remaining time they had at pause.
+        const pausedDurationMs = room.pausedAt !== null ? Date.now() - room.pausedAt : 0;
+        room.turnStartedAt += pausedDurationMs;
+        room.paused = false;
+        room.pausedAt = null;
+        room.pauseVotes = [];
+        addLog(room, 'Game resumed by player vote.');
+      }
+      break;
+    }
+
     case 'removeSeat': {
       const target = requirePlayer(players, action.targetUid);
       const isSelf = action.uid === action.targetUid;
@@ -1082,6 +1155,12 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   if (room.phase === 'gameOver') return types;
 
+  if (room.paused) {
+    if (!player.isBot) types.push('voteToUnpause');
+    return types;
+  }
+  if (!player.isBot) types.push('voteToPause');
+
   if (room.phase === 'discard') {
     if (room.pendingDiscardUids.includes(uid)) types.push('discard');
     return types;
@@ -1098,6 +1177,14 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
       else types.push('buildRoad');
     }
     return types;
+  }
+
+  if (
+    (room.phase === 'roll' || room.phase === 'main') &&
+    room.turnTimerSeconds !== null &&
+    Date.now() - room.turnStartedAt >= room.turnTimerSeconds * 1000
+  ) {
+    types.push('timeoutEndTurn');
   }
 
   if (!isCurrent) {

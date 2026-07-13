@@ -69,6 +69,9 @@ async function seedLobbyRoom(roomId: string, hostUid: string, otherUids: string[
     victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+    paused: false,
+    pausedAt: null,
+    pauseVotes: [],
   };
   await roomRef(roomId).set(room);
   await Promise.all(turnOrder.map((uid, i) => playerRef(roomId, uid).set(lobbyPlayer(uid, i))));

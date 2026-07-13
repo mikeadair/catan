@@ -19,6 +19,12 @@
   animation: turn-timer-pulse 1s infinite;
 }
 
+.turn-timer--paused {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  animation: none;
+}
+
 @keyframes turn-timer-pulse {
   0%,
   100% {

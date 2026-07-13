@@ -213,6 +213,9 @@ export async function createRoom(
     victoryPointsToWin: settings?.victoryPointsToWin ?? DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: settings?.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: settings?.turnTimerSeconds !== undefined ? settings.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    paused: false,
+    pausedAt: null,
+    pauseVotes: [],
     devCardPlayedThisTurn: false,
     lastSetupSettlementVertexId: null,
   };

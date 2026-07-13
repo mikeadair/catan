@@ -20,6 +20,9 @@ const ACTION_TYPES: GameAction['type'][] = [
   'finalizeTrade',
   'endTurn',
   'removeSeat',
+  'timeoutEndTurn',
+  'voteToPause',
+  'voteToUnpause',
 ];
 
 function isString(v: unknown): v is string {
@@ -55,6 +58,9 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
     case 'rollDice':
     case 'buyDevCard':
     case 'endTurn':
+    case 'timeoutEndTurn':
+    case 'voteToPause':
+    case 'voteToUnpause':
       return;
     case 'buildRoad':
       if (!isString(a.edgeId)) throw new Error('buildRoad requires edgeId');

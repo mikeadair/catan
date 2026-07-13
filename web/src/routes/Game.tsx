@@ -11,6 +11,7 @@ import BankPanel from '../components/BankPanel';
 import GameLog from '../components/GameLog';
 import DiceRoller from '../components/DiceRoller';
 import TurnTimer from '../components/TurnTimer';
+import PauseControl from '../components/PauseControl';
 import BuildToolbar, { type BuildMode } from '../components/BuildToolbar';
 import DevCardPanel from '../components/DevCardPanel';
 import TradeBar from '../components/TradeBar';
@@ -19,6 +20,8 @@ import ResourceHand from '../components/ResourceHand';
 import DiscardModal from '../components/DiscardModal';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
+
+const AFK_AUTO_ROLL_MS = 15000;
 
 interface RoadBuildingPending {
   devCardId: string;
@@ -54,6 +57,7 @@ export default function Game(): JSX.Element {
   const trades = useGameStore((s) => s.trades);
   const chat = useGameStore((s) => s.chat);
   const dispatch = useGameStore((s) => s.dispatch);
+  const dispatchQuiet = useGameStore((s) => s.dispatchQuiet);
   const sendChatMessage = useGameStore((s) => s.sendChatMessage);
   const leaveRoom = useGameStore((s) => s.leaveRoom);
 
@@ -194,6 +198,36 @@ export default function Game(): JSX.Element {
     wasCurrentPlayerRef.current = isNowCurrent;
   }, [room?.turnOrder, room?.currentPlayerIndex, uid]);
 
+  // AFK auto-roll: if it's your turn to roll and you haven't within 15s, roll for you —
+  // keeps the game moving without anyone having to notice and nudge you. Only the current
+  // player's own client fires this (each client re-derives the same deadline from the
+  // shared turnStartedAt, so no coordination between clients is needed).
+  useEffect(() => {
+    if (!room || !uid) return;
+    if (room.paused || room.phase !== 'roll' || pendingActionType !== null) return;
+    if (room.turnOrder[room.currentPlayerIndex] !== uid) return;
+    const remaining = Math.max(0, AFK_AUTO_ROLL_MS - (Date.now() - room.turnStartedAt));
+    const timer = setTimeout(() => {
+      void dispatchQuiet({ type: 'rollDice', uid });
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [room?.paused, room?.phase, room?.turnStartedAt, room?.currentPlayerIndex, room?.turnOrder, uid, pendingActionType, dispatchQuiet]);
+
+  // Turn-timer expiry skips the turn. Any connected client (not just the current player's
+  // own, which may be the one that's gone AFK/offline) can report the timeout — the server
+  // re-validates elapsed time itself, so duplicate reports from multiple clients just race
+  // harmlessly (dispatchQuiet swallows the loser's rejection instead of toasting it).
+  useEffect(() => {
+    if (!room || !uid) return;
+    if (room.paused || room.turnTimerSeconds === null) return;
+    if (room.phase !== 'roll' && room.phase !== 'main') return;
+    const remaining = Math.max(0, room.turnTimerSeconds * 1000 - (Date.now() - room.turnStartedAt));
+    const timer = setTimeout(() => {
+      void dispatchQuiet({ type: 'timeoutEndTurn', uid });
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [room?.paused, room?.phase, room?.turnStartedAt, room?.turnTimerSeconds, uid, dispatchQuiet]);
+
   if (!uid || !room) {
     return <div className="game-loading">Loading game…</div>;
   }
@@ -333,7 +367,9 @@ export default function Game(): JSX.Element {
   let onEdgeClick: ((e: EdgeId) => void) | undefined;
   let onHexClick: ((h: string) => void) | undefined;
 
-  if (setupNeedsSettlement) {
+  if (room.paused) {
+    // Board stays visible but unresponsive while paused — see PauseControl/phaseBanner.
+  } else if (setupNeedsSettlement) {
     interactionMode = 'placeSettlement';
     freeSetup = true;
     onVertexClick = (vertexId) => {
@@ -380,7 +416,8 @@ export default function Game(): JSX.Element {
     : '';
 
   let phaseBanner: string | null = null;
-  if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
+  if (room.paused) phaseBanner = '⏸ Game paused';
+  else if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
   else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
   else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
   else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
@@ -451,6 +488,13 @@ export default function Game(): JSX.Element {
           >
             {sidebarSide === 'left' ? '⇥' : '⇤'}
           </button>
+          <PauseControl
+            room={room}
+            players={players}
+            uid={uid}
+            blocked={pendingActionType !== null}
+            onVote={() => void runAction({ type: room.paused ? 'voteToUnpause' : 'voteToPause', uid })}
+          />
           <button type="button" className="game__leave-button" onClick={() => setLeaveConfirmOpen(true)}>
             Leave game
           </button>
@@ -504,7 +548,12 @@ export default function Game(): JSX.Element {
               onPlay={handlePlayDevCard}
             />
           </div>
-          <TurnTimer turnStartedAt={room.turnStartedAt} turnTimerSeconds={room.turnTimerSeconds} />
+          <TurnTimer
+            turnStartedAt={room.turnStartedAt}
+            turnTimerSeconds={room.turnTimerSeconds}
+            paused={room.paused}
+            pausedAt={room.pausedAt}
+          />
           <BuildToolbar
             resources={resources}
             legalTypes={legalTypes}

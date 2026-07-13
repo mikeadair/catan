@@ -40,6 +40,9 @@ export default function DevPreview(): JSX.Element {
     victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+    paused: false,
+    pausedAt: null,
+    pauseVotes: [],
   };
 
   const players: Record<string, PublicPlayer> = {
