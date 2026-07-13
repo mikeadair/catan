@@ -18,6 +18,7 @@ import DevCardPanel from '../components/DevCardPanel';
 import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
+import { TradeIcon } from '../components/gameIcons';
 import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
@@ -81,6 +82,17 @@ export default function Game(): JSX.Element {
     setTradeGive({});
     setTradeReceive({});
     setTradeTargetUid('');
+  }
+  // Whether the trade composer (TradeBar's "you want" row/steppers/target-select/Offer/Bank
+  // buttons, plus the hand's tap-to-select mode) is showing. Off by default — the composer
+  // used to always render, eating vertical space even when nobody was mid-trade. Toggling off
+  // resets any in-progress composition rather than leaving staged (but invisible) cards behind.
+  const [tradeComposerOpen, setTradeComposerOpen] = useState(false);
+  function toggleTradeComposer() {
+    setTradeComposerOpen((cur) => {
+      if (cur) resetTradeComposer();
+      return !cur;
+    });
   }
   const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
     try {
@@ -513,19 +525,25 @@ export default function Game(): JSX.Element {
             onRoll={() => void runAction({ type: 'rollDice', uid })}
           />
         )}
-      </div>
-
-      <div className="game__trades-column">
-        <TradeOffers
-          uid={uid}
-          players={players}
-          ownResources={resources}
-          trades={trades}
-          blocked={pendingActionType !== null}
-          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
-          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
-          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
-        />
+        {/* Rendered as an overlay anchored in the board's own empty water margin (the `pad`
+            space around the hex grid in Board.tsx) rather than a layout-participating grid
+            column — a grid column's width changes with its content (zero when no trades are
+            pending, real width once one appears), which used to visibly resize/reflow the
+            board every time a trade appeared or disappeared. Positioned absolutely, so it
+            never affects the board's or toolbar's layout regardless of how many trades are
+            showing. Still returns null internally when there's nothing pending. */}
+        <div className="game__trades-overlay">
+          <TradeOffers
+            uid={uid}
+            players={players}
+            ownResources={resources}
+            trades={trades}
+            blocked={pendingActionType !== null}
+            onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
+            onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+            onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
+          />
+        </div>
       </div>
 
       <aside className="game__sidebar">
@@ -564,34 +582,53 @@ export default function Game(): JSX.Element {
       </aside>
 
       <footer className="game__toolbar">
-        <TradeBar
-          room={room}
-          players={players}
-          uid={uid}
-          give={tradeGive}
-          receive={tradeReceive}
-          onReceiveChange={setTradeReceive}
-          targetUid={tradeTargetUid}
-          onTargetUidChange={setTradeTargetUid}
-          canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
-          blocked={pendingActionType !== null}
-          onBankTrade={(give, giveAmount, receive) => void handleBankTrade(give, giveAmount, receive)}
-          onProposeTrade={(give, receive, targetUid) => void handleProposeTrade(give, receive, targetUid)}
-        />
+        {tradeComposerOpen && (
+          <TradeBar
+            room={room}
+            players={players}
+            uid={uid}
+            give={tradeGive}
+            receive={tradeReceive}
+            onReceiveChange={setTradeReceive}
+            targetUid={tradeTargetUid}
+            onTargetUidChange={setTradeTargetUid}
+            canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
+            blocked={pendingActionType !== null}
+            onBankTrade={(give, giveAmount, receive) => void handleBankTrade(give, giveAmount, receive)}
+            onProposeTrade={(give, receive, targetUid) => void handleProposeTrade(give, receive, targetUid)}
+          />
+        )}
         <div className="game__toolbar-main">
           <div className="game__toolbar-hand">
             <div className="game__toolbar-label-row">
               <span className="game__toolbar-label">
-                {tradeGiveTotal > 0 ? 'Your hand — tap to add/remove from trade' : 'Your hand — tap cards to give in a trade'}
+                {tradeComposerOpen
+                  ? tradeGiveTotal > 0
+                    ? 'Your hand — tap to add/remove from trade'
+                    : 'Your hand — tap cards to give in a trade'
+                  : 'Your hand'}
               </span>
-              {tradeGiveTotal > 0 && (
+              {tradeComposerOpen && tradeGiveTotal > 0 && (
                 <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
                   Clear ({tradeGiveTotal})
                 </button>
               )}
             </div>
-            <ResourceHand resources={resources} variant="cards" selected={tradeGive} onChange={setTradeGive} />
+            {tradeComposerOpen ? (
+              <ResourceHand resources={resources} variant="cards" selected={tradeGive} onChange={setTradeGive} />
+            ) : (
+              <ResourceHand resources={resources} variant="cards" />
+            )}
           </div>
+          <button
+            type="button"
+            className={`build-toolbar__button${tradeComposerOpen ? ' build-toolbar__button--active' : ''}`}
+            onClick={toggleTradeComposer}
+            aria-pressed={tradeComposerOpen}
+          >
+            <TradeIcon className="build-toolbar__icon" />
+            <span className="build-toolbar__label">Trade</span>
+          </button>
           <DevCardPanel
             devCards={ownHand?.devCards ?? []}
             turnNumber={room.turnNumber}

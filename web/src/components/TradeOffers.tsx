@@ -1,7 +1,8 @@
-// Pending trades relevant to the current player, shown persistently in their own column
-// next to the board (not tucked behind a popover) so they're impossible to miss and
-// directly actionable by whoever proposed them (Cancel, or finalize with a chosen
-// interested player) or anyone else who could accept/reject them.
+// Pending trades relevant to the current player, shown persistently as an overlay in the
+// board's own water margin (not tucked behind a popover, and not a layout-participating grid
+// column — see Game.css's .game__trades-overlay) so they're impossible to miss and directly
+// actionable by whoever proposed them (Cancel, or finalize with a chosen interested player)
+// or anyone else who could accept/reject them.
 import type { JSX } from 'react';
 import type { PublicPlayer, Resource, ResourceCount, TradeOffer } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';

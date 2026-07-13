@@ -7,10 +7,12 @@
   flex-direction: column;
   gap: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  /* This panel now lives in its own grid column (an `auto`-sized track between the board and
-     the sidebar) rather than stretching to fill a flex sidebar, so it needs its own width —
-     wide enough for a full give→receive icon row without wrapping mid-trade, narrow enough to
-     stay a clearly secondary column next to the board. */
+  /* Rendered as an absolutely-positioned overlay in the board's water margin (see Game.css's
+     .game__trades-overlay), not a layout-participating column, so it needs its own explicit
+     width — wide enough for a full give→receive icon row without wrapping mid-trade, narrow
+     enough to read as a secondary overlay rather than covering the board. A visible
+     border/shadow (above) gives it enough weight to stay legible against the ocean background
+     it sits on. */
   width: 212px;
 }
 
