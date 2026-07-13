@@ -1,7 +1,7 @@
 // Reusable resource display/picker. Used read-only for the bank strip and the
 // player's own hand, and interactively (via `selected`/`onChange`) for
 // discard, bank-trade, player-trade, and Year of Plenty resource pickers.
-import type { JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import type { Resource, ResourceCount } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
@@ -26,9 +26,10 @@ export interface ResourceHandProps {
   /** 'chip' (default): compact icon+count, used for pickers and the bank strip (where counts
    * run up to 19 and individual card faces would be unusable). 'cards': one card-styled face
    * per unit owned. Read-only (no `onChange`) for a player's own hand display; with
-   * `selected`/`onChange` it becomes clickable — tapping any face of a resource toggles one
-   * unit selected (the first `selected[r]` faces render highlighted), used by the trade bar
-   * and discard modal so players pick straight from their actual hand instead of a stepper. */
+   * `selected`/`onChange` it becomes clickable — tapping a specific face toggles exactly that
+   * face (not just "some face of that type" derived from a count), so the card a player
+   * actually taps stays highlighted regardless of its position, used by the trade bar and
+   * discard modal so players pick straight from their actual hand instead of a stepper. */
   variant?: 'chip' | 'cards';
 }
 
@@ -44,21 +45,37 @@ export default function ResourceHand({
   const sel = selected ?? {};
   const selectedTotal = RESOURCES.reduce((sum, r) => sum + (sel[r] ?? 0), 0);
 
+  // Which exact card faces are toggled, per resource — tracked by face index rather than
+  // derived from `sel[r]`'s count, so the specific card a player taps is what stays
+  // highlighted (not just however many of the leftmost faces of that type). `selected` is
+  // still the source of truth for parents (they only care about counts); this is purely
+  // "which visual face(s) currently represent that count" bookkeeping.
+  const [faceSelection, setFaceSelection] = useState<Partial<Record<Resource, number[]>>>({});
+
+  // External resets (a "Clear" button, closing the trade composer, confirming a discard) always
+  // zero out the whole `selected` map at once — reconcile our per-face tracking to match rather
+  // than leaving stale highlighted faces behind after the count they represented is gone.
+  useEffect(() => {
+    if (selectedTotal > 0) return;
+    setFaceSelection((cur) => (Object.values(cur).some((faces) => faces && faces.length > 0) ? {} : cur));
+  }, [selectedTotal]);
+
   if (variant === 'cards') {
-    // Interactive mode (onChange present): clicking any face of a resource toggles one unit
-    // of that resource selected/deselected — the first `selCount` faces render highlighted,
-    // so the exact face clicked doesn't matter (they're interchangeable), only the count.
     function toggleCardFace(r: Resource, faceIndex: number) {
       if (!onChange) return;
-      const selCount = sel[r] ?? 0;
-      if (faceIndex < selCount) {
-        onChange({ ...sel, [r]: selCount - 1 });
-        return;
+      const current = faceSelection[r] ?? [];
+      const isCurrentlySelected = current.includes(faceIndex);
+      let nextFaces: number[];
+      if (isCurrentlySelected) {
+        nextFaces = current.filter((i) => i !== faceIndex);
+      } else {
+        const avail = unlimited ? Infinity : resources[r];
+        if (current.length >= avail) return;
+        if (max !== undefined && selectedTotal >= max) return;
+        nextFaces = [...current, faceIndex];
       }
-      const avail = unlimited ? Infinity : resources[r];
-      if (selCount >= avail) return;
-      if (max !== undefined && selectedTotal >= max) return;
-      onChange({ ...sel, [r]: selCount + 1 });
+      setFaceSelection({ ...faceSelection, [r]: nextFaces });
+      onChange({ ...sel, [r]: nextFaces.length });
     }
 
     return (
@@ -66,11 +83,11 @@ export default function ResourceHand({
         {RESOURCES.flatMap((r) => {
           const count = resources[r] ?? 0;
           if (count === 0) return [];
-          const selCount = sel[r] ?? 0;
           const faceCount = Math.min(count, MAX_CARD_FACES_PER_RESOURCE);
           const overflow = count - faceCount;
+          const selectedFaces = faceSelection[r] ?? [];
           return Array.from({ length: faceCount }, (_, i) => {
-            const isSelected = interactive && i < selCount;
+            const isSelected = interactive && selectedFaces.includes(i);
             return (
               <div
                 key={`${r}-${i}`}
