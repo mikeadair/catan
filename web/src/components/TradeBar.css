@@ -1,0 +1,92 @@
+.trade-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.trade-bar__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.trade-bar__toggle:hover {
+  border-color: var(--color-accent);
+}
+
+.trade-bar__toggle--active {
+  border-color: var(--color-accent);
+  background: rgba(242, 177, 52, 0.15);
+}
+
+.trade-bar__toggle-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.trade-bar__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px;
+  min-width: 320px;
+}
+
+.trade-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trade-bar__row-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  font-weight: 600;
+  min-width: 62px;
+}
+
+.trade-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.trade-bar__actions select {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  padding: 6px 8px;
+}
+
+.trade-bar__actions button {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.trade-bar__actions button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.trade-bar__actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

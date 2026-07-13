@@ -104,23 +104,23 @@
 .player-roster__stat {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+}
+
+.player-roster__stat-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
 }
 
 .player-roster__icon-badge {
   margin-left: 2px;
-}
-
-.player-roster__pieces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--color-accent);
-}
-
-.player-roster__piece {
   display: inline-flex;
-  align-items: center;
-  gap: 2px;
+}
+
+.player-roster__badge-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--color-accent);
 }

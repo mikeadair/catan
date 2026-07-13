@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { computeRollGains, legalActionTypes, type GameStateBundle } from '@catan/engine';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '@catan/engine';
-import { RESOURCES } from '@catan/engine';
+import { MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
@@ -13,7 +13,7 @@ import DiceRoller from '../components/DiceRoller';
 import TurnTimer from '../components/TurnTimer';
 import BuildToolbar, { type BuildMode } from '../components/BuildToolbar';
 import DevCardPanel from '../components/DevCardPanel';
-import TradePanel from '../components/TradePanel';
+import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
 import DiscardModal from '../components/DiscardModal';
@@ -64,8 +64,6 @@ export default function Game(): JSX.Element {
   const [yopSelection, setYopSelection] = useState<Partial<ResourceCount>>({});
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
   const [robberVictimStep, setRobberVictimStep] = useState<RobberVictimStep | null>(null);
-  const [activePopover, setActivePopover] = useState<'trade' | null>(null);
-  const popoversRef = useRef<HTMLDivElement | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [sidebarSide, setSidebarSide] = useState<'left' | 'right'>(() => {
     try {
@@ -98,18 +96,6 @@ export default function Game(): JSX.Element {
   useEffect(() => {
     setBuildMode(null);
   }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
-
-  // Close whichever popover (Dev Cards / Trade) is open on an outside click.
-  useEffect(() => {
-    if (!activePopover) return;
-    function handlePointerDown(e: MouseEvent) {
-      if (popoversRef.current && !popoversRef.current.contains(e.target as Node)) {
-        setActivePopover(null);
-      }
-    }
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [activePopover]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
   // robber steals, discards, dev cards, and the win announcement).
@@ -305,7 +291,6 @@ export default function Game(): JSX.Element {
     else if (type === 'roadBuilding') setRoadBuildingPending({ devCardId, edges: [] });
     else if (type === 'yearOfPlenty') setYopPending(devCardId);
     else if (type === 'monopoly') setMonopolyPending(devCardId);
-    setActivePopover(null);
   }
 
   async function confirmYearOfPlenty() {
@@ -409,7 +394,15 @@ export default function Game(): JSX.Element {
     phaseBanner = `Waiting for ${names.join(', ')} to discard…`;
   }
 
-  const showBottomBar = room.phase === 'roll' || room.phase === 'main';
+  // Dice rolling only makes sense in roll/main; the toolbar itself (build/trade/hand) is
+  // relevant throughout the whole live game now, so it's always mounted below.
+  const showDiceRoller = room.phase === 'roll' || room.phase === 'main';
+  const selfPlayer = players[uid];
+  const piecesLeft = {
+    roads: selfPlayer ? MAX_ROADS - selfPlayer.roadsBuilt : 0,
+    settlements: selfPlayer ? MAX_SETTLEMENTS - selfPlayer.settlementsBuilt : 0,
+    cities: selfPlayer ? MAX_CITIES - selfPlayer.citiesBuilt : 0,
+  };
 
   return (
     <div className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}`}>
@@ -436,7 +429,7 @@ export default function Game(): JSX.Element {
           onEdgeClick={onEdgeClick}
           onHexClick={onHexClick}
         />
-        {showBottomBar && (
+        {showDiceRoller && (
           <DiceRoller
             diceRoll={room.diceRoll}
             canRoll={legalTypes.includes('rollDice')}
@@ -485,7 +478,21 @@ export default function Game(): JSX.Element {
         <GameLog log={room.log} chat={chat} onSend={(text) => void sendChatMessage(text)} />
       </aside>
 
-      <footer className={`game__toolbar${showBottomBar ? '' : ' game__toolbar--hidden'}`}>
+      <footer className="game__toolbar">
+          <TradeBar
+            room={room}
+            players={players}
+            uid={uid}
+            ownResources={resources}
+            canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
+            blocked={pendingActionType !== null}
+            onBankTrade={(give, giveAmount, receive) =>
+              void runAction({ type: 'bankTrade', uid, give, giveAmount, receive })
+            }
+            onProposeTrade={(give, receive, targetUid) =>
+              void runAction({ type: 'proposeTrade', uid, give, receive, targetUid })
+            }
+          />
           <div className="game__toolbar-hand">
             <div className="game__toolbar-label">Your hand</div>
             <ResourceHand resources={resources} variant="cards" />
@@ -504,38 +511,12 @@ export default function Game(): JSX.Element {
             activeMode={buildMode}
             devCardsRemaining={room.devCardDeckCount}
             isCurrentPlayer={isCurrentPlayer}
+            piecesLeft={piecesLeft}
             pendingActionType={pendingActionType}
             onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
             onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
             onEndTurn={() => void runAction({ type: 'endTurn', uid })}
           />
-          <div className="game__toolbar-popovers" ref={popoversRef}>
-            <button
-              type="button"
-              className="game__toolbar-toggle"
-              onClick={() => setActivePopover((v) => (v === 'trade' ? null : 'trade'))}
-            >
-              Trade
-            </button>
-            {activePopover === 'trade' && (
-              <div className="game__popover game__popover--trade">
-                <TradePanel
-                  room={room}
-                  players={players}
-                  uid={uid}
-                  ownResources={resources}
-                  canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
-                  blocked={pendingActionType !== null}
-                  onBankTrade={(give, giveAmount, receive) =>
-                    void runAction({ type: 'bankTrade', uid, give, giveAmount, receive })
-                  }
-                  onProposeTrade={(give, receive, targetUid) =>
-                    void runAction({ type: 'proposeTrade', uid, give, receive, targetUid })
-                  }
-                />
-              </div>
-            )}
-          </div>
       </footer>
 
       <DiscardModal

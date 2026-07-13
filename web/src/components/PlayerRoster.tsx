@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
-import { MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, type PrivateHand, type PublicPlayer } from '@catan/engine';
+import type { PrivateHand, PublicPlayer } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
+import { KnightIcon, LargestArmyIcon, LongestRoadIcon, ResourceCardsIcon, DevCardIcon, RoadIcon, VictoryPointIcon } from './gameIcons';
 import './PlayerRoster.css';
 
 export interface PlayerRosterProps {
@@ -50,31 +51,32 @@ export default function PlayerRoster({
                 </div>
                 <div className="player-roster__stats">
                   <span className="player-roster__stat" title="Resource cards">
-                    🂠 {p.resourceCount}
+                    <ResourceCardsIcon className="player-roster__stat-icon" /> {p.resourceCount}
                   </span>
                   <span className="player-roster__stat" title="Development cards">
-                    🃏 {p.devCardCount}
+                    <DevCardIcon className="player-roster__stat-icon" /> {p.devCardCount}
                   </span>
                   <span className="player-roster__stat" title="Victory points">
-                    🏆 {p.visibleVictoryPoints}
+                    <VictoryPointIcon className="player-roster__stat-icon" /> {p.visibleVictoryPoints}
                     {isYou && hiddenVp > 0 ? ` (+${hiddenVp} hidden)` : ''}
                   </span>
                   <span className="player-roster__stat" title="Knights played">
-                    ⚔️ {p.knightsPlayed}
-                    {largestArmyUid === uid && <span className="player-roster__icon-badge" title="Largest Army">🎖️</span>}
+                    <KnightIcon className="player-roster__stat-icon" /> {p.knightsPlayed}
+                    {largestArmyUid === uid && (
+                      <span className="player-roster__icon-badge" title="Largest Army">
+                        <LargestArmyIcon className="player-roster__badge-icon" />
+                      </span>
+                    )}
                   </span>
                   <span className="player-roster__stat" title="Roads built">
-                    🛤️ {p.roadsBuilt}
-                    {longestRoadUid === uid && <span className="player-roster__icon-badge" title="Longest Road">🏅</span>}
+                    <RoadIcon className="player-roster__stat-icon" /> {p.roadsBuilt}
+                    {longestRoadUid === uid && (
+                      <span className="player-roster__icon-badge" title="Longest Road">
+                        <LongestRoadIcon className="player-roster__badge-icon" />
+                      </span>
+                    )}
                   </span>
                 </div>
-                {isYou && (
-                  <div className="player-roster__pieces" title="Pieces you have left to build">
-                    <span className="player-roster__piece">🛤️ {MAX_ROADS - p.roadsBuilt} left</span>
-                    <span className="player-roster__piece">🏠 {MAX_SETTLEMENTS - p.settlementsBuilt} left</span>
-                    <span className="player-roster__piece">🏛️ {MAX_CITIES - p.citiesBuilt} left</span>
-                  </div>
-                )}
               </div>
             </li>
           );

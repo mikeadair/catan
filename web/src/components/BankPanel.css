@@ -25,5 +25,64 @@
 }
 
 .bank-panel__devcards-icon {
-  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+.bank-panel__cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bank-card {
+  position: relative;
+  width: 52px;
+  height: 66px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: var(--color-panel-light);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.bank-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  opacity: 0.28;
+}
+
+.bank-card--brick::before { background: var(--resource-brick); }
+.bank-card--lumber::before { background: var(--resource-lumber); }
+.bank-card--ore::before { background: var(--resource-ore); }
+.bank-card--grain::before { background: var(--resource-grain); }
+.bank-card--wool::before { background: var(--resource-wool); }
+
+.bank-card__icon {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.bank-card__count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+  z-index: 1;
+}
+
+.bank-card__label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-text-dim);
+  z-index: 1;
 }

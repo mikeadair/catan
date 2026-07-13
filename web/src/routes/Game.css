@@ -122,6 +122,13 @@
   gap: 8px;
 }
 
+/* The global sound toggle (App.css `.sound-toggle`) is fixed at top:12px/left:12px — when
+   the sidebar flips to the left, its top row lands in the same corner. Clear the sound
+   button's ~36px footprint instead of overlapping it. */
+.game--sidebar-left .game__sidebar-top {
+  padding-left: 44px;
+}
+
 .game__sidebar-side-toggle {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
@@ -165,18 +172,6 @@
   gap: 16px;
   flex-wrap: wrap;
   position: relative;
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-}
-
-/* Kept mounted (rather than unmounted) so the grid row it occupies stays reserved —
-   toggling display/mount was causing the board area above to visibly resize/jump every
-   time the phase left 'roll'/'main' (e.g. into 'robber'), which read as jarring. */
-.game__toolbar--hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
 }
 
 .game__toolbar-hand {
@@ -191,40 +186,6 @@
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
-}
-
-.game__toolbar-popovers {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.game__toolbar-toggle {
-  background: var(--color-panel-light);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 8px 14px;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.game__toolbar-toggle:hover {
-  border-color: var(--color-accent);
-}
-
-.game__toolbar-toggle--alert {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: #1c1c1c;
-  animation: dice-roller-pulse 1.6s ease-in-out infinite;
-}
-
-.game__popover {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  right: 0;
-  z-index: 200;
 }
 
 .game__monopoly-choices {

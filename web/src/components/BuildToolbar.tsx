@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { BUILD_COSTS, type GameAction, type ResourceCount } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
+import { CityIcon, DevCardIcon, RoadIcon, SettlementIcon } from './gameIcons';
 import './BuildToolbar.css';
 
 function CostChips({ cost, resources }: { cost: Partial<ResourceCount>; resources: ResourceCount }): JSX.Element {
@@ -31,6 +32,9 @@ export interface BuildToolbarProps {
   activeMode: BuildMode;
   devCardsRemaining: number;
   isCurrentPlayer: boolean;
+  /** Pieces the local player still has left to place — shown as a badge next to the
+   * matching build button instead of in the player roster. */
+  piecesLeft: { roads: number; settlements: number; cities: number };
   /** Action type currently in flight (a real network round-trip), or null. Blocks starting
    * a new action while one is already pending, and relabels the specific button involved. */
   pendingActionType: GameAction['type'] | null;
@@ -70,6 +74,7 @@ export default function BuildToolbar({
   activeMode,
   devCardsRemaining,
   isCurrentPlayer,
+  piecesLeft,
   pendingActionType,
   onToggleMode,
   onBuyDevCard,
@@ -104,8 +109,10 @@ export default function BuildToolbar({
         title={isPending ? 'Waiting for previous action…' : disabledReason(canRoad, isCurrentPlayer, affordRoad, BUILD_COSTS.road)}
         onClick={() => onToggleMode('road')}
       >
+        <RoadIcon className="build-toolbar__icon" />
         <span className="build-toolbar__label">Road</span>
         <CostChips cost={BUILD_COSTS.road} resources={resources} />
+        <span className="build-toolbar__left">{piecesLeft.roads} left</span>
       </button>
       <button
         type="button"
@@ -114,8 +121,10 @@ export default function BuildToolbar({
         title={isPending ? 'Waiting for previous action…' : disabledReason(canSettlement, isCurrentPlayer, affordSettlement, BUILD_COSTS.settlement)}
         onClick={() => onToggleMode('settlement')}
       >
+        <SettlementIcon className="build-toolbar__icon" />
         <span className="build-toolbar__label">Settlement</span>
         <CostChips cost={BUILD_COSTS.settlement} resources={resources} />
+        <span className="build-toolbar__left">{piecesLeft.settlements} left</span>
       </button>
       <button
         type="button"
@@ -124,8 +133,10 @@ export default function BuildToolbar({
         title={isPending ? 'Waiting for previous action…' : disabledReason(canCity, isCurrentPlayer, affordCity, BUILD_COSTS.city)}
         onClick={() => onToggleMode('city')}
       >
+        <CityIcon className="build-toolbar__icon" />
         <span className="build-toolbar__label">City</span>
         <CostChips cost={BUILD_COSTS.city} resources={resources} />
+        <span className="build-toolbar__left">{piecesLeft.cities} left</span>
       </button>
       <button
         type="button"
@@ -134,8 +145,10 @@ export default function BuildToolbar({
         title={devCardReason}
         onClick={onBuyDevCard}
       >
+        <DevCardIcon className="build-toolbar__icon" />
         <span className="build-toolbar__label">{isBuyingDevCard ? 'Buying…' : 'Dev Card'}</span>
         <CostChips cost={BUILD_COSTS.devCard} resources={resources} />
+        <span className="build-toolbar__left">{devCardsRemaining} left</span>
       </button>
       <button
         type="button"
