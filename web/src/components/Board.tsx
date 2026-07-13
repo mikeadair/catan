@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
 import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '@catan/engine';
 import { TERRAIN_RESOURCE } from '@catan/engine';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
@@ -76,6 +76,63 @@ function activateOnEnterOrSpace(e: KeyboardEvent, activate: () => void): void {
   }
 }
 
+/** Which candidate is currently "armed" (tapped once, previewed, awaiting a second
+ * tap/click/Enter on the same spot — or a tap on the confirm badge — to actually commit).
+ * Tapping a *different* candidate re-arms on the new one instead of requiring a cancel step. */
+type ArmedCandidate = { kind: 'vertex'; id: VertexId } | { kind: 'edge'; id: EdgeId } | null;
+
+/** Small rounded badge + checkmark, positioned near an armed candidate, previewing "this is
+ * what you're about to place" and doubling as an explicit confirm tap-target (in addition to
+ * tapping the candidate itself again). Kept generic over vertex/edge callers. */
+function ConfirmBadge({
+  x,
+  y,
+  label,
+  onConfirm,
+}: {
+  x: number;
+  y: number;
+  label: string;
+  onConfirm: () => void;
+}): JSX.Element {
+  const w = 30;
+  const h = 22;
+  return (
+    <g
+      transform={`translate(${x}, ${y})`}
+      className="catan-board__confirm-badge"
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onConfirm();
+      }}
+      onKeyDown={(e) => activateOnEnterOrSpace(e, onConfirm)}
+    >
+      <rect
+        x={-w / 2}
+        y={-h / 2}
+        width={w}
+        height={h}
+        rx={6}
+        fill="var(--color-accent)"
+        stroke="#1c1c1c"
+        strokeWidth={1.5}
+      />
+      {/* Checkmark */}
+      <path
+        d="M -8,0 L -2.5,6 L 8,-7"
+        fill="none"
+        stroke="#1c1c1c"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+}
+
 // --- Local mirrors of rules.ts legality helpers, scoped to board+room only
 // (no hand needed) for client-side candidate filtering. Not authoritative —
 // the Firestore transaction is the final check.
@@ -127,13 +184,47 @@ export default function BoardView({
   const board = room.board;
   const ownColor = uid && players[uid] ? PLAYER_COLOR_HEX[players[uid].color] : 'var(--color-accent)';
 
-  // Hover preview: show the actual piece (ghosted, in the player's own color) at whatever
-  // candidate vertex/edge the pointer is over, not just a generic highlighted hotspot.
-  const [hoverVertexId, setHoverVertexId] = useState<VertexId | null>(null);
-  const [hoverEdgeId, setHoverEdgeId] = useState<EdgeId | null>(null);
-  const previewVertexId =
-    interactionMode === 'placeSettlement' || interactionMode === 'placeCity' ? hoverVertexId : null;
-  const previewEdgeId = interactionMode === 'placeRoad' ? hoverEdgeId : null;
+  // Two-step tap-to-confirm: the first tap on a candidate "arms" it (shows a preview of the
+  // piece plus a confirm badge) without committing; a second tap on that *same* candidate (or
+  // the badge, or Enter/Space while it's focused) actually calls onVertexClick/onEdgeClick.
+  // Tapping a different candidate re-arms there instead of requiring a cancel step first.
+  //
+  // This replaces an earlier hover-driven preview (mouseenter/mouseleave on the hotspot)
+  // that had a latent staleness bug: a hotspot that disappears out from under the pointer
+  // (e.g. the instant its edge/vertex gets built and drops out of the candidate set) never
+  // fires `mouseleave`, so the hover id — and the ghost preview keyed off it — could linger
+  // indefinitely. Arming is cleared explicitly on commit and whenever the armed id falls out
+  // of the current candidate set (below), so it can't go stale the same way.
+  const [armed, setArmed] = useState<ArmedCandidate>(null);
+
+  useEffect(() => {
+    setArmed(null);
+  }, [interactionMode]);
+
+  function tapVertex(vertexId: VertexId): void {
+    if (armed?.kind === 'vertex' && armed.id === vertexId) {
+      setArmed(null);
+      onVertexClick?.(vertexId);
+    } else {
+      setArmed({ kind: 'vertex', id: vertexId });
+    }
+  }
+
+  function tapEdge(edgeId: EdgeId): void {
+    if (armed?.kind === 'edge' && armed.id === edgeId) {
+      setArmed(null);
+      onEdgeClick?.(edgeId);
+    } else {
+      setArmed({ kind: 'edge', id: edgeId });
+    }
+  }
+
+  function confirmArmed(): void {
+    if (!armed) return;
+    if (armed.kind === 'vertex') onVertexClick?.(armed.id);
+    else onEdgeClick?.(armed.id);
+    setArmed(null);
+  }
 
   const layout = useMemo(() => {
     if (!board) return null;
@@ -203,6 +294,18 @@ export default function BoardView({
     if (interactionMode !== 'placeRobber') return new Set<string>();
     return new Set(board.hexes.filter((h) => h.id !== board.robberHexId).map((h) => h.id));
   }, [board, interactionMode]);
+
+  // If the armed candidate falls out of the legal set for some other reason (e.g. another
+  // player takes the same spot first in a live game), un-arm it rather than leaving a
+  // confirm badge pointing at something that's no longer buildable.
+  useEffect(() => {
+    setArmed((cur) => {
+      if (!cur) return cur;
+      if (cur.kind === 'vertex' && !candidateVertices.has(cur.id)) return null;
+      if (cur.kind === 'edge' && !candidateEdges.has(cur.id)) return null;
+      return cur;
+    });
+  }, [candidateVertices, candidateEdges]);
 
   if (!board || !layout) return null;
 
@@ -397,24 +500,26 @@ export default function BoardView({
         );
       })}
 
-      {/* Interaction hotspots */}
+      {/* Interaction hotspots. Every candidate pulses continuously (not just on hover) so
+          legal placements are visible at a glance; the first tap "arms" one (see the preview
+          + confirm-badge block below) rather than building immediately. */}
       {interactionMode === 'placeSettlement' &&
         Array.from(candidateVertices).map((vid) => {
           const p = vertexPixel(vid, board, SIZE);
+          const isArmed = armed?.kind === 'vertex' && armed.id === vid;
           return (
             <circle
               key={`hot-${vid}`}
               cx={p.x}
               cy={p.y}
               r={9}
-              className="catan-board__hotspot catan-board__hotspot--vertex"
-              onClick={() => onVertexClick?.(vid)}
-              onMouseEnter={() => setHoverVertexId(vid)}
-              onMouseLeave={() => setHoverVertexId((cur) => (cur === vid ? null : cur))}
+              className={`catan-board__hotspot catan-board__hotspot--vertex${isArmed ? ' catan-board__hotspot--armed' : ' catan-board__hotspot--pulse'}`}
+              onClick={() => tapVertex(vid)}
               role="button"
               tabIndex={0}
-              aria-label="Build settlement here"
-              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onVertexClick?.(vid))}
+              aria-label={isArmed ? 'Confirm settlement here' : 'Build settlement here'}
+              aria-pressed={isArmed}
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapVertex(vid))}
             />
           );
         })}
@@ -422,20 +527,20 @@ export default function BoardView({
       {interactionMode === 'placeCity' &&
         Array.from(candidateVertices).map((vid) => {
           const p = vertexPixel(vid, board, SIZE);
+          const isArmed = armed?.kind === 'vertex' && armed.id === vid;
           return (
             <circle
               key={`hot-${vid}`}
               cx={p.x}
               cy={p.y}
               r={12}
-              className="catan-board__hotspot catan-board__hotspot--vertex"
-              onClick={() => onVertexClick?.(vid)}
-              onMouseEnter={() => setHoverVertexId(vid)}
-              onMouseLeave={() => setHoverVertexId((cur) => (cur === vid ? null : cur))}
+              className={`catan-board__hotspot catan-board__hotspot--vertex${isArmed ? ' catan-board__hotspot--armed' : ' catan-board__hotspot--pulse'}`}
+              onClick={() => tapVertex(vid)}
               role="button"
               tabIndex={0}
-              aria-label="Upgrade to city here"
-              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onVertexClick?.(vid))}
+              aria-label={isArmed ? 'Confirm city upgrade here' : 'Upgrade to city here'}
+              aria-pressed={isArmed}
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapVertex(vid))}
             />
           );
         })}
@@ -447,67 +552,97 @@ export default function BoardView({
           const [a, b] = edgeInfo.vertexIds;
           const pa = vertexPixel(a, board, SIZE);
           const pb = vertexPixel(b, board, SIZE);
+          const isArmed = armed?.kind === 'edge' && armed.id === eid;
           return (
             <g
               key={`hot-${eid}`}
-              onClick={() => onEdgeClick?.(eid)}
-              onMouseEnter={() => setHoverEdgeId(eid)}
-              onMouseLeave={() => setHoverEdgeId((cur) => (cur === eid ? null : cur))}
+              onClick={() => tapEdge(eid)}
               role="button"
               tabIndex={0}
-              aria-label="Build road here"
-              onKeyDown={(e) => activateOnEnterOrSpace(e, () => onEdgeClick?.(eid))}
+              aria-label={isArmed ? 'Confirm road here' : 'Build road here'}
+              aria-pressed={isArmed}
+              onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapEdge(eid))}
             >
               <line
                 x1={pa.x}
                 y1={pa.y}
                 x2={pb.x}
                 y2={pb.y}
-                className="catan-board__hotspot catan-board__hotspot--edge"
+                className={`catan-board__hotspot catan-board__hotspot--edge${isArmed ? ' catan-board__hotspot--edge-armed' : ' catan-board__hotspot--edge-pulse'}`}
                 strokeWidth={14}
                 strokeLinecap="round"
               />
-              <circle cx={mid.x} cy={mid.y} r={3} fill="var(--color-accent)" opacity={0.001} />
+              {/* The actual click target above is the full-length line (easier to hit); this
+                  small bubble at the midpoint is the "pulsing dot in the middle of the road"
+                  visual affordance requested — purely decorative, so pointer-events stay off
+                  it and clicks fall through to the line/group underneath. */}
+              {!isArmed && (
+                <circle
+                  cx={mid.x}
+                  cy={mid.y}
+                  r={5}
+                  fill="var(--color-accent)"
+                  stroke="#1c1c1c"
+                  strokeWidth={1}
+                  className="catan-board__pulse-bubble"
+                  style={{ pointerEvents: 'none' }}
+                />
+              )}
             </g>
           );
         })}
 
-      {/* Hover preview: the actual piece, ghosted, in the player's own color — drawn last
-          (on top) and pointer-events-none so it never steals the hotspot's own hover/click. */}
-      {previewVertexId &&
+      {/* Armed preview: the actual piece, solid-ish in the player's own color, at whatever
+          candidate is currently armed — plus a confirm badge next to it. Drawn last (on top)
+          so it's never occluded; the piece preview itself is pointer-events-none (the
+          hotspot underneath still owns the click/tap-again-to-confirm), but the badge is a
+          real, independently focusable/clickable confirm control. */}
+      {armed?.kind === 'vertex' &&
         (() => {
-          const p = vertexPixel(previewVertexId, board, SIZE);
+          const p = vertexPixel(armed.id, board, SIZE);
           const size = interactionMode === 'placeCity' ? housePath(7.5, 12.5) : housePath(8, 11);
           return (
-            <path
-              d={size}
-              transform={`translate(${p.x}, ${p.y})`}
-              fill={ownColor}
-              stroke="#1c1c1c"
-              strokeWidth={2}
-              opacity={0.55}
-              style={{ pointerEvents: 'none' }}
-            />
+            <g key="armed-vertex-preview">
+              <path
+                d={size}
+                transform={`translate(${p.x}, ${p.y})`}
+                fill={ownColor}
+                stroke="#1c1c1c"
+                strokeWidth={2}
+                opacity={0.85}
+                style={{ pointerEvents: 'none' }}
+              />
+              <ConfirmBadge
+                x={p.x + 26}
+                y={p.y - 26}
+                label={interactionMode === 'placeCity' ? 'Confirm city upgrade' : 'Confirm settlement'}
+                onConfirm={confirmArmed}
+              />
+            </g>
           );
         })()}
 
-      {previewEdgeId &&
+      {armed?.kind === 'edge' &&
         (() => {
-          const edgeInfo = board.edges[previewEdgeId];
+          const edgeInfo = board.edges[armed.id];
           const pa = vertexPixel(edgeInfo.vertexIds[0], board, SIZE);
           const pb = vertexPixel(edgeInfo.vertexIds[1], board, SIZE);
+          const mid = edgeMidpoint(armed.id, board, SIZE);
           return (
-            <line
-              x1={pa.x}
-              y1={pa.y}
-              x2={pb.x}
-              y2={pb.y}
-              stroke={ownColor}
-              strokeWidth={5}
-              strokeLinecap="round"
-              opacity={0.55}
-              style={{ pointerEvents: 'none' }}
-            />
+            <g key="armed-edge-preview">
+              <line
+                x1={pa.x}
+                y1={pa.y}
+                x2={pb.x}
+                y2={pb.y}
+                stroke={ownColor}
+                strokeWidth={5}
+                strokeLinecap="round"
+                opacity={0.85}
+                style={{ pointerEvents: 'none' }}
+              />
+              <ConfirmBadge x={mid.x} y={mid.y - 28} label="Confirm road" onConfirm={confirmArmed} />
+            </g>
           );
         })()}
 

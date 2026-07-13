@@ -29,6 +29,14 @@
   fill-opacity: 0.9;
 }
 
+/* Armed: the candidate the player has tapped once and is now previewing — a solid, non-
+   pulsing ring (the pulse is "look, you can place here"; once armed, the piece preview +
+   confirm badge already say "here's what happens next", so the motion would just be noise). */
+.catan-board__hotspot--armed {
+  fill-opacity: 0.9;
+  stroke-width: 3;
+}
+
 .catan-board__hotspot--edge {
   stroke: var(--color-accent);
   stroke-opacity: 0.4;
@@ -38,7 +46,13 @@
   stroke-opacity: 0.85;
 }
 
-g[role='button']:focus-visible .catan-board__hotspot--edge {
+.catan-board__hotspot--edge-armed {
+  stroke-opacity: 0.85;
+  stroke-width: 18;
+}
+
+g[role='button']:focus-visible .catan-board__hotspot--edge,
+g[role='button']:focus-visible .catan-board__hotspot--edge-armed {
   stroke-opacity: 0.9;
   stroke-width: 18;
 }
@@ -53,4 +67,65 @@ g[role='button']:focus-visible .catan-board__hotspot--edge {
 .catan-board__hotspot--hex:hover,
 .catan-board__hotspot--hex:focus-visible {
   fill-opacity: 0.35;
+}
+
+/* Candidate pulsing: legal placements stay visible without needing a hover, on both desktop
+   and touch. Two variants — a scale+opacity pulse for compact shapes (the vertex hotspot
+   itself, and the small edge-midpoint "bubble"), and an opacity-only pulse for the full-length
+   edge hit-target line (scaling a long diagonal line from its center reads as "stretching",
+   not "pulsing"). */
+@keyframes catan-pulse-scale {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+}
+
+@keyframes catan-pulse-fade {
+  0%,
+  100% {
+    stroke-opacity: 0.3;
+  }
+  50% {
+    stroke-opacity: 0.75;
+  }
+}
+
+.catan-board__hotspot--pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: catan-pulse-scale 1.6s ease-in-out infinite;
+}
+
+.catan-board__hotspot--edge-pulse {
+  animation: catan-pulse-fade 1.6s ease-in-out infinite;
+}
+
+.catan-board__pulse-bubble {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: catan-pulse-scale 1.6s ease-in-out infinite;
+}
+
+/* Respect reduced-motion: keep the candidates visible and legible, just without the loop. */
+@media (prefers-reduced-motion: reduce) {
+  .catan-board__hotspot--pulse,
+  .catan-board__hotspot--edge-pulse,
+  .catan-board__pulse-bubble {
+    animation: none;
+  }
+}
+
+.catan-board__confirm-badge {
+  cursor: pointer;
+}
+
+.catan-board__confirm-badge:focus-visible rect {
+  stroke: var(--color-text);
+  stroke-width: 2.5;
 }
