@@ -25,7 +25,10 @@ export interface ResourceHandProps {
   unlimited?: boolean;
   /** 'chip' (default): compact icon+count, used for pickers and the bank strip (where counts
    * run up to 19 and individual card faces would be unusable). 'cards': one card-styled face
-   * per unit owned, fanned like a real hand — for a player's own read-only hand display. */
+   * per unit owned. Read-only (no `onChange`) for a player's own hand display; with
+   * `selected`/`onChange` it becomes clickable — tapping any face of a resource toggles one
+   * unit selected (the first `selected[r]` faces render highlighted), used by the trade bar
+   * and discard modal so players pick straight from their actual hand instead of a stepper. */
   variant?: 'chip' | 'cards';
 }
 
@@ -42,20 +45,57 @@ export default function ResourceHand({
   const selectedTotal = RESOURCES.reduce((sum, r) => sum + (sel[r] ?? 0), 0);
 
   if (variant === 'cards') {
+    // Interactive mode (onChange present): clicking any face of a resource toggles one unit
+    // of that resource selected/deselected — the first `selCount` faces render highlighted,
+    // so the exact face clicked doesn't matter (they're interchangeable), only the count.
+    function toggleCardFace(r: Resource, faceIndex: number) {
+      if (!onChange) return;
+      const selCount = sel[r] ?? 0;
+      if (faceIndex < selCount) {
+        onChange({ ...sel, [r]: selCount - 1 });
+        return;
+      }
+      const avail = unlimited ? Infinity : resources[r];
+      if (selCount >= avail) return;
+      if (max !== undefined && selectedTotal >= max) return;
+      onChange({ ...sel, [r]: selCount + 1 });
+    }
+
     return (
       <div className="resource-hand resource-hand--cards">
         {RESOURCES.flatMap((r) => {
           const count = resources[r] ?? 0;
           if (count === 0) return [];
+          const selCount = sel[r] ?? 0;
           const faceCount = Math.min(count, MAX_CARD_FACES_PER_RESOURCE);
           const overflow = count - faceCount;
-          return Array.from({ length: faceCount }, (_, i) => (
-            <div key={`${r}-${i}`} className={`resource-card resource-card--${r}`}>
-              <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
-              <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
-              {i === faceCount - 1 && overflow > 0 && <span className="resource-card__overflow">+{overflow}</span>}
-            </div>
-          ));
+          return Array.from({ length: faceCount }, (_, i) => {
+            const isSelected = interactive && i < selCount;
+            return (
+              <div
+                key={`${r}-${i}`}
+                className={`resource-card resource-card--${r}${isSelected ? ' resource-card--selected' : ''}${interactive ? ' resource-card--interactive' : ''}`}
+                onClick={interactive ? () => toggleCardFace(r, i) : undefined}
+                role={interactive ? 'button' : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleCardFace(r, i);
+                        }
+                      }
+                    : undefined
+                }
+              >
+                <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
+                <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
+                {i === faceCount - 1 && overflow > 0 && <span className="resource-card__overflow">+{overflow}</span>}
+                {isSelected && <span className="resource-card__check">✓</span>}
+              </div>
+            );
+          });
         })}
       </div>
     );
