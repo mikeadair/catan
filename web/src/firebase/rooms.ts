@@ -431,6 +431,37 @@ export async function dispatchAction(roomId: string, action: GameAction): Promis
   await submitActionCallable({ roomId, action });
 }
 
+/**
+ * Runs decideBotAction for a single bot uid and, if it produced an action, submits it via
+ * submitAction (asBotUid). Shared by claimAndRunBotAction (the current-turn driver) and
+ * claimAndRunOffTurnBotTrade (the off-turn trade-response driver) below — both eventually
+ * boil down to "load this bot's hand, ask the engine what it wants to do, submit it".
+ */
+async function runBotDecisionAndSubmit(
+  roomId: string,
+  room: RoomState,
+  players: Record<string, PublicPlayer>,
+  trades: TradeOffer[],
+  botUid: string,
+): Promise<boolean> {
+  const botHandSnap = await getDoc(handRef(roomId, botUid));
+  const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
+
+  // trades passed straight from the caller's own already-subscribed `subscribeTrades` state
+  // (public data, safe to hand to any bot's decision).
+  const decisionBundle: GameStateBundle = {
+    room,
+    players,
+    hands: botHand ? { [botUid]: botHand } : {},
+    trades,
+  };
+  const action = decideBotAction(decisionBundle, botUid);
+  if (!action) return false;
+
+  await submitActionCallable({ roomId, action, asBotUid: botUid });
+  return true;
+}
+
 export async function claimAndRunBotAction(
   roomId: string,
   room: RoomState,
@@ -457,25 +488,35 @@ export async function claimAndRunBotAction(
   const claimIsFresh = !!existingClaim && now - existingClaim.ts < BOT_CLAIM_STALE_MS;
   if (claimIsFresh) return false;
 
-  const botHandSnap = await getDoc(handRef(roomId, botUid));
-  const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
+  return runBotDecisionAndSubmit(roomId, room, players, trades, botUid);
+}
 
-  // trades passed straight from the caller's own already-subscribed `subscribeTrades` state
-  // (public data, safe to hand to any bot's decision) — decideBotAction's main-phase logic
-  // now consults this to avoid re-proposing a trade it already has pending. decideTradeResponse
-  // (reacting to another player's turn) stays unreachable here since this driver only ever
-  // acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]).
-  const decisionBundle: GameStateBundle = {
-    room,
-    players,
-    hands: botHand ? { [botUid]: botHand } : {},
-    trades,
-  };
-  const action = decideBotAction(decisionBundle, botUid);
-  if (!action) return false;
+/**
+ * Off-turn counterpart to claimAndRunBotAction: lets a bot that is NOT the current player
+ * react to a trade proposed to it (or open to everyone) via decideTradeResponse — the path
+ * decideBotAction already supports (see its `!isCurrent` branch) but that claimAndRunBotAction
+ * itself can never reach, since it's hard-gated to room.turnOrder[currentPlayerIndex].
+ *
+ * No botActionClaim-style staleness gate here: unlike a bot's own turn (a sequence of several
+ * actions that must not be double-driven mid-sequence), a trade response is a single
+ * idempotent decision — decideTradeResponse is a pure function of the trade/hand/difficulty,
+ * so two clients racing to submit it independently just means the loser's submitAction call
+ * fails on a "trade is no longer pending" error once the winner's has already landed, same as
+ * the harmless race described above. Pacing (the human-like reaction delay) is the caller's
+ * job — see BOT_TRADE_RESPONSE_DELAY_*_MS in web/src/state/store.ts.
+ */
+export async function claimAndRunOffTurnBotTrade(
+  roomId: string,
+  room: RoomState,
+  players: Record<string, PublicPlayer>,
+  trades: TradeOffer[],
+  botUid: string,
+): Promise<boolean> {
+  if (room.status !== 'playing') return false;
+  if (room.turnOrder[room.currentPlayerIndex] === botUid) return false; // it's this bot's own turn; claimAndRunBotAction owns that path
+  if (!players[botUid]?.isBot) return false;
 
-  await submitActionCallable({ roomId, action, asBotUid: botUid });
-  return true;
+  return runBotDecisionAndSubmit(roomId, room, players, trades, botUid);
 }
 
 export function subscribeRoom(roomId: string, cb: (room: RoomState | null) => void): () => void {
