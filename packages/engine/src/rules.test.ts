@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAction, computeRollGains, createGame, legalActionTypes, recalcLargestArmy, recalcLongestRoad } from './rules';
 import { initialFogRevealHexIds } from './board';
 import type { GameStateBundle } from './rules';
-import type { Building, PrivateHand, PublicPlayer, VertexId } from './types';
+import type { Board, Building, PrivateHand, PublicPlayer, VertexId } from './types';
 import { RESOURCES, TRADE_EXPIRY_MS } from './types';
 
 function makeGame(
@@ -1030,7 +1030,7 @@ describe('fog-of-war and gold hex', () => {
     bundle.hands[uid].resources = { brick: 20, lumber: 20, ore: 20, grain: 20, wool: 20 };
 
     const myVertex = Object.entries(bundle.room.vertices).find(([, b]) => b.uid === uid)![0];
-    const path = findPathToHiddenHex(bundle, myVertex);
+    const path = findPathToHiddenHex(bundle, myVertex, uid);
     expect(path).not.toBeNull();
 
     const discoveredBefore = new Set(bundle.room.discoveredHexIds);
@@ -1046,17 +1046,57 @@ describe('fog-of-war and gold hex', () => {
       expect(hex.number).not.toBeNull();
     }
   });
+
+  it('reveals a hidden hex that a road only touches at one corner (tip), not a full shared edge', () => {
+    let bundle = makeFogGame();
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 20, lumber: 20, ore: 20, grain: 20, wool: 20 };
+    const board = bundle.room.board!;
+    const discoveredBefore = new Set(bundle.room.discoveredHexIds);
+
+    const myVertex = Object.entries(bundle.room.vertices).find(([, b]) => b.uid === uid)![0];
+    const path = findPathToHiddenHex(bundle, myVertex, uid, {
+      // Only accept an edge whose *edge*-adjacent hexes are all already discovered, but whose
+      // endpoint vertices touch an undiscovered hex — i.e. a tip/corner touch, not a side touch.
+      requireTipTouchOnly: true,
+    });
+    expect(path).not.toBeNull();
+
+    for (const edgeId of path!) {
+      if (bundle.room.edges[edgeId]) continue; // already built during setup
+      bundle = applyAction(bundle, { type: 'buildRoad', uid, edgeId });
+    }
+    const discoveredAfter = new Set(bundle.room.discoveredHexIds!);
+    const newlyRevealed = [...discoveredAfter].filter((id) => !discoveredBefore.has(id));
+    expect(newlyRevealed.length).toBeGreaterThan(0);
+  });
 });
 
 // --- test-only helpers ---
 
-/** BFS over the edge graph from `fromVertexId` to the nearest not-yet-discovered hex
- * (fog-of-war only) — returns the edge ids to build, in order, ending with whichever edge
- * actually borders the hidden hex (building it is what triggers discovery). */
-function findPathToHiddenHex(bundle: GameStateBundle, fromVertexId: VertexId): string[] | null {
+/** BFS over the edge graph from `fromVertexId` to the nearest edge that would trigger a fog
+ * reveal (fog-of-war only) — returns the edge ids to build, in order, ending with whichever
+ * edge actually touches the hidden hex (building it is what triggers discovery). Only
+ * traverses edges that are unowned or already owned by `uid`, so the returned path is always
+ * legally buildable in sequence (an edge owned by another player can never be built through).
+ * With `requireTipTouchOnly`, only matches an edge that touches a hidden hex solely via one of
+ * its endpoint vertices (a "tip" touch) and not via `edge.adjacentHexIds` (a "side" touch). */
+function findPathToHiddenHex(
+  bundle: GameStateBundle,
+  fromVertexId: VertexId,
+  uid: string,
+  opts: { requireTipTouchOnly?: boolean } = {},
+): string[] | null {
   const board = bundle.room.board!;
   const discovered = new Set(bundle.room.discoveredHexIds ?? []);
   const isHidden = (hexId: string) => !discovered.has(hexId);
+  const matchesEdge = (edge: Board['edges'][string]) => {
+    const sideHidden = edge.adjacentHexIds.some(isHidden);
+    const tipHidden = edge.vertexIds.some((vId) => board.vertices[vId].adjacentHexIds.some(isHidden));
+    return opts.requireTipTouchOnly ? tipHidden && !sideHidden : sideHidden || tipHidden;
+  };
 
   const visited = new Set<VertexId>([fromVertexId]);
   const queue: { vertex: VertexId; path: string[] }[] = [{ vertex: fromVertexId, path: [] }];
@@ -1064,7 +1104,9 @@ function findPathToHiddenHex(bundle: GameStateBundle, fromVertexId: VertexId): s
     const { vertex, path } = queue.shift()!;
     for (const edgeId of board.vertices[vertex].adjacentEdgeIds) {
       const edge = board.edges[edgeId];
-      if (edge.adjacentHexIds.some(isHidden)) {
+      const owner = bundle.room.edges[edgeId];
+      if (owner && owner !== uid) continue; // can never legally build through another player's road
+      if (matchesEdge(edge)) {
         return [...path, edgeId];
       }
       const [a, b] = edge.vertexIds;

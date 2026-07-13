@@ -407,7 +407,12 @@ const RANDOM_NUMBER_TOKENS = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
 /** fog-of-war only: reveals any hex(es) touching a newly-built edge that aren't discovered
  * yet — assigns each a genuinely random number token (not drawn from the board's original
  * fairness-constrained pool; see HexTile.number) and grants the discovering player 1 of its
- * resource (nothing for desert/gold, which are already revealed from game start anyway). */
+ * resource (nothing for desert/gold, which are already revealed from game start anyway).
+ *
+ * "Touching" includes a hex the road only grazes at one endpoint (a shared vertex/corner,
+ * not a full shared edge) — not just hexes the edge runs along the full side of. Each edge
+ * endpoint vertex can itself border up to 3 hexes, so we union in both endpoints'
+ * adjacentHexIds alongside the edge's own adjacentHexIds. */
 function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discovererUid: string): void {
   const { room, players, hands } = bundle;
   const board = room.board;
@@ -415,8 +420,15 @@ function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discoverer
   const edge = board.edges[edgeId];
   if (!edge) return;
 
+  const touchedHexIds = new Set(edge.adjacentHexIds);
+  for (const vertexId of edge.vertexIds) {
+    const vertex = board.vertices[vertexId];
+    if (!vertex) continue;
+    for (const hexId of vertex.adjacentHexIds) touchedHexIds.add(hexId);
+  }
+
   const discovered = new Set(room.discoveredHexIds);
-  for (const hexId of edge.adjacentHexIds) {
+  for (const hexId of touchedHexIds) {
     if (discovered.has(hexId)) continue;
     const hex = board.hexes.find((h) => h.id === hexId);
     if (!hex) continue;
