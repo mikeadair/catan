@@ -35,6 +35,7 @@ export default function DevPreview(): JSX.Element {
     setupRound: null,
     pendingDiscardUids: [],
     discardPhaseStartedAt: null,
+    robberPhaseStartedAt: null,
     botActionClaim: null,
     log: [],
     createdAt: Date.now(),

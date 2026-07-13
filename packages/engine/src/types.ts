@@ -236,6 +236,11 @@ export interface RoomState {
   // fixed DISCARD_TIMEOUT_SECONDS countdown (see 'timeoutDiscard' in rules.ts) shared by every
   // pending discarder, unlike the per-turn timer which only ever concerns one player at a time.
   discardPhaseStartedAt: number | null;
+  // Date.now() when the room entered the 'robber' phase; null whenever it isn't. Drives the
+  // fixed ROBBER_TIMEOUT_SECONDS countdown (see 'timeoutRobber' in rules.ts) so a current
+  // player who goes AFK/offline while deciding where to place the robber doesn't stall the
+  // game indefinitely — mirrors discardPhaseStartedAt above.
+  robberPhaseStartedAt: number | null;
   botActionClaim: { turnNumber: number; ts: number } | null;
   log: LogEntry[];
   createdAt: number;
@@ -299,6 +304,9 @@ export const LARGEST_ARMY_MIN = 3;
 // gets this long from the moment the room entered the 'discard' phase before 'timeoutDiscard'
 // may auto-discard a random selection on their behalf. See rules.ts.
 export const DISCARD_TIMEOUT_SECONDS = 30;
+// Same idea, for the current player deciding where to place the robber after a 7 (or a
+// knight). See 'timeoutRobber' in rules.ts.
+export const ROBBER_TIMEOUT_SECONDS = 30;
 
 // --- Game actions: the single vocabulary of legal moves, applied via game/rules.ts ---
 export type GameAction =
@@ -318,6 +326,10 @@ export type GameAction =
   // randomly discards down to the required count for every uid still in pendingDiscardUids,
   // not just one, since a 7 roll can leave several players owing a discard simultaneously.
   | { type: 'timeoutDiscard'; uid: string }
+  // Any room member may submit this once ROBBER_TIMEOUT_SECONDS has actually elapsed since
+  // room.robberPhaseStartedAt — moves the robber to a random legal hex on the current
+  // player's behalf (no steal) so an AFK/stuck current player doesn't stall the game.
+  | { type: 'timeoutRobber'; uid: string }
   // fog-of-war only: pays out a pending gold-hex pick (see pendingGoldPicks/'goldPick' phase).
   // resources.length must exactly match the owed amount; entries need not be distinct.
   | { type: 'pickGoldResources'; uid: string; resources: Resource[] }

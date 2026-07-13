@@ -35,6 +35,7 @@ import {
   MAX_SETTLEMENTS,
   PLAYER_COLORS,
   RESOURCES,
+  ROBBER_TIMEOUT_SECONDS,
   STARTING_BANK,
   TERRAIN_RESOURCE,
   TRADE_EXPIRY_MS,
@@ -569,6 +570,7 @@ export function createGame(
     setupRound: 1,
     pendingDiscardUids: [],
     discardPhaseStartedAt: null,
+    robberPhaseStartedAt: null,
     botActionClaim: null,
     log: [],
     createdAt: Date.now(),
@@ -671,6 +673,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           room.phase = 'discard';
         } else {
           room.phase = 'robber';
+          room.robberPhaseStartedAt = Date.now();
         }
       } else {
         distributeResources(next, roll);
@@ -734,6 +737,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (room.pendingDiscardUids.length === 0) {
         room.phase = 'robber';
         room.discardPhaseStartedAt = null;
+        room.robberPhaseStartedAt = Date.now();
       }
       break;
     }
@@ -759,6 +763,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.pendingDiscardUids = [];
       room.discardPhaseStartedAt = null;
       room.phase = 'robber';
+      room.robberPhaseStartedAt = Date.now();
       break;
     }
 
@@ -823,8 +828,37 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           addLog(room, `${players[action.uid].displayName} stole a card from ${players[victimUid].displayName}.`);
         }
       }
-      if (room.phase === 'robber') room.phase = 'main';
+      if (room.phase === 'robber') {
+        room.phase = 'main';
+        room.robberPhaseStartedAt = null;
+      }
       if (isKnight) recalcLargestArmy(room, players);
+      break;
+    }
+
+    case 'timeoutRobber': {
+      requirePhase(room, ['robber']);
+      if (room.robberPhaseStartedAt === null) throw new Error('No robber timer is running');
+      const elapsedMs = Date.now() - room.robberPhaseStartedAt;
+      if (elapsedMs < ROBBER_TIMEOUT_SECONDS * 1000) {
+        throw new Error('Robber timer has not expired yet');
+      }
+      if (!board) throw new Error('No board');
+      const timedOutUid = room.turnOrder[room.currentPlayerIndex];
+      // Auto-place on a random legal hex, no steal — keeps this simple (no victim-selection
+      // heuristics) while still unblocking the game for a current player who's gone AFK/stuck.
+      const legalHexes = board.hexes.filter((h) => h.id !== board.robberHexId);
+      const unprotected = room.safeMode
+        ? legalHexes.filter((h) => !hexProtectsWeakPlayer(room, players, h.id))
+        : legalHexes;
+      // Fail open, matching moveRobber's own safe-mode handling: if every remaining hex would
+      // be protected, allow any of them rather than having nothing legal to pick.
+      const pool = unprotected.length > 0 ? unprotected : legalHexes;
+      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      board.robberHexId = chosen.id;
+      room.phase = 'main';
+      room.robberPhaseStartedAt = null;
+      addLog(room, `${players[timedOutUid].displayName} ran out of time — the robber moved at random.`);
       break;
     }
 
@@ -1345,6 +1379,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         const pausedDurationMs = room.pausedAt !== null ? Date.now() - room.pausedAt : 0;
         room.turnStartedAt += pausedDurationMs;
         if (room.discardPhaseStartedAt !== null) room.discardPhaseStartedAt += pausedDurationMs;
+        if (room.robberPhaseStartedAt !== null) room.robberPhaseStartedAt += pausedDurationMs;
         room.paused = false;
         room.pausedAt = null;
         room.pauseVotes = [];
@@ -1481,6 +1516,12 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   if (room.phase === 'robber') {
     if (isCurrent) types.push('moveRobber');
+    if (
+      room.robberPhaseStartedAt !== null &&
+      Date.now() - room.robberPhaseStartedAt >= ROBBER_TIMEOUT_SECONDS * 1000
+    ) {
+      types.push('timeoutRobber');
+    }
     return types;
   }
 

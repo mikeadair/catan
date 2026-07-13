@@ -41,6 +41,7 @@ export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewPr
       setupRound: null,
       pendingDiscardUids: [],
       discardPhaseStartedAt: null,
+      robberPhaseStartedAt: null,
       botActionClaim: null,
       log: [],
       createdAt: 0,

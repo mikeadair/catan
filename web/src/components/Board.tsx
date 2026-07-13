@@ -281,7 +281,11 @@ export default function BoardView({
       scale: layout.width / rect.width, // viewBox user-space units per screen px
       dragged: false,
     };
-    svg.setPointerCapture(e.pointerId);
+    // Deliberately not calling setPointerCapture here: capturing eagerly, on every pointerdown
+    // including plain taps, retargets the pointerup/click that follows a tap-on-a-hotspot
+    // (vertex/edge/hex) to the <svg> itself in some browsers instead of the hotspot underneath
+    // the pointer — silently swallowing ordinary build/robber-placement clicks. Capture is only
+    // engaged once we've confirmed (in handlePointerMove) that this gesture is actually a drag.
   }
 
   function handlePointerMove(e: ReactPointerEvent<SVGSVGElement>): void {
@@ -293,6 +297,7 @@ export default function BoardView({
       if (Math.hypot(dxScreen, dyScreen) < DRAG_THRESHOLD_PX) return;
       drag.dragged = true;
       setIsPanning(true);
+      svgRef.current?.setPointerCapture(e.pointerId);
     }
     // Dragging right/down should move the visible content right/down (follow the pointer),
     // which means the viewBox's own min-x/min-y must move left/up by the same amount.

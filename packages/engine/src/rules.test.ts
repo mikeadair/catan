@@ -7,6 +7,7 @@ import {
   DISCARD_TIMEOUT_SECONDS,
   MIN_OPEN_TRADE_WINDOW_MS,
   RESOURCES,
+  ROBBER_TIMEOUT_SECONDS,
   TRADE_EXPIRY_MS,
   TRADE_TURN_EXTENSION_MS,
   TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
@@ -327,6 +328,38 @@ describe('dice roll and resource distribution', () => {
     expect(handTotal(bundle.hands[otherA])).toBe(3);
     expect(handTotal(bundle.hands[otherB])).toBe(4);
     expect(bundle.room.log.some((l) => l.message.includes('timed out'))).toBe(true);
+  });
+
+  it('rejects timeoutRobber before the robber timer has actually elapsed', () => {
+    let bundle = makeGame(2, { discardLimit: 20 });
+    bundle = driveSetup(bundle);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    mockDice(3, 4); // roll 7, nobody over the discard limit -> straight to 'robber'
+    bundle = applyAction(bundle, { type: 'rollDice', uid });
+    expect(bundle.room.phase).toBe('robber');
+    expect(bundle.room.robberPhaseStartedAt).not.toBeNull();
+
+    expect(() => applyAction(bundle, { type: 'timeoutRobber', uid })).toThrow(/has not expired yet/i);
+    expect(legalActionTypes(bundle, uid)).not.toContain('timeoutRobber');
+  });
+
+  it('timeoutRobber moves the robber to a random other hex and returns to the main phase', () => {
+    let bundle = makeGame(2, { discardLimit: 20 });
+    bundle = driveSetup(bundle);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const startHexId = bundle.room.board!.robberHexId;
+    mockDice(3, 4);
+    bundle = applyAction(bundle, { type: 'rollDice', uid });
+    expect(bundle.room.phase).toBe('robber');
+
+    bundle.room.robberPhaseStartedAt = Date.now() - ROBBER_TIMEOUT_SECONDS * 1000 - 1000;
+    expect(legalActionTypes(bundle, uid)).toContain('timeoutRobber');
+    bundle = applyAction(bundle, { type: 'timeoutRobber', uid });
+
+    expect(bundle.room.phase).toBe('main');
+    expect(bundle.room.robberPhaseStartedAt).toBeNull();
+    expect(bundle.room.board!.robberHexId).not.toBe(startHexId);
+    expect(bundle.room.log.some((l) => l.message.includes('ran out of time'))).toBe(true);
   });
 
   it('does not distribute a resource the bank cannot fully cover', () => {
