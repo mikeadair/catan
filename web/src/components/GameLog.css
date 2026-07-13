@@ -8,6 +8,37 @@
   gap: 8px;
   flex: 1;
   min-height: 0;
+
+  /* Size-toggle scale variables (see the header's size-cycle button). Medium matches the
+     original fixed px values; small/large scale text and icon dimensions from there. */
+  --log-font-size: 12.5px;
+  --log-small-font-size: 11px;
+  --log-icon-size: 14px;
+  --log-die-size: 13px;
+  --log-gains-indent: 17px;
+}
+
+.game-log[data-log-size='small'] {
+  --log-font-size: 11px;
+  --log-small-font-size: 9.5px;
+  --log-icon-size: 11px;
+  --log-die-size: 10px;
+  --log-gains-indent: 14px;
+}
+
+.game-log[data-log-size='large'] {
+  --log-font-size: 15px;
+  --log-small-font-size: 13px;
+  --log-icon-size: 19px;
+  --log-die-size: 17px;
+  --log-gains-indent: 21px;
+}
+
+.game-log__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .game-log__header {
@@ -16,6 +47,34 @@
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
+}
+
+.game-log__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.game-log__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.game-log__icon-btn[aria-pressed='true'] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .game-log__scroll {
@@ -31,12 +90,12 @@
 
 .game-log__empty {
   color: var(--color-text-dim);
-  font-size: 12px;
+  font-size: var(--log-font-size);
   font-style: italic;
 }
 
 .game-log__entry {
-  font-size: 12.5px;
+  font-size: var(--log-font-size);
   line-height: 1.35;
 }
 
@@ -76,8 +135,8 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
-  width: 13px;
-  height: 13px;
+  width: var(--log-die-size);
+  height: var(--log-die-size);
   padding: 1.5px;
   gap: 1px;
   background: var(--color-panel-light);
@@ -106,14 +165,14 @@
 }
 
 .game-log__resource-icon {
-  width: 14px;
-  height: 14px;
+  width: var(--log-icon-size);
+  height: var(--log-icon-size);
   object-fit: contain;
   vertical-align: middle;
 }
 
 .game-log__resource-count {
-  font-size: 11px;
+  font-size: var(--log-small-font-size);
   font-weight: 600;
   color: var(--color-text-dim);
 }
@@ -126,7 +185,7 @@
 
 .game-log__trade-arrow {
   color: var(--color-text-dim);
-  font-size: 11px;
+  font-size: var(--log-small-font-size);
 }
 
 .game-log__gains {
@@ -134,7 +193,7 @@
   flex-direction: column;
   gap: 2px;
   margin-top: 2px;
-  padding-left: 17px; /* align under the dice pips */
+  padding-left: var(--log-gains-indent); /* align under the dice pips */
   width: 100%;
 }
 

@@ -10,3 +10,4 @@ firebase-debug.log
 firestore-debug.log
 *.zip
 *.har
+.gstack/
