@@ -1,7 +1,7 @@
 // Reusable resource display/picker. Used read-only for the bank strip and the
 // player's own hand, and interactively (via `selected`/`onChange`) for
 // discard, bank-trade, player-trade, and Year of Plenty resource pickers.
-import type { CSSProperties, JSX } from 'react';
+import type { JSX } from 'react';
 import type { Resource, ResourceCount } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
@@ -42,7 +42,6 @@ export default function ResourceHand({
   const selectedTotal = RESOURCES.reduce((sum, r) => sum + (sel[r] ?? 0), 0);
 
   if (variant === 'cards') {
-    let globalIndex = 0;
     return (
       <div className="resource-hand resource-hand--cards">
         {RESOURCES.flatMap((r) => {
@@ -50,28 +49,13 @@ export default function ResourceHand({
           if (count === 0) return [];
           const faceCount = Math.min(count, MAX_CARD_FACES_PER_RESOURCE);
           const overflow = count - faceCount;
-          return Array.from({ length: faceCount }, (_, i) => {
-            const idx = globalIndex++;
-            return (
-              <div
-                key={`${r}-${i}`}
-                className={`resource-card resource-card--${r}`}
-                style={
-                  {
-                    zIndex: idx,
-                    marginLeft: idx === 0 ? 0 : -22,
-                    '--card-rotate': `${(idx % 2 === 0 ? -1 : 1) * 2}deg`,
-                  } as CSSProperties
-                }
-              >
-                <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
-                <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
-                {i === faceCount - 1 && overflow > 0 && (
-                  <span className="resource-card__overflow">+{overflow}</span>
-                )}
-              </div>
-            );
-          });
+          return Array.from({ length: faceCount }, (_, i) => (
+            <div key={`${r}-${i}`} className={`resource-card resource-card--${r}`}>
+              <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
+              <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
+              {i === faceCount - 1 && overflow > 0 && <span className="resource-card__overflow">+{overflow}</span>}
+            </div>
+          ));
         })}
       </div>
     );

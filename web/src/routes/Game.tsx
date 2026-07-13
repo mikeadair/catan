@@ -13,6 +13,7 @@ import DiceRoller from '../components/DiceRoller';
 import TurnTimer from '../components/TurnTimer';
 import PauseControl from '../components/PauseControl';
 import BuildToolbar, { type BuildMode } from '../components/BuildToolbar';
+import EndTurnButton from '../components/EndTurnButton';
 import DevCardPanel from '../components/DevCardPanel';
 import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
@@ -544,19 +545,13 @@ export default function Game(): JSX.Element {
           <div className="game__toolbar-hand">
             <div className="game__toolbar-label">Your hand</div>
             <ResourceHand resources={resources} variant="cards" />
-            <DevCardPanel
-              devCards={ownHand?.devCards ?? []}
-              turnNumber={room.turnNumber}
-              canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
-              blocked={pendingActionType !== null}
-              onPlay={handlePlayDevCard}
-            />
           </div>
-          <TurnTimer
-            turnStartedAt={room.turnStartedAt}
-            turnTimerSeconds={room.turnTimerSeconds}
-            paused={room.paused}
-            pausedAt={room.pausedAt}
+          <DevCardPanel
+            devCards={ownHand?.devCards ?? []}
+            turnNumber={room.turnNumber}
+            canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
+            blocked={pendingActionType !== null}
+            onPlay={handlePlayDevCard}
           />
           <BuildToolbar
             resources={resources}
@@ -568,8 +563,21 @@ export default function Game(): JSX.Element {
             pendingActionType={pendingActionType}
             onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
             onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
-            onEndTurn={() => void runAction({ type: 'endTurn', uid })}
           />
+          <div className="game__toolbar-right">
+            <TurnTimer
+              turnStartedAt={room.turnStartedAt}
+              turnTimerSeconds={room.turnTimerSeconds}
+              paused={room.paused}
+              pausedAt={room.pausedAt}
+            />
+            <EndTurnButton
+              legalTypes={legalTypes}
+              isCurrentPlayer={isCurrentPlayer}
+              pendingActionType={pendingActionType}
+              onEndTurn={() => void runAction({ type: 'endTurn', uid })}
+            />
+          </div>
       </footer>
 
       <DiscardModal

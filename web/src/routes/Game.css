@@ -178,6 +178,12 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Stable footprint so the whole footer doesn't jump around as the hand grows/shrinks —
+     roughly 3-6 cards fit per row; beyond ~12 cards (2 rows) it wraps further rather than
+     stretching wider, which is fine since a hand rarely gets that large before a forced
+     discard. */
+  min-width: 190px;
+  max-width: 350px;
 }
 
 .game__toolbar-label {
@@ -186,6 +192,13 @@
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
+}
+
+.game__toolbar-right {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .game__monopoly-choices {

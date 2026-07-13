@@ -50,15 +50,14 @@
 .resource-chip--wool { border-left-color: var(--resource-wool); }
 
 .resource-hand--cards {
-  gap: 0;
-  align-items: flex-end;
-  padding-left: 4px; /* room for the first card's rotation/shadow, which has no overlap to tuck under */
+  gap: 6px;
+  align-content: flex-start;
 }
 
 .resource-card {
   position: relative;
-  width: 68px;
-  height: 94px;
+  width: 52px;
+  height: 74px;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.35);
   background: var(--color-panel-light);
@@ -66,15 +65,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 4px;
+  gap: 3px;
+  padding: 5px 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
   transition: transform 0.12s ease;
-  transform: rotate(var(--card-rotate, 0deg));
 }
 
 .resource-card:hover {
-  transform: rotate(var(--card-rotate, 0deg)) translateY(-8px);
+  transform: translateY(-4px);
 }
 
 .resource-card::before {
@@ -92,15 +90,15 @@
 .resource-card--wool::before { background: var(--resource-wool); }
 
 .resource-card__icon {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
   image-rendering: pixelated;
   z-index: 1;
 }
 
 .resource-card__label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--color-text);

@@ -37,18 +37,6 @@
   background: rgba(242, 177, 52, 0.15);
 }
 
-.build-toolbar__button--end-turn {
-  background: var(--color-accent);
-  color: #1c1c1c;
-  font-weight: 700;
-  justify-content: center;
-}
-
-.build-toolbar__button--end-turn:disabled {
-  background: var(--color-panel-light);
-  color: var(--color-text-dim);
-}
-
 .build-toolbar__label {
   font-weight: 600;
   font-size: 13px;

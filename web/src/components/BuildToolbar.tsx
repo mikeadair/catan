@@ -40,7 +40,6 @@ export interface BuildToolbarProps {
   pendingActionType: GameAction['type'] | null;
   onToggleMode: (mode: 'road' | 'settlement' | 'city') => void;
   onBuyDevCard: () => void;
-  onEndTurn: () => void;
 }
 
 function canAfford(resources: ResourceCount, cost: Partial<ResourceCount>): boolean {
@@ -78,7 +77,6 @@ export default function BuildToolbar({
   pendingActionType,
   onToggleMode,
   onBuyDevCard,
-  onEndTurn,
 }: BuildToolbarProps): JSX.Element {
   const isPending = pendingActionType !== null;
   const affordRoad = canAfford(resources, BUILD_COSTS.road);
@@ -90,9 +88,7 @@ export default function BuildToolbar({
   const canSettlement = legalTypes.includes('buildSettlement') && affordSettlement && !isPending;
   const canCity = legalTypes.includes('buildCity') && affordCity && !isPending;
   const canBuyDevCard = legalTypes.includes('buyDevCard') && affordDevCard && devCardsRemaining > 0 && !isPending;
-  const canEndTurn = legalTypes.includes('endTurn') && !isPending;
   const isBuyingDevCard = pendingActionType === 'buyDevCard';
-  const isEndingTurn = pendingActionType === 'endTurn';
 
   const devCardReason = isBuyingDevCard
     ? 'Buying…'
@@ -149,15 +145,6 @@ export default function BuildToolbar({
         <span className="build-toolbar__label">{isBuyingDevCard ? 'Buying…' : 'Dev Card'}</span>
         <CostChips cost={BUILD_COSTS.devCard} resources={resources} />
         <span className="build-toolbar__left">{devCardsRemaining} left</span>
-      </button>
-      <button
-        type="button"
-        className="build-toolbar__button build-toolbar__button--end-turn"
-        disabled={!canEndTurn}
-        title={isEndingTurn ? 'Ending turn…' : canEndTurn ? undefined : !isCurrentPlayer ? 'Not your turn' : 'Roll the dice first'}
-        onClick={onEndTurn}
-      >
-        {isEndingTurn ? 'Ending…' : 'End Turn'}
       </button>
     </div>
   );
