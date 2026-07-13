@@ -112,11 +112,16 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: web
 
-      # No args — `npm run test:e2e`'s `firebase emulators:exec ... "bash e2e/run-with-bridge.sh"`
-      # swallows anything appended after `--` into the *outer* emulators:exec command, not the
-      # quoted inner script, so `-- layout.spec.ts` silently does nothing. Harmless today
-      # (layout.spec.ts is the only spec file), but don't rely on it if a second file is added.
-      - run: npm run test:e2e
+      # Pinned to the desktop-1080p project specifically: layout.spec.ts writes screenshots to
+      # fixed filenames (home.png, lobby-full.png, ...) regardless of which Playwright project
+      # ran it, so running all 3 viewport projects here would leave whichever ran last (the
+      # smallest, desktop-1366) as the committed "normal desktop" screenshot. `npm run
+      # test:e2e:screenshots` bakes `--project=desktop-1080p` into the *inner* quoted command
+      # (`firebase emulators:exec ... "bash e2e/run-with-bridge.sh --project=desktop-1080p"`)
+      # rather than appending it after `--`, which `firebase emulators:exec` would otherwise
+      # swallow into its own arg parsing instead of forwarding to the quoted inner script.
+      # Local `npm run test:e2e` is untouched and still runs all 3 projects.
+      - run: npm run test:e2e:screenshots
         working-directory: web
 
       - uses: stefanzweifel/git-auto-commit-action@v5

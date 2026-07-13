@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth } from 'firebase/auth';
+import { browserLocalPersistence, connectAuthEmulator, getAuth, setPersistence } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions } from 'firebase/functions';
 
@@ -16,6 +16,13 @@ export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
+
+// Explicitly pin persistence to localStorage rather than relying on the SDK's implicit
+// default — that default silently degrades to in-memory (no persistence across reloads) in
+// some environments (e.g. certain webviews, or storage-partitioned browser contexts), which
+// was the root cause of sign-in appearing to not survive a page refresh. Fired here
+// (not awaited) so it's in flight before any sign-in call from auth.ts's ensureSignedIn().
+void setPersistence(auth, browserLocalPersistence);
 
 // e2e tests (web/playwright.config.ts) run against the Firebase Local Emulator Suite
 // instead of the real `mikeadair-catan` project, so they never read or write production

@@ -15,8 +15,9 @@ import {
 } from 'firebase/auth';
 import { auth } from './config';
 
-// Firebase JS SDK persists anonymous auth sessions across reloads via IndexedDB
-// by default, so we don't need to configure persistence explicitly here.
+// Persistence (browserLocalPersistence) is configured explicitly in ./config.ts, right after
+// `auth` is created — see the comment there for why we don't rely on the SDK's implicit
+// default.
 
 let signInPromise: Promise<string> | null = null;
 
