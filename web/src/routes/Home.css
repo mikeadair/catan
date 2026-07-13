@@ -10,6 +10,18 @@
   flex-direction: column;
   gap: 24px;
   overflow-y: auto;
+}
+
+/* The sea gradient lives on a fixed full-viewport layer rather than on .home itself —
+   .home's own box is capped at max-width: 920px for readability, so painting the gradient
+   there left a visible seam where the lighter --color-ocean halo abruptly cut off at the
+   column edge instead of continuing to the sides of the screen. position: fixed sizes this
+   to the viewport regardless of .home's width. */
+.home::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   background:
     radial-gradient(circle at 50% -10%, var(--color-ocean) 0%, transparent 60%),
     var(--color-ocean-deep);
