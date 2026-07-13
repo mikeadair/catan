@@ -4,25 +4,11 @@ import { TERRAIN_RESOURCE } from '@catan/engine';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { RESOURCE_ICON } from './resourceIcons';
-import hillsIcon from '../assets/terrain/hills.png';
-import forestIcon from '../assets/terrain/forest.png';
-import mountainsIcon from '../assets/terrain/mountains.png';
-import fieldsIcon from '../assets/terrain/fields.png';
-import pastureIcon from '../assets/terrain/pasture.png';
 import desertIcon from '../assets/terrain/desert.png';
 import robberIcon from '../assets/terrain/robber.png';
 import './Board.css';
 
 const SIZE = 56;
-
-const TERRAIN_ICON: Record<Exclude<Terrain, 'gold'>, string> = {
-  hills: hillsIcon,
-  forest: forestIcon,
-  mountains: mountainsIcon,
-  fields: fieldsIcon,
-  pasture: pastureIcon,
-  desert: desertIcon,
-};
 
 const DESERT_COLOR = '#c9b57a';
 const GOLD_COLOR = '#d9b64e';
@@ -358,13 +344,17 @@ export default function BoardView({
         // the number — desert/gold/fog have no number token (fog's is simply unknown yet),
         // so their icon/glyph can stay centered and a bit larger.
         const centeredIcon = isDesert || isGold || isFogged;
-        const iconSize = centeredIcon ? SIZE * 1.05 : SIZE * 0.62;
-        const iconCenterY = centeredIcon ? center.y : center.y + SIZE * 0.54;
+        // The card-style resource art (RESOURCE_ICON, shared with the hand/bank/trade UI) has
+        // a lot more transparent padding baked into the source PNG than the old terrain badge
+        // art did, so it needs a noticeably larger box to read at the same visual size — the
+        // desert's own dedicated icon keeps the old centered sizing.
+        const iconSize = centeredIcon ? SIZE * 1.05 : SIZE * 0.98;
+        const iconCenterY = centeredIcon ? center.y : center.y + SIZE * 0.5;
         return (
           <g key={hex.id}>
             <polygon points={points} fill={fill} stroke="var(--color-ocean-deep)" strokeWidth={2} />
             {!centeredIcon && (
-              <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.56} fill="rgba(0,0,0,0.16)" />
+              <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.36} fill="rgba(0,0,0,0.16)" />
             )}
             {isFogged ? (
               <text
@@ -382,9 +372,22 @@ export default function BoardView({
               <text x={center.x} y={iconCenterY + 12} textAnchor="middle" fontSize={34} style={{ pointerEvents: 'none' }}>
                 ✨
               </text>
-            ) : (
+            ) : isDesert ? (
               <image
-                href={TERRAIN_ICON[hex.terrain as Exclude<Terrain, 'gold'>]}
+                href={desertIcon}
+                x={center.x - iconSize / 2}
+                y={iconCenterY - iconSize / 2}
+                width={iconSize}
+                height={iconSize}
+                style={{ pointerEvents: 'none' }}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            ) : (
+              // Card-style resource icon (shared with the hand/bank/trade UI) instead of the
+              // old terrain-specific badge art, so the same visual language is used everywhere
+              // a resource is depicted.
+              <image
+                href={RESOURCE_ICON[TERRAIN_RESOURCE[hex.terrain as Exclude<Terrain, 'desert' | 'gold'>]]}
                 x={center.x - iconSize / 2}
                 y={iconCenterY - iconSize / 2}
                 width={iconSize}
