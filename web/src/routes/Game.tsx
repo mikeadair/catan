@@ -121,11 +121,11 @@ export default function Game(): JSX.Element {
 
   // Clear transient, per-turn UI selection state whenever the phase or the
   // active player changes underneath us (e.g. an illegal click didn't clear
-  // it, or the turn simply moved on).
+  // it, or the turn simply moved on). Trade composer selections are deliberately excluded —
+  // they should only clear when the player explicitly closes the composer (toggleTradeComposer
+  // -> resetTradeComposer), not because a turn ended or anything else happened underneath them.
   useEffect(() => {
     setBuildMode(null);
-    setTradeGive({});
-    setTradeReceive({});
   }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
@@ -298,14 +298,15 @@ export default function Game(): JSX.Element {
     }
   }
 
+  // Deliberately does not reset the composer on success — selections should only clear when
+  // the player explicitly closes the trade composer (see toggleTradeComposer), not as a side
+  // effect of submitting a trade.
   async function handleProposeTrade(give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) {
-    const ok = await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
-    if (ok) resetTradeComposer();
+    await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
   }
 
   async function handleBankTrade(give: Resource, giveAmount: number, receive: Resource) {
-    const ok = await runAction({ type: 'bankTrade', uid: uid!, give, giveAmount, receive });
-    if (ok) resetTradeComposer();
+    await runAction({ type: 'bankTrade', uid: uid!, give, giveAmount, receive });
   }
 
   function computeEligibleVictims(hexId: string): string[] {
