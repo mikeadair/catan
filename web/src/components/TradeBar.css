@@ -1,93 +1,135 @@
 .trade-bar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.trade-bar__toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--color-panel-light);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 10px 16px;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.trade-bar__toggle:hover {
-  border-color: var(--color-accent);
-}
-
-.trade-bar__toggle--active {
-  border-color: var(--color-accent);
-  background: rgba(242, 177, 52, 0.15);
-}
-
-.trade-bar__toggle-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.trade-bar__panel {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  /* Same gray as the bottom bar itself (.game__toolbar), not the lighter panel tone used by
-     individual controls — this is meant to read as a popup extension of the toolbar. */
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 12px;
-  width: max-content;
-  max-width: min(90vw, 420px);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.trade-bar__divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 2px 0;
-}
-
-.trade-bar__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
+  /* This bar sits directly in the toolbar's height budget, which competes with the board for
+     vertical space (see .game grid-template-rows: 1fr auto in Game.css) — every extra row
+     here is a row taken from the board. Cards are kept deliberately compact (see
+     .trade-bar__want-card below) and .trade-bar__want-cards never wraps internally, so this
+     bar is reliably one row tall; if the actions genuinely don't fit alongside it at very
+     narrow widths, the whole bar wraps as two rows (want, then actions) rather than the want
+     row silently growing to two-plus rows on its own. */
 }
 
-.trade-bar__row--give {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-
-.trade-bar__row--give .trade-bar__row-label {
+.trade-bar__want {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
-.trade-bar__row-label {
+.trade-bar__want-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
-  min-width: 62px;
+  white-space: nowrap;
+}
+
+.trade-bar__want-cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  /* Safety valve rather than a second wrapped row: at very narrow widths this scrolls
+     horizontally instead of growing taller. */
+  overflow-x: auto;
+}
+
+.trade-bar__want-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-panel-light);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 7px;
+  padding: 3px 5px;
+  flex-shrink: 0;
+}
+
+.trade-bar__want-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.trade-bar__want-card--brick::before { background: var(--resource-brick); }
+.trade-bar__want-card--lumber::before { background: var(--resource-lumber); }
+.trade-bar__want-card--ore::before { background: var(--resource-ore); }
+.trade-bar__want-card--grain::before { background: var(--resource-grain); }
+.trade-bar__want-card--wool::before { background: var(--resource-wool); }
+
+.trade-bar__want-icon {
+  width: 15px;
+  height: 15px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.trade-bar__want-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  z-index: 1;
+  white-space: nowrap;
+}
+
+.trade-bar__want-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid var(--color-border);
+  z-index: 1;
+}
+
+.trade-bar__want-stepper button {
+  width: 17px;
+  height: 17px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  font-size: 11px;
+}
+
+.trade-bar__want-stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.trade-bar__want-stepper button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.trade-bar__want-count {
+  min-width: 12px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-accent);
 }
 
 .trade-bar__actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 4px;
+  flex-shrink: 0;
 }
 
 .trade-bar__actions select {
@@ -105,6 +147,7 @@
   padding: 6px 12px;
   color: var(--color-text);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .trade-bar__actions button:not(:disabled):hover {
