@@ -428,7 +428,12 @@ export async function dispatchAction(roomId: string, action: GameAction): Promis
   await submitActionCallable({ roomId, action });
 }
 
-export async function claimAndRunBotAction(roomId: string, room: RoomState, players: Record<string, PublicPlayer>): Promise<boolean> {
+export async function claimAndRunBotAction(
+  roomId: string,
+  room: RoomState,
+  players: Record<string, PublicPlayer>,
+  trades: TradeOffer[] = [],
+): Promise<boolean> {
   if (room.status !== 'playing') return false;
 
   const botUid = room.turnOrder[room.currentPlayerIndex];
@@ -452,15 +457,16 @@ export async function claimAndRunBotAction(roomId: string, room: RoomState, play
   const botHandSnap = await getDoc(handRef(roomId, botUid));
   const botHand = botHandSnap.exists() ? (botHandSnap.data() as PrivateHand) : undefined;
 
-  // trades: [] — decideBotAction only ever consults `bundle.trades` via
-  // decideTradeResponse, which is for reacting to another player's turn. This driver only
-  // ever acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]),
-  // so that branch is unreachable here.
+  // trades passed straight from the caller's own already-subscribed `subscribeTrades` state
+  // (public data, safe to hand to any bot's decision) — decideBotAction's main-phase logic
+  // now consults this to avoid re-proposing a trade it already has pending. decideTradeResponse
+  // (reacting to another player's turn) stays unreachable here since this driver only ever
+  // acts for the CURRENT player (botUid is always room.turnOrder[currentPlayerIndex]).
   const decisionBundle: GameStateBundle = {
     room,
     players,
     hands: botHand ? { [botUid]: botHand } : {},
-    trades: [],
+    trades,
   };
   const action = decideBotAction(decisionBundle, botUid);
   if (!action) return false;

@@ -78,10 +78,10 @@ function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>
 
 function runBotActionIfDue(roomId: string, get: () => GameStore): void {
   if (botActionInFlight) return;
-  const { roomId: currentRoomId, room, players } = get();
+  const { roomId: currentRoomId, room, players, trades } = get();
   if (currentRoomId !== roomId || !room || !isBotTurn(room, players)) return;
   botActionInFlight = true;
-  claimAndRunBotAction(roomId, room, players)
+  claimAndRunBotAction(roomId, room, players, trades)
     .catch(() => {})
     .finally(() => {
       botActionInFlight = false;

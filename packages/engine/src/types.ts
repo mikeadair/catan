@@ -109,7 +109,7 @@ export type GamePhase =
 export const PLAYER_COLORS = ['red', 'blue', 'white', 'orange', 'green', 'brown'] as const;
 export type PlayerColor = (typeof PLAYER_COLORS)[number];
 
-export type BotDifficulty = 'normal';
+export type BotDifficulty = 'easy' | 'normal' | 'hard';
 
 // --- Public, room-readable player summary (no hidden info) ---
 export interface PublicPlayer {

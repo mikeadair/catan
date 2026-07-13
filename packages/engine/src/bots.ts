@@ -1,9 +1,20 @@
-// Heuristic bot AI. Zero Firebase/React imports. Single 'normal' difficulty tier.
+// Heuristic bot AI. Zero Firebase/React imports.
 // decideBotAction is called in a loop by an external bot-driver until it
 // returns null or an 'endTurn' action. It never throws to the caller — any
 // internal error results in `null` so the driver can safely stop/skip a beat.
+//
+// Three difficulty tiers (PublicPlayer.botDifficulty, default 'normal' when absent):
+//  - 'easy': weaker placement/robber evaluation, no strategic trading (bank or
+//    player), and occasionally skips a beneficial build entirely.
+//  - 'normal': the original heuristics — solid placement scoring, bank trading
+//    toward whatever build it's closest to, no player-to-player trade proposals.
+//  - 'hard': sharper placement scoring (weights 6/8 and ports higher), targets
+//    the strongest opponent (with a bias toward humans over bots) with the
+//    robber, and will additionally propose player trades to close a 2-resource
+//    gap (normal only closes a 1-resource gap).
 
 import type {
+  BotDifficulty,
   EdgeId,
   GameAction,
   Resource,
@@ -27,6 +38,7 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
   const player = players[botUid];
   const hand = hands[botUid];
   if (!player || !hand || !room.board) return null;
+  const difficulty: BotDifficulty = player.botDifficulty ?? 'normal';
 
   if (room.phase === 'discard') {
     if (!room.pendingDiscardUids.includes(botUid)) return null;
@@ -41,17 +53,17 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
 
   if (room.phase === 'setup1' || room.phase === 'setup2') {
     if (room.turnOrder[room.currentPlayerIndex] !== botUid) return null;
-    return decideSetupAction(bundle, botUid);
+    return decideSetupAction(bundle, botUid, difficulty);
   }
 
   if (room.phase === 'robber') {
     if (room.turnOrder[room.currentPlayerIndex] !== botUid) return null;
-    return decideRobberMove(bundle, botUid, null);
+    return decideRobberMove(bundle, botUid, null, difficulty);
   }
 
   const isCurrent = room.turnOrder[room.currentPlayerIndex] === botUid;
   if (!isCurrent) {
-    return decideTradeResponse(bundle, botUid);
+    return decideTradeResponse(bundle, botUid, difficulty);
   }
 
   if (room.phase === 'roll') {
@@ -59,7 +71,7 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
   }
 
   if (room.phase === 'main') {
-    return decideMainAction(bundle, botUid);
+    return decideMainAction(bundle, botUid, difficulty);
   }
 
   return null;
@@ -79,24 +91,31 @@ function candidateSettlementVertices(bundle: GameStateBundle): VertexId[] {
   });
 }
 
-function vertexScore(bundle: GameStateBundle, vertexId: VertexId): number {
+/** Difficulty affects both the inputs considered and how heavily they're weighted:
+ * 'easy' ignores resource-diversity/port value entirely (raw pip count only, the
+ * weakest evaluation); 'normal' is the original balanced score; 'hard' additionally
+ * rewards the high-probability 6/8 numbers and values ports more. */
+function vertexScore(bundle: GameStateBundle, vertexId: VertexId, difficulty: BotDifficulty = 'normal'): number {
   const { room } = bundle;
   const board = room.board!;
   const v = board.vertices[vertexId];
   if (!v) return 0;
-  let score = 0;
+  let pipScore = 0;
+  let primeBonus = 0;
   const resourcesSeen = new Set<Resource>();
   for (const hexId of v.adjacentHexIds) {
     const hex = board.hexes.find((h) => h.id === hexId);
     if (!hex) continue;
-    score += pipCount(hex.number);
+    pipScore += pipCount(hex.number);
+    if (difficulty === 'hard' && (hex.number === 6 || hex.number === 8)) primeBonus += 0.5;
     // Gold has no fixed resource (bot picks whatever's scarcest when it actually rolls —
     // see 'pickGoldResources'); the pip-count bump above already values it, just skip the
     // fixed-resource-diversity bonus since there isn't one to look up.
     if (hex.terrain !== 'desert' && hex.terrain !== 'gold') resourcesSeen.add(TERRAIN_RESOURCE[hex.terrain]);
   }
-  score += resourcesSeen.size * 0.5;
-  if (board.ports.some((p) => p.vertexIds.includes(vertexId))) score += 1;
+  if (difficulty === 'easy') return pipScore;
+  let score = pipScore + resourcesSeen.size * 0.5 + primeBonus;
+  if (board.ports.some((p) => p.vertexIds.includes(vertexId))) score += difficulty === 'hard' ? 1.5 : 1;
   return score;
 }
 
@@ -128,14 +147,14 @@ function portRateLocal(bundle: GameStateBundle, uid: string, resource: Resource)
 // Setup placement
 // ---------------------------------------------------------------------------
 
-function decideSetupAction(bundle: GameStateBundle, botUid: string): GameAction {
+function decideSetupAction(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction {
   const { room, players } = bundle;
   const player = players[botUid];
 
   if (player.settlementsBuilt === player.roadsBuilt) {
     const candidates = candidateSettlementVertices(bundle);
     if (candidates.length === 0) throw new Error('bot: no legal setup settlement spot');
-    candidates.sort((a, b) => vertexScore(bundle, b) - vertexScore(bundle, a));
+    candidates.sort((a, b) => vertexScore(bundle, b, difficulty) - vertexScore(bundle, a, difficulty));
     return { type: 'buildSettlement', uid: botUid, vertexId: candidates[0], free: true };
   }
 
@@ -150,7 +169,7 @@ function decideSetupAction(bundle: GameStateBundle, botUid: string): GameAction 
   for (const eId of options) {
     const edge = board.edges[eId];
     const other = edge.vertexIds.find((id) => id !== anchor)!;
-    const s = vertexScore(bundle, other);
+    const s = vertexScore(bundle, other, difficulty);
     if (s > bestScore) {
       bestScore = s;
       best = eId;
@@ -196,19 +215,33 @@ function decideGoldPick(bundle: GameStateBundle, botUid: string, amount: number)
 // Robber
 // ---------------------------------------------------------------------------
 
-function decideRobberMove(bundle: GameStateBundle, botUid: string, devCardId: string | null): GameAction {
+/** How worrying an opponent looks, purely from public info (visibleVictoryPoints +
+ * resourceCount — a bot can no more see a rival's hidden hand than a human could).
+ * 'easy' evaluates this crudely (card count only, ignoring VP); 'hard' weighs VP more
+ * heavily and adds an explicit bias toward human targets over fellow bots, so a 'hard'
+ * bot is meaningfully more likely to lean on the human player specifically. */
+function opponentThreatScore(players: GameStateBundle['players'], uid: string, difficulty: BotDifficulty): number {
+  const p = players[uid];
+  if (difficulty === 'easy') return p.resourceCount;
+  if (difficulty === 'hard') return p.visibleVictoryPoints * 4 + p.resourceCount + (p.isBot ? 0 : 6);
+  return p.visibleVictoryPoints * 3 + p.resourceCount;
+}
+
+function decideRobberMove(
+  bundle: GameStateBundle,
+  botUid: string,
+  devCardId: string | null,
+  difficulty: BotDifficulty,
+): GameAction {
   const { room, players } = bundle;
   const board = room.board!;
   const opponents = room.turnOrder.filter((u) => u !== botUid);
 
-  // Uses each opponent's public resourceCount rather than their private hand — the bot
-  // (like a human player) can only see how many cards someone holds, not what they are,
-  // and the decision bundle for a bot's turn only ever loads the bot's own private hand.
-  const opponentScore = (u: string) => players[u].visibleVictoryPoints * 3 + players[u].resourceCount;
-
   let leader: string | null = null;
   for (const u of opponents) {
-    if (leader === null || opponentScore(u) > opponentScore(leader)) leader = u;
+    if (leader === null || opponentThreatScore(players, u, difficulty) > opponentThreatScore(players, leader, difficulty)) {
+      leader = u;
+    }
   }
 
   const candidateHexes = board.hexes.filter((h) => h.id !== board.robberHexId);
@@ -237,8 +270,7 @@ function decideRobberMove(bundle: GameStateBundle, botUid: string, devCardId: st
   );
   let stealFromUid: string | null = null;
   for (const u of victims) {
-    const n = players[u].resourceCount;
-    if (stealFromUid === null || n > players[stealFromUid].resourceCount) {
+    if (stealFromUid === null || opponentThreatScore(players, u, difficulty) > opponentThreatScore(players, stealFromUid, difficulty)) {
       stealFromUid = u;
     }
   }
@@ -253,18 +285,18 @@ function decideRobberMove(bundle: GameStateBundle, botUid: string, devCardId: st
 // Main-phase turn logic
 // ---------------------------------------------------------------------------
 
-function bestConnectedSettlementVertex(bundle: GameStateBundle, botUid: string): VertexId | null {
+function bestConnectedSettlementVertex(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): VertexId | null {
   const { room } = bundle;
   const candidates = candidateSettlementVertices(bundle).filter((vId) => {
     const v = room.board!.vertices[vId];
     return v.adjacentEdgeIds.some((eId) => room.edges[eId] === botUid);
   });
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => vertexScore(bundle, b) - vertexScore(bundle, a));
+  candidates.sort((a, b) => vertexScore(bundle, b, difficulty) - vertexScore(bundle, a, difficulty));
   return candidates[0];
 }
 
-function bestExpansionRoad(bundle: GameStateBundle, botUid: string): EdgeId | null {
+function bestExpansionRoad(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): EdgeId | null {
   const { room } = bundle;
   const board = room.board!;
   const ownVertices = new Set<VertexId>();
@@ -283,7 +315,7 @@ function bestExpansionRoad(bundle: GameStateBundle, botUid: string): EdgeId | nu
     const touches = e.vertexIds.some((v) => ownVertices.has(v));
     if (!touches) continue;
     const farVertex = e.vertexIds.find((v) => !ownVertices.has(v)) ?? e.vertexIds[0];
-    const score = vertexScore(bundle, farVertex);
+    const score = vertexScore(bundle, farVertex, difficulty);
     if (score > bestScore) {
       bestScore = score;
       best = eId;
@@ -297,6 +329,45 @@ function pickNeededResource(resources: ResourceCount): Resource {
   return sorted[0];
 }
 
+/** In priority order (matching decideMainAction's build priority), the costs of every
+ * build the bot could still make progress toward — i.e. hasn't maxed out piece-wise, or
+ * (for dev cards) the deck isn't empty. Shared by the bank-trade and player-trade
+ * heuristics below so both target "whatever's actually blocking a build" consistently. */
+function buildPriorityCosts(bundle: GameStateBundle, botUid: string): Partial<ResourceCount>[] {
+  const { room, players } = bundle;
+  const player = players[botUid];
+  const costs: Partial<ResourceCount>[] = [];
+  if (player.citiesBuilt < MAX_CITIES) costs.push(BUILD_COSTS.city);
+  if (player.settlementsBuilt < MAX_SETTLEMENTS) costs.push(BUILD_COSTS.settlement);
+  if (player.roadsBuilt < MAX_ROADS) costs.push(BUILD_COSTS.road);
+  if (room.devCardDeckCount > 0) costs.push(BUILD_COSTS.devCard);
+  return costs;
+}
+
+/** Per-resource shortfall (cost - have, only for resources actually short) for a single
+ * build cost against the bot's current hand. */
+function resourceDeficits(hand: ResourceCount, cost: Partial<ResourceCount>): Partial<Record<Resource, number>> {
+  const out: Partial<Record<Resource, number>> = {};
+  for (const r of RESOURCES) {
+    const need = cost[r] ?? 0;
+    if (hand[r] < need) out[r] = need - hand[r];
+  }
+  return out;
+}
+
+/** Bank-trade target: the resource that would unlock the highest-priority build it's
+ * exactly one resource TYPE short of, falling back to "whatever I have least of" if no
+ * build is that close. */
+function pickBankTradeTarget(bundle: GameStateBundle, botUid: string): Resource {
+  const hand = bundle.hands[botUid].resources;
+  for (const cost of buildPriorityCosts(bundle, botUid)) {
+    const deficits = resourceDeficits(hand, cost);
+    const missing = RESOURCES.filter((r) => deficits[r]);
+    if (missing.length === 1) return missing[0];
+  }
+  return pickNeededResource(hand);
+}
+
 function decideBankTrade(bundle: GameStateBundle, botUid: string): GameAction | null {
   const { room, hands } = bundle;
   const hand = hands[botUid];
@@ -305,7 +376,7 @@ function decideBankTrade(bundle: GameStateBundle, botUid: string): GameAction | 
     if (hand.resources[give] < rate) continue;
     // Don't trade away the last copies of a resource we're not truly flush in.
     if (hand.resources[give] - rate < 0) continue;
-    const need = pickNeededResource(hand.resources);
+    const need = pickBankTradeTarget(bundle, botUid);
     if (need === give) continue;
     if (room.bank[need] <= 0) continue;
     return { type: 'bankTrade', uid: botUid, give, giveAmount: rate, receive: need };
@@ -313,10 +384,59 @@ function decideBankTrade(bundle: GameStateBundle, botUid: string): GameAction | 
   return null;
 }
 
-function decideMainAction(bundle: GameStateBundle, botUid: string): GameAction {
+/**
+ * Proposes an open (targetUid: null) player trade when the bot is short exactly one
+ * resource TYPE ('normal') — or up to two ('hard') — for its highest-priority buildable
+ * item, and holds a genuine surplus (≥2 more than that build itself needs) of something
+ * else to offer in a fair, same-size swap. 'easy' never proposes (no strategic trading).
+ * Skips entirely if the bot already has an open trade pending, so a stalled proposal
+ * doesn't get re-spammed every time the reactive bot-driver re-evaluates this turn.
+ */
+function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
+  if (difficulty === 'easy') return null;
+  const { hands, trades } = bundle;
+  const hand = hands[botUid].resources;
+  if (trades.some((t) => t.proposerUid === botUid && t.status === 'pending')) return null;
+
+  const maxGapTypes = difficulty === 'hard' ? 2 : 1;
+  for (const cost of buildPriorityCosts(bundle, botUid)) {
+    const deficits = resourceDeficits(hand, cost);
+    const missingTypes = RESOURCES.filter((r) => deficits[r]);
+    if (missingTypes.length === 0 || missingTypes.length > maxGapTypes) continue;
+
+    let remaining = missingTypes.reduce((s, r) => s + (deficits[r] ?? 0), 0);
+    const give: Partial<ResourceCount> = {};
+    for (const r of RESOURCES) {
+      if (remaining === 0) break;
+      if (missingTypes.includes(r)) continue;
+      const margin = hand[r] - (cost[r] ?? 0);
+      if (margin < 2) continue;
+      const take = Math.min(margin, remaining);
+      give[r] = take;
+      remaining -= take;
+    }
+    if (remaining > 0) continue; // not enough genuine surplus to cover the gap fairly
+
+    const receive: Partial<ResourceCount> = {};
+    for (const r of missingTypes) receive[r] = deficits[r]!;
+    return { type: 'proposeTrade', uid: botUid, give, receive, targetUid: null };
+  }
+  return null;
+}
+
+// 'easy' bots occasionally just end their turn instead of making an otherwise-available
+// build, reflecting weaker play. Kept as a single named constant so tests can reason about
+// (and mock Math.random around) the exact threshold.
+const EASY_SKIP_BUILD_CHANCE = 0.15;
+
+function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction {
   const { room, players, hands } = bundle;
   const player = players[botUid];
   const hand = hands[botUid];
+
+  if (difficulty === 'easy' && Math.random() < EASY_SKIP_BUILD_CHANCE) {
+    return { type: 'endTurn', uid: botUid };
+  }
 
   // 1. Upgrade to city.
   if (player.citiesBuilt < MAX_CITIES && canAffordLocal(hand.resources, BUILD_COSTS.city)) {
@@ -324,20 +444,20 @@ function decideMainAction(bundle: GameStateBundle, botUid: string): GameAction {
       .filter(([, b]) => b.uid === botUid && b.type === 'settlement')
       .map(([id]) => id);
     if (ownSettlements.length > 0) {
-      ownSettlements.sort((a, b) => vertexScore(bundle, b) - vertexScore(bundle, a));
+      ownSettlements.sort((a, b) => vertexScore(bundle, b, difficulty) - vertexScore(bundle, a, difficulty));
       return { type: 'buildCity', uid: botUid, vertexId: ownSettlements[0] };
     }
   }
 
   // 2. Build settlement on a strong, connected, open spot.
   if (player.settlementsBuilt < MAX_SETTLEMENTS && canAffordLocal(hand.resources, BUILD_COSTS.settlement)) {
-    const spot = bestConnectedSettlementVertex(bundle, botUid);
+    const spot = bestConnectedSettlementVertex(bundle, botUid, difficulty);
     if (spot) return { type: 'buildSettlement', uid: botUid, vertexId: spot };
   }
 
   // 3. Build a road toward a decent spot.
   if (player.roadsBuilt < MAX_ROADS && canAffordLocal(hand.resources, BUILD_COSTS.road)) {
-    const edge = bestExpansionRoad(bundle, botUid);
+    const edge = bestExpansionRoad(bundle, botUid, difficulty);
     if (edge) return { type: 'buildRoad', uid: botUid, edgeId: edge };
   }
 
@@ -346,11 +466,17 @@ function decideMainAction(bundle: GameStateBundle, botUid: string): GameAction {
     return { type: 'buyDevCard', uid: botUid };
   }
 
-  // 5. Trade with the bank to work toward the next priority.
-  const trade = decideBankTrade(bundle, botUid);
-  if (trade) return trade;
+  // 5. Propose a player trade to close a resource gap ('easy' never does this).
+  const playerTrade = decidePlayerTrade(bundle, botUid, difficulty);
+  if (playerTrade) return playerTrade;
 
-  // 6. Nothing left to usefully do.
+  // 6. Trade with the bank to work toward the next priority ('easy' never does this).
+  if (difficulty !== 'easy') {
+    const trade = decideBankTrade(bundle, botUid);
+    if (trade) return trade;
+  }
+
+  // 7. Nothing left to usefully do.
   return { type: 'endTurn', uid: botUid };
 }
 
@@ -358,7 +484,7 @@ function decideMainAction(bundle: GameStateBundle, botUid: string): GameAction {
 // Responding to trades on someone else's turn
 // ---------------------------------------------------------------------------
 
-function decideTradeResponse(bundle: GameStateBundle, botUid: string): GameAction | null {
+function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
   const { hands, trades } = bundle;
   const hand = hands[botUid];
   const candidate = trades.find(
@@ -368,7 +494,29 @@ function decideTradeResponse(bundle: GameStateBundle, botUid: string): GameActio
   if (!canAffordLocal(hand.resources, candidate.receive)) return null;
   const giveValue = RESOURCES.reduce((s, r) => s + (candidate.receive[r] ?? 0), 0);
   const getValue = RESOURCES.reduce((s, r) => s + (candidate.give[r] ?? 0), 0);
-  if (getValue >= giveValue) {
+
+  let accept: boolean;
+  if (difficulty === 'easy') {
+    // Weaker judgment: also takes trades that are a little unfavorable.
+    accept = getValue >= giveValue - 1;
+  } else if (difficulty === 'hard') {
+    // Pickier: strictly favorable trades are always fine; an even trade is only taken if
+    // it doesn't cut into a resource the bot is already low on (protects scarce cards).
+    if (getValue > giveValue) {
+      accept = true;
+    } else if (getValue === giveValue) {
+      const givingScarce = RESOURCES.some(
+        (r) => (candidate.receive[r] ?? 0) > 0 && hand.resources[r] - (candidate.receive[r] ?? 0) <= 1,
+      );
+      accept = !givingScarce;
+    } else {
+      accept = false;
+    }
+  } else {
+    accept = getValue >= giveValue;
+  }
+
+  if (accept) {
     return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept: true };
   }
   return null;

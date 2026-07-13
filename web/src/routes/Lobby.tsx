@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { addBot, removeSeat, startGame, updatePlayerColor, updateRoomSettings } from '../firebase/rooms';
-import { PLAYER_COLORS, type MapPresetId, type PlayerColor } from '@catan/engine';
+import { PLAYER_COLORS, type BotDifficulty, type MapPresetId, type PlayerColor } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import MapPreview from '../components/MapPreview';
 import MapPickerGrid from '../components/MapPickerGrid';
@@ -15,6 +15,8 @@ const DISCARD_MAX = 12;
 const TURN_TIMER_MIN = 30;
 const TURN_TIMER_MAX = 600;
 const DEFAULT_TURN_TIMER_SECONDS_FALLBACK = 120;
+const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'normal', 'hard'];
+const BOT_DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -30,6 +32,7 @@ export default function Lobby(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>('normal');
 
   if (!room || !roomId || !uid) {
     return (
@@ -66,7 +69,7 @@ export default function Lobby(): JSX.Element {
   }
 
   function handleAddBot() {
-    run(() => addBot(roomId!, 'normal'));
+    run(() => addBot(roomId!, botDifficulty));
   }
 
   function handleRemoveSeat(targetUid: string) {
@@ -152,6 +155,11 @@ export default function Lobby(): JSX.Element {
                   )}
                   <span className="lobby__seat-name">{p.displayName}</span>
                   {p.isBot && <span className="lobby__badge">bot</span>}
+                  {p.isBot && (
+                    <span className={`lobby__badge lobby__badge--difficulty-${p.botDifficulty ?? 'normal'}`}>
+                      {BOT_DIFFICULTY_LABEL[p.botDifficulty ?? 'normal']}
+                    </span>
+                  )}
                   {p.uid === room.hostUid && <span className="lobby__badge lobby__badge--host">host</span>}
                   {isHost && p.isBot && (
                     <button
@@ -198,6 +206,19 @@ export default function Lobby(): JSX.Element {
           <div className="lobby__actions">
             {isHost ? (
               <>
+                <select
+                  className="lobby__bot-difficulty"
+                  value={botDifficulty}
+                  disabled={busy || room.turnOrder.length >= MAX_SEATS}
+                  onChange={(e) => setBotDifficulty(e.target.value as BotDifficulty)}
+                  aria-label="Bot difficulty"
+                >
+                  {BOT_DIFFICULTIES.map((d) => (
+                    <option key={d} value={d}>
+                      {BOT_DIFFICULTY_LABEL[d]}
+                    </option>
+                  ))}
+                </select>
                 <button
                   className="lobby__button"
                   onClick={handleAddBot}

@@ -146,6 +146,36 @@
   color: #1c1a12;
 }
 
+.lobby__badge--difficulty-easy {
+  background: rgba(90, 179, 116, 0.25);
+  color: #6fcf8f;
+}
+
+.lobby__badge--difficulty-normal {
+  background: var(--color-border);
+  color: var(--color-text-dim);
+}
+
+.lobby__badge--difficulty-hard {
+  background: rgba(229, 72, 77, 0.2);
+  color: #ef8b8e;
+}
+
+.lobby__bot-difficulty {
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text);
+  padding: 10px 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lobby__bot-difficulty:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .lobby__seat-remove {
   background: none;
   border: none;
