@@ -227,14 +227,18 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Stable footprint so the whole footer doesn't jump around as the hand grows/shrinks —
-     roughly 3-6 cards fit per row; beyond ~12 cards (2 rows) it wraps further rather than
-     stretching wider, which is fine since a hand rarely gets that large before a forced
-     discard. min-height reserves room for the label row plus two full rows of resource
-     cards (74px each + 6px gap) up front, so gaining a new resource type or enough of one
-     to wrap onto a second row doesn't jump the rest of the toolbar/page around. */
-  min-width: 300px;
-  max-width: 420px;
+  /* Stable, truly *fixed* footprint (not just a min-width) so the whole footer never jumps
+     around as the hand's content changes — this used to be min/max-width, which let the box's
+     intrinsic content width (the label row's text + the "Clear (N)" button, which only
+     appears once a card is staged) grow it up to max-width, shoving every toolbar item to its
+     right by however many pixels the label row gained. A hard `width` plus `flex-shrink: 0`
+     means the box is the same size selected or not; .game__toolbar-label/-label-row below get
+     `min-width: 0` so their text can wrap onto a second line inside that fixed width instead
+     of forcing the box wider. min-height reserves room for the label row plus two full rows of
+     resource cards (74px each + 6px gap) up front, so gaining a new resource type or enough of
+     one to wrap onto a second row doesn't jump the rest of the toolbar/page around either. */
+  width: 420px;
+  flex: 0 0 420px;
   min-height: 178px;
 }
 
@@ -243,9 +247,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .game__toolbar-label {
+  min-width: 0;
+  overflow-wrap: break-word;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -254,6 +261,7 @@
 }
 
 .game__toolbar-clear-give {
+  flex-shrink: 0;
   background: none;
   border: 1px solid var(--color-border);
   border-radius: 999px;
