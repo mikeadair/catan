@@ -123,11 +123,14 @@ function newPublicPlayer(params: {
  * Picks the lowest unused seatIndex and the first unused PlayerColor among the
  * currently-seated players, reading each player doc directly by uid (bounded by
  * `turnOrder`, so no Firestore wildcard/collection read is needed inside the transaction).
+ * `preferredColor` (from a signed-in user's persisted profile) is honored if it's still
+ * free; otherwise falls back to the first unused color, same as before.
  */
 async function assignSeat(
   tx: Transaction,
   roomId: string,
-  turnOrder: string[]
+  turnOrder: string[],
+  preferredColor?: PlayerColor
 ): Promise<{ seatIndex: number; color: PlayerColor }> {
   const usedSeatIndices = new Set<number>();
   const usedColors = new Set<PlayerColor>();
@@ -141,7 +144,10 @@ async function assignSeat(
   }
   let seatIndex = 0;
   while (usedSeatIndices.has(seatIndex)) seatIndex++;
-  const color = PLAYER_COLORS.find((c) => !usedColors.has(c));
+  const color =
+    preferredColor && !usedColors.has(preferredColor)
+      ? preferredColor
+      : PLAYER_COLORS.find((c) => !usedColors.has(c));
   if (color === undefined) {
     throw new Error('Room is full');
   }
@@ -152,7 +158,12 @@ export async function createRoom(
   hostUid: string,
   hostName: string,
   mapPreset: MapPresetId,
-  settings?: { victoryPointsToWin?: number; discardLimit?: number; turnTimerSeconds?: number | null }
+  settings?: {
+    victoryPointsToWin?: number;
+    discardLimit?: number;
+    turnTimerSeconds?: number | null;
+    preferredColor?: PlayerColor;
+  }
 ): Promise<{ roomId: string; code: string }> {
   const newRoomRef = doc(collection(db, 'rooms'));
   const roomId = newRoomRef.id;
@@ -206,10 +217,14 @@ export async function createRoom(
     lastSetupSettlementVertexId: null,
   };
 
+  const hostColor =
+    settings?.preferredColor && PLAYER_COLORS.includes(settings.preferredColor)
+      ? settings.preferredColor
+      : PLAYER_COLORS[0];
   const hostPlayer = newPublicPlayer({
     uid: hostUid,
     displayName: hostName,
-    color: PLAYER_COLORS[0],
+    color: hostColor,
     isBot: false,
     seatIndex: 0,
   });
@@ -222,7 +237,12 @@ export async function createRoom(
   return { roomId, code };
 }
 
-export async function joinRoom(code: string, uid: string, displayName: string): Promise<string> {
+export async function joinRoom(
+  code: string,
+  uid: string,
+  displayName: string,
+  preferredColor?: PlayerColor
+): Promise<string> {
   const normalizedCode = code.trim().toUpperCase();
   // Filtered to status=='lobby' for the same list-query-safety reason as createRoom's
   // uniqueness check above — every possible match must be readable by a non-member.
@@ -256,7 +276,7 @@ export async function joinRoom(code: string, uid: string, displayName: string): 
       throw new Error('Room is full');
     }
 
-    const { seatIndex, color } = await assignSeat(tx, roomId, room.turnOrder);
+    const { seatIndex, color } = await assignSeat(tx, roomId, room.turnOrder, preferredColor);
     const player = newPublicPlayer({ uid, displayName, color, isBot: false, seatIndex });
 
     tx.set(playerRef(roomId, uid), player);

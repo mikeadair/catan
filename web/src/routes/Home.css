@@ -286,3 +286,92 @@
   background: var(--color-accent);
   color: #1c1a12;
 }
+
+.home__account-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.home__account-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.home__link-button {
+  background: none;
+  border: none;
+  color: var(--color-accent);
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+.home__auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--color-panel-light);
+}
+
+.home__auth-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.home__auth-tab {
+  flex: 1;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.home__auth-tab--active {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.home__auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home__auth-message {
+  font-size: 13px;
+  color: var(--color-text-dim);
+}
+
+.home__color-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.home__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  padding: 0;
+}
+
+.home__swatch:hover {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.home__swatch--selected {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+}

@@ -235,3 +235,29 @@ describe('firestore.rules — atomic write patterns (createRoom / joinRoom regre
     await assertFails(getDoc(doc(db, 'rooms', ROOM_ID, 'players', 'p0')));
   });
 });
+
+describe('firestore.rules — users/{uid} preference doc', () => {
+  it('lets a signed-in user read and write their own doc', async () => {
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertSucceeds(setDoc(doc(db, 'users', 'p0'), { displayName: 'Alice', color: 'red' }));
+    await assertSucceeds(getDoc(doc(db, 'users', 'p0')));
+  });
+
+  it('denies reading another uid\'s doc', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'p1'), { displayName: 'Bob', color: 'blue' });
+    });
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertFails(getDoc(doc(db, 'users', 'p1')));
+  });
+
+  it('denies writing another uid\'s doc', async () => {
+    const db = testEnv.authenticatedContext('p0').firestore();
+    await assertFails(setDoc(doc(db, 'users', 'p1'), { displayName: 'Eve', color: 'green' }));
+  });
+
+  it('denies an unauthenticated write', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(setDoc(doc(db, 'users', 'p0'), { displayName: 'Nobody', color: 'brown' }));
+  });
+});
