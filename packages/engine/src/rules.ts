@@ -10,6 +10,7 @@ import type {
   DevCardType,
   EdgeId,
   GameAction,
+  LogEntryMeta,
   MapPresetId,
   Port,
   PrivateHand,
@@ -100,8 +101,11 @@ function handSize(hand: PrivateHand): number {
   return RESOURCES.reduce((sum, r) => sum + hand.resources[r], 0);
 }
 
-function addLog(room: RoomState, message: string): void {
-  room.log.push({ id: nanoid(), ts: Date.now(), message });
+function addLog(room: RoomState, message: string, meta?: LogEntryMeta): void {
+  // Firestore's Admin SDK rejects explicit `undefined` property values (no
+  // ignoreUndefinedProperties set — see functions/src/db.ts), so `meta` must be omitted
+  // entirely rather than set to undefined when the caller doesn't pass one.
+  room.log.push(meta ? { id: nanoid(), ts: Date.now(), message, meta } : { id: nanoid(), ts: Date.now(), message });
   if (room.log.length > 50) {
     room.log.splice(0, room.log.length - 50);
   }
@@ -595,7 +599,17 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       const d2 = 1 + Math.floor(Math.random() * 6);
       room.diceRoll = [d1, d2];
       const roll = d1 + d2;
-      addLog(room, `${players[action.uid].displayName} rolled ${roll}.`);
+      // computeRollGains is a preview (doesn't account for the bank running short of a
+      // resource, unlike distributeResources below), which is fine for a log display — it's
+      // only ever wrong in the same rare edge case distributeResources itself special-cases.
+      const rollGains = roll !== 7 && board ? computeRollGains(board, room.vertices, roll) : undefined;
+      addLog(
+        room,
+        `${players[action.uid].displayName} rolled ${roll}.`,
+        rollGains && Object.keys(rollGains).length > 0
+          ? { kind: 'diceRoll', roll: [d1, d2], gains: rollGains }
+          : { kind: 'diceRoll', roll: [d1, d2] },
+      );
 
       if (roll === 7) {
         const discardUids = room.turnOrder.filter((uid) => handSize(hands[uid]) > room.discardLimit);
@@ -631,7 +645,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         hands[action.uid].resources[r] += 1;
       }
       players[action.uid].resourceCount = handSize(hands[action.uid]);
-      addLog(room, `${players[action.uid].displayName} picked ${action.resources.join(', ')} from the gold hex.`);
+      const goldPickResources: Partial<ResourceCount> = {};
+      for (const r of action.resources) goldPickResources[r] = (goldPickResources[r] ?? 0) + 1;
+      addLog(room, `${players[action.uid].displayName} picked ${action.resources.join(', ')} from the gold hex.`, {
+        kind: 'resourceGain',
+        uid: action.uid,
+        resources: goldPickResources,
+      });
       room.pendingGoldPicks = room.pendingGoldPicks.filter((p) => p.uid !== action.uid);
       if (room.pendingGoldPicks.length === 0) {
         room.phase = 'main';
@@ -929,7 +949,11 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       players[action.uid].devCardCount = hand.devCards.length;
       players[action.uid].resourceCount = handSize(hand);
       room.devCardPlayedThisTurn = true;
-      addLog(room, `${players[action.uid].displayName} played Year of Plenty.`);
+      addLog(room, `${players[action.uid].displayName} played Year of Plenty.`, {
+        kind: 'resourceGain',
+        uid: action.uid,
+        resources: want,
+      });
       break;
     }
 
@@ -958,7 +982,11 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       hand.devCards.splice(idx, 1);
       players[action.uid].devCardCount = hand.devCards.length;
       room.devCardPlayedThisTurn = true;
-      addLog(room, `${players[action.uid].displayName} played Monopoly on ${action.resource} and collected ${total}.`);
+      addLog(room, `${players[action.uid].displayName} played Monopoly on ${action.resource} and collected ${total}.`, {
+        kind: 'resourceGain',
+        uid: action.uid,
+        resources: { [action.resource]: total },
+      });
       break;
     }
 
@@ -981,7 +1009,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       hand.resources[action.receive] += 1;
       room.bank[action.receive] -= 1;
       players[action.uid].resourceCount = handSize(hand);
-      addLog(room, `${players[action.uid].displayName} traded ${action.giveAmount} ${action.give} for 1 ${action.receive} with the bank.`);
+      addLog(room, `${players[action.uid].displayName} traded ${action.giveAmount} ${action.give} for 1 ${action.receive} with the bank.`, {
+        kind: 'resourceTrade',
+        fromUid: action.uid,
+        toUid: null,
+        give: { [action.give]: action.giveAmount },
+        receive: { [action.receive]: 1 },
+      });
       break;
     }
 
@@ -1056,7 +1090,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       players[trade.proposerUid].resourceCount = handSize(proposerHand);
       players[action.uid].resourceCount = handSize(responderHand);
       trade.status = 'accepted';
-      addLog(room, `${players[action.uid].displayName} accepted a trade from ${players[trade.proposerUid].displayName}.`);
+      addLog(room, `${players[action.uid].displayName} accepted a trade from ${players[trade.proposerUid].displayName}.`, {
+        kind: 'resourceTrade',
+        fromUid: trade.proposerUid,
+        toUid: action.uid,
+        give: trade.give,
+        receive: trade.receive,
+      });
       break;
     }
 
@@ -1086,7 +1126,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       players[action.withUid].resourceCount = handSize(responderHand);
       trade.status = 'accepted';
       trade.interestedUids = [];
-      addLog(room, `${players[action.uid].displayName} traded with ${players[action.withUid].displayName}.`);
+      addLog(room, `${players[action.uid].displayName} traded with ${players[action.withUid].displayName}.`, {
+        kind: 'resourceTrade',
+        fromUid: action.uid,
+        toUid: action.withUid,
+        give: trade.give,
+        receive: trade.receive,
+      });
       break;
     }
 
