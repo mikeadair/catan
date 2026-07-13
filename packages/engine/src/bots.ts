@@ -33,6 +33,12 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
     return decideDiscard(bundle, botUid);
   }
 
+  if (room.phase === 'goldPick') {
+    const pending = room.pendingGoldPicks.find((p) => p.uid === botUid);
+    if (!pending) return null;
+    return decideGoldPick(bundle, botUid, pending.amount);
+  }
+
   if (room.phase === 'setup1' || room.phase === 'setup2') {
     if (room.turnOrder[room.currentPlayerIndex] !== botUid) return null;
     return decideSetupAction(bundle, botUid);
@@ -84,7 +90,10 @@ function vertexScore(bundle: GameStateBundle, vertexId: VertexId): number {
     const hex = board.hexes.find((h) => h.id === hexId);
     if (!hex) continue;
     score += pipCount(hex.number);
-    if (hex.terrain !== 'desert') resourcesSeen.add(TERRAIN_RESOURCE[hex.terrain]);
+    // Gold has no fixed resource (bot picks whatever's scarcest when it actually rolls —
+    // see 'pickGoldResources'); the pip-count bump above already values it, just skip the
+    // fixed-resource-diversity bonus since there isn't one to look up.
+    if (hex.terrain !== 'desert' && hex.terrain !== 'gold') resourcesSeen.add(TERRAIN_RESOURCE[hex.terrain]);
   }
   score += resourcesSeen.size * 0.5;
   if (board.ports.some((p) => p.vertexIds.includes(vertexId))) score += 1;
@@ -171,6 +180,16 @@ function decideDiscard(bundle: GameStateBundle, botUid: string): GameAction {
     }
   }
   return { type: 'discard', uid: botUid, resources: toDiscard };
+}
+
+/** Greedily fills whichever resource(s) the bot is shortest on — the inverse priority of
+ * decideDiscard, which sheds whatever it has the most of. */
+function decideGoldPick(bundle: GameStateBundle, botUid: string, amount: number): GameAction {
+  const { hands } = bundle;
+  const hand = hands[botUid];
+  const counts = RESOURCES.map((r) => ({ r, n: hand.resources[r] })).sort((a, b) => a.n - b.n);
+  const resources: Resource[] = Array.from({ length: amount }, (_, i) => counts[i % counts.length].r);
+  return { type: 'pickGoldResources', uid: botUid, resources };
 }
 
 // ---------------------------------------------------------------------------

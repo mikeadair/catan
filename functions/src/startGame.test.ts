@@ -72,6 +72,8 @@ async function seedLobbyRoom(roomId: string, hostUid: string, otherUids: string[
     paused: false,
     pausedAt: null,
     pauseVotes: [],
+    discoveredHexIds: null,
+    pendingGoldPicks: [],
   };
   await roomRef(roomId).set(room);
   await Promise.all(turnOrder.map((uid, i) => playerRef(roomId, uid).set(lobbyPlayer(uid, i))));

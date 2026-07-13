@@ -21,4 +21,10 @@ export const MAP_PRESETS: MapPreset[] = [
     name: '5-6 Player Extension',
     description: 'A larger 30-hex board for 5-6 players. Terrain and numbers are randomized (fairly), same as Balanced Random.',
   },
+  {
+    id: 'fog-of-war',
+    name: 'Fog of War',
+    description:
+      'Only the 6 corner tiles, the desert, and a gold tile are known at the start — the rest reveal (with a freshly random number) as your roads reach them, granting a resource on discovery. The gold tile lets whoever rolls it pick their own resource, but can\'t be settled on at setup.',
+  },
 ];

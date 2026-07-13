@@ -36,7 +36,7 @@ import {
   STARTING_BANK,
   TERRAIN_RESOURCE,
 } from './types';
-import { generateBoard } from './board';
+import { generateBoard, initialFogRevealHexIds } from './board';
 import { createRng, shuffle } from './rng';
 
 export interface GameStateBundle {
@@ -149,7 +149,7 @@ function verticesAdjacentToHex(room: RoomState, hexId: string): VertexId[] {
 }
 
 function hexResource(terrain: Terrain): Resource | null {
-  if (terrain === 'desert') return null;
+  if (terrain === 'desert' || terrain === 'gold') return null;
   return TERRAIN_RESOURCE[terrain];
 }
 
@@ -365,6 +365,59 @@ function distributeResources(bundle: GameStateBundle, roll: number): void {
   }
 }
 
+/** Mirrors computeRollClaims but for the gold hex (fog-of-war only): who owes how many
+ * resource picks (1 per settlement, 2 per city touching a gold hex whose number was
+ * rolled) — resolved via 'pickGoldResources' during the resulting 'goldPick' phase. */
+function computeGoldPickClaims(
+  board: Board,
+  buildings: RoomState['vertices'],
+  roll: number,
+): { uid: string; amount: number }[] {
+  const perUid: Record<string, number> = {};
+  for (const hex of board.hexes) {
+    if (hex.terrain !== 'gold' || hex.number !== roll || hex.id === board.robberHexId) continue;
+    for (const v of Object.values(board.vertices)) {
+      if (!v.adjacentHexIds.includes(hex.id)) continue;
+      const building = buildings[v.id];
+      if (!building) continue;
+      const amount = building.type === 'city' ? 2 : 1;
+      perUid[building.uid] = (perUid[building.uid] ?? 0) + amount;
+    }
+  }
+  return Object.entries(perUid).map(([uid, amount]) => ({ uid, amount }));
+}
+
+const RANDOM_NUMBER_TOKENS = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
+
+/** fog-of-war only: reveals any hex(es) touching a newly-built edge that aren't discovered
+ * yet — assigns each a genuinely random number token (not drawn from the board's original
+ * fairness-constrained pool; see HexTile.number) and grants the discovering player 1 of its
+ * resource (nothing for desert/gold, which are already revealed from game start anyway). */
+function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discovererUid: string): void {
+  const { room, players, hands } = bundle;
+  const board = room.board;
+  if (!board || room.discoveredHexIds === null) return;
+  const edge = board.edges[edgeId];
+  if (!edge) return;
+
+  const discovered = new Set(room.discoveredHexIds);
+  for (const hexId of edge.adjacentHexIds) {
+    if (discovered.has(hexId)) continue;
+    const hex = board.hexes.find((h) => h.id === hexId);
+    if (!hex) continue;
+    discovered.add(hexId);
+    hex.number = RANDOM_NUMBER_TOKENS[Math.floor(Math.random() * RANDOM_NUMBER_TOKENS.length)];
+    addLog(room, `${players[discovererUid].displayName} revealed a ${hex.terrain} tile.`);
+    const resource = hexResource(hex.terrain);
+    if (resource && room.bank[resource] > 0) {
+      room.bank[resource] -= 1;
+      hands[discovererUid].resources[resource] += 1;
+      players[discovererUid].resourceCount = handSize(hands[discovererUid]);
+    }
+  }
+  room.discoveredHexIds = Array.from(discovered);
+}
+
 // ---------------------------------------------------------------------------
 // createGame
 // ---------------------------------------------------------------------------
@@ -455,6 +508,8 @@ export function createGame(
     paused: false,
     pausedAt: null,
     pauseVotes: [],
+    discoveredHexIds: roomBase.mapPreset === 'fog-of-war' ? initialFogRevealHexIds(board.hexes) : null,
+    pendingGoldPicks: [],
     devCardPlayedThisTurn: false,
     lastSetupSettlementVertexId: null,
   };
@@ -536,6 +591,33 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         }
       } else {
         distributeResources(next, roll);
+        const goldPicks = board ? computeGoldPickClaims(board, room.vertices, roll) : [];
+        if (goldPicks.length > 0) {
+          room.pendingGoldPicks = goldPicks;
+          room.phase = 'goldPick';
+        } else {
+          room.phase = 'main';
+        }
+      }
+      break;
+    }
+
+    case 'pickGoldResources': {
+      requirePhase(room, ['goldPick']);
+      const pending = room.pendingGoldPicks.find((p) => p.uid === action.uid);
+      if (!pending) throw new Error('You do not have a pending gold pick');
+      if (action.resources.length !== pending.amount) {
+        throw new Error(`Must pick exactly ${pending.amount} resource(s)`);
+      }
+      for (const r of action.resources) {
+        if (room.bank[r] <= 0) throw new Error(`Bank is out of ${r}`);
+        room.bank[r] -= 1;
+        hands[action.uid].resources[r] += 1;
+      }
+      players[action.uid].resourceCount = handSize(hands[action.uid]);
+      addLog(room, `${players[action.uid].displayName} picked ${action.resources.join(', ')} from the gold hex.`);
+      room.pendingGoldPicks = room.pendingGoldPicks.filter((p) => p.uid !== action.uid);
+      if (room.pendingGoldPicks.length === 0) {
         room.phase = 'main';
       }
       break;
@@ -656,6 +738,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         player.resourceCount = handSize(hands[action.uid]);
         addLog(room, `${player.displayName} built a road.`);
       }
+      discoverHexesAtEdge(next, action.edgeId, action.uid);
       recalcLongestRoad(room, players);
       recomputeVisibleVP(room, players);
       break;
@@ -675,6 +758,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         requirePhase(room, ['setup1', 'setup2']);
         if (player.settlementsBuilt !== player.roadsBuilt) {
           throw new Error('Already placed this turn\'s free settlement');
+        }
+        if (board2.vertices[action.vertexId].adjacentHexIds.some((h) => board2.hexes.find((hex) => hex.id === h)?.terrain === 'gold')) {
+          throw new Error('Cannot place a starting settlement next to the gold hex');
         }
         room.vertices[action.vertexId] = { type: 'settlement', uid: action.uid };
         player.settlementsBuilt += 1;
@@ -1163,6 +1249,11 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   if (room.phase === 'discard') {
     if (room.pendingDiscardUids.includes(uid)) types.push('discard');
+    return types;
+  }
+
+  if (room.phase === 'goldPick') {
+    if (room.pendingGoldPicks.some((p) => p.uid === uid)) types.push('pickGoldResources');
     return types;
   }
 

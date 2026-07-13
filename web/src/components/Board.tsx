@@ -15,7 +15,7 @@ import './Board.css';
 
 const SIZE = 56;
 
-const TERRAIN_ICON: Record<Terrain, string> = {
+const TERRAIN_ICON: Record<Exclude<Terrain, 'gold'>, string> = {
   hills: hillsIcon,
   forest: forestIcon,
   mountains: mountainsIcon,
@@ -25,6 +25,13 @@ const TERRAIN_ICON: Record<Terrain, string> = {
 };
 
 const DESERT_COLOR = '#c9b57a';
+const GOLD_COLOR = '#d9b64e';
+// fog-of-war: undiscovered hexes render as this generic "unknown" fill/icon rather than
+// their real terrain — a deliberate client-rendering choice, not a security boundary (the
+// real terrain is still present in room.board, same trust model as everything else in this
+// client-authoritative-reads architecture); only the number token is genuinely undetermined
+// server-side until discovery.
+const FOG_COLOR = '#333c46';
 
 export type BoardInteractionMode = 'none' | 'placeSettlement' | 'placeCity' | 'placeRoad' | 'placeRobber';
 
@@ -220,30 +227,51 @@ export default function BoardView({
         const center = hexPixel(hex.coord, SIZE);
         const corners = hexCornerPoints(center, SIZE);
         const points = corners.map((p) => `${p.x},${p.y}`).join(' ');
-        const fill = hex.terrain === 'desert' ? DESERT_COLOR : `var(--resource-${TERRAIN_RESOURCE[hex.terrain]})`;
-        const isHotHex = hex.number === 6 || hex.number === 8;
+        const isFogged = room.discoveredHexIds !== null && !room.discoveredHexIds.includes(hex.id);
         const isDesert = hex.terrain === 'desert';
-        // Non-desert tiles also carry a number token dead center, so the terrain icon sits
-        // lower in the hex as a small grounded badge instead of a large image overlapping
-        // (and visually competing with) the number — desert has no number token, so its
-        // icon can stay centered and a bit larger.
-        const iconSize = isDesert ? SIZE * 1.05 : SIZE * 0.62;
-        const iconCenterY = isDesert ? center.y : center.y + SIZE * 0.54;
+        const isGold = hex.terrain === 'gold';
+        const fill = isFogged ? FOG_COLOR : isDesert ? DESERT_COLOR : isGold ? GOLD_COLOR : `var(--resource-${TERRAIN_RESOURCE[hex.terrain as Exclude<Terrain, 'desert' | 'gold'>]})`;
+        const isHotHex = hex.number === 6 || hex.number === 8;
+        // Non-desert/gold/fog tiles also carry a number token dead center, so the terrain
+        // icon sits lower as a small grounded badge instead of a large image competing with
+        // the number — desert/gold/fog have no number token (fog's is simply unknown yet),
+        // so their icon/glyph can stay centered and a bit larger.
+        const centeredIcon = isDesert || isGold || isFogged;
+        const iconSize = centeredIcon ? SIZE * 1.05 : SIZE * 0.62;
+        const iconCenterY = centeredIcon ? center.y : center.y + SIZE * 0.54;
         return (
           <g key={hex.id}>
             <polygon points={points} fill={fill} stroke="var(--color-ocean-deep)" strokeWidth={2} />
-            {!isDesert && (
+            {!centeredIcon && (
               <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.56} fill="rgba(0,0,0,0.16)" />
             )}
-            <image
-              href={TERRAIN_ICON[hex.terrain]}
-              x={center.x - iconSize / 2}
-              y={iconCenterY - iconSize / 2}
-              width={iconSize}
-              height={iconSize}
-              style={{ pointerEvents: 'none' }}
-              preserveAspectRatio="xMidYMid meet"
-            />
+            {isFogged ? (
+              <text
+                x={center.x}
+                y={iconCenterY + 11}
+                textAnchor="middle"
+                fontSize={32}
+                fontWeight={700}
+                fill="rgba(255,255,255,0.3)"
+                style={{ pointerEvents: 'none' }}
+              >
+                ?
+              </text>
+            ) : isGold ? (
+              <text x={center.x} y={iconCenterY + 12} textAnchor="middle" fontSize={34} style={{ pointerEvents: 'none' }}>
+                ✨
+              </text>
+            ) : (
+              <image
+                href={TERRAIN_ICON[hex.terrain as Exclude<Terrain, 'gold'>]}
+                x={center.x - iconSize / 2}
+                y={iconCenterY - iconSize / 2}
+                width={iconSize}
+                height={iconSize}
+                style={{ pointerEvents: 'none' }}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            )}
             {hex.number !== null && (
               <g>
                 <circle cx={center.x} cy={center.y} r={18} fill="#f4e8cf" stroke="#2b2015" strokeWidth={1.5} />

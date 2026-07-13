@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyAction, computeRollGains, createGame, legalActionTypes, recalcLargestArmy, recalcLongestRoad } from './rules';
+import { initialFogRevealHexIds } from './board';
 import type { GameStateBundle } from './rules';
 import type { Building, PrivateHand, PublicPlayer, VertexId } from './types';
 import { RESOURCES } from './types';
@@ -29,10 +30,13 @@ function makeGame(
 /** Finds a vertex satisfying the distance rule against the bundle's current room.vertices. */
 function findFreeVertex(bundle: GameStateBundle, excluding: Set<VertexId> = new Set()): VertexId {
   const board = bundle.room.board!;
+  const touchesGold = (v: (typeof board.vertices)[string]) =>
+    v.adjacentHexIds.some((h) => board.hexes.find((hex) => hex.id === h)?.terrain === 'gold');
   for (const v of Object.values(board.vertices)) {
     if (excluding.has(v.id)) continue;
     if (bundle.room.vertices[v.id]) continue;
     if (v.adjacentVertexIds.some((n) => bundle.room.vertices[n])) continue;
+    if (touchesGold(v)) continue; // setup placements can't border the gold hex — see rules.ts
     return v.id;
   }
   throw new Error('No free vertex available');
@@ -777,7 +781,134 @@ describe('timeoutEndTurn', () => {
   });
 });
 
+describe('fog-of-war and gold hex', () => {
+  function makeFogGame(seed = 'fog-seed-1'): GameStateBundle {
+    const seatedPlayers = [
+      { uid: 'p0', displayName: 'Player 0', isBot: false },
+      { uid: 'p1', displayName: 'Player 1', isBot: false },
+    ];
+    return createGame({ id: 'room1', code: 'ABCDE', hostUid: 'p0', mapPreset: 'fog-of-war', seed }, seatedPlayers);
+  }
+
+  it('reveals exactly the corner, desert, and gold hexes at generation time', () => {
+    const bundle = makeFogGame();
+    const board = bundle.room.board!;
+    expect(bundle.room.discoveredHexIds).toEqual(initialFogRevealHexIds(board.hexes));
+    const revealed = new Set(bundle.room.discoveredHexIds);
+    for (const hex of board.hexes) {
+      if (revealed.has(hex.id)) {
+        if (hex.terrain !== 'desert') expect(hex.number).not.toBeNull();
+      } else {
+        expect(hex.number).toBeNull();
+      }
+    }
+    expect(board.hexes.some((h) => h.terrain === 'gold')).toBe(true);
+  });
+
+  it('rejects a starting settlement adjacent to the gold hex', () => {
+    const bundle = makeFogGame();
+    const board = bundle.room.board!;
+    const goldHex = board.hexes.find((h) => h.terrain === 'gold')!;
+    const vertexId = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(goldHex.id))!.id;
+    const uid = bundle.room.turnOrder[0];
+    expect(() => applyAction(bundle, { type: 'buildSettlement', uid, vertexId, free: true })).toThrow(/gold/);
+  });
+
+  it('resolves pending gold picks one player at a time, returning to main once all are done', () => {
+    let bundle = makeFogGame();
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'goldPick';
+    const [uidA, uidB] = bundle.room.turnOrder;
+    bundle.room.pendingGoldPicks = [
+      { uid: uidA, amount: 1 },
+      { uid: uidB, amount: 2 },
+    ];
+    const oreBefore = bundle.room.bank.ore;
+    const oreBeforeA = bundle.hands[uidA].resources.ore;
+    const brickBeforeB = bundle.hands[uidB].resources.brick;
+
+    bundle = applyAction(bundle, { type: 'pickGoldResources', uid: uidA, resources: ['ore'] });
+    expect(bundle.room.phase).toBe('goldPick'); // uidB still pending
+    expect(bundle.hands[uidA].resources.ore).toBe(oreBeforeA + 1);
+    expect(bundle.room.bank.ore).toBe(oreBefore - 1);
+
+    bundle = applyAction(bundle, { type: 'pickGoldResources', uid: uidB, resources: ['brick', 'brick'] });
+    expect(bundle.room.phase).toBe('main');
+    expect(bundle.hands[uidB].resources.brick).toBe(brickBeforeB + 2);
+  });
+
+  it('rejects a gold pick with the wrong resource count', () => {
+    let bundle = makeFogGame();
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'goldPick';
+    const uid = bundle.room.turnOrder[0];
+    bundle.room.pendingGoldPicks = [{ uid, amount: 2 }];
+    expect(() => applyAction(bundle, { type: 'pickGoldResources', uid, resources: ['ore'] })).toThrow(/exactly 2/);
+  });
+
+  it('rejects a gold pick from a player with nothing pending', () => {
+    let bundle = makeFogGame();
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'goldPick';
+    const [uidA, uidB] = bundle.room.turnOrder;
+    bundle.room.pendingGoldPicks = [{ uid: uidA, amount: 1 }];
+    expect(() => applyAction(bundle, { type: 'pickGoldResources', uid: uidB, resources: ['ore'] })).toThrow(/pending/);
+  });
+
+  it('reveals a hidden hex (with a freshly random number) and grants a resource when a road reaches it', () => {
+    let bundle = makeFogGame();
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 20, lumber: 20, ore: 20, grain: 20, wool: 20 };
+
+    const myVertex = Object.entries(bundle.room.vertices).find(([, b]) => b.uid === uid)![0];
+    const path = findPathToHiddenHex(bundle, myVertex);
+    expect(path).not.toBeNull();
+
+    const discoveredBefore = new Set(bundle.room.discoveredHexIds);
+    for (const edgeId of path!) {
+      if (bundle.room.edges[edgeId]) continue; // already built during setup
+      bundle = applyAction(bundle, { type: 'buildRoad', uid, edgeId });
+    }
+    const discoveredAfter = new Set(bundle.room.discoveredHexIds!);
+    const newlyRevealed = [...discoveredAfter].filter((id) => !discoveredBefore.has(id));
+    expect(newlyRevealed.length).toBeGreaterThan(0);
+    for (const hexId of newlyRevealed) {
+      const hex = bundle.room.board!.hexes.find((h) => h.id === hexId)!;
+      expect(hex.number).not.toBeNull();
+    }
+  });
+});
+
 // --- test-only helpers ---
+
+/** BFS over the edge graph from `fromVertexId` to the nearest not-yet-discovered hex
+ * (fog-of-war only) — returns the edge ids to build, in order, ending with whichever edge
+ * actually borders the hidden hex (building it is what triggers discovery). */
+function findPathToHiddenHex(bundle: GameStateBundle, fromVertexId: VertexId): string[] | null {
+  const board = bundle.room.board!;
+  const discovered = new Set(bundle.room.discoveredHexIds ?? []);
+  const isHidden = (hexId: string) => !discovered.has(hexId);
+
+  const visited = new Set<VertexId>([fromVertexId]);
+  const queue: { vertex: VertexId; path: string[] }[] = [{ vertex: fromVertexId, path: [] }];
+  while (queue.length > 0) {
+    const { vertex, path } = queue.shift()!;
+    for (const edgeId of board.vertices[vertex].adjacentEdgeIds) {
+      const edge = board.edges[edgeId];
+      if (edge.adjacentHexIds.some(isHidden)) {
+        return [...path, edgeId];
+      }
+      const [a, b] = edge.vertexIds;
+      const next = a === vertex ? b : a;
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push({ vertex: next, path: [...path, edgeId] });
+    }
+  }
+  return null;
+}
 
 function handTotal(hand: PrivateHand): number {
   return RESOURCES.reduce((sum, r) => sum + hand.resources[r], 0);

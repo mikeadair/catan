@@ -43,6 +43,8 @@ export default function DevPreview(): JSX.Element {
     paused: false,
     pausedAt: null,
     pauseVotes: [],
+    discoveredHexIds: null,
+    pendingGoldPicks: [],
   };
 
   const players: Record<string, PublicPlayer> = {

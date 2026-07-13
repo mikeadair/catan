@@ -23,6 +23,7 @@ const ACTION_TYPES: GameAction['type'][] = [
   'timeoutEndTurn',
   'voteToPause',
   'voteToUnpause',
+  'pickGoldResources',
 ];
 
 function isString(v: unknown): v is string {
@@ -97,6 +98,11 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
       return;
     case 'discard':
       if (!isPartialResourceCount(a.resources)) throw new Error('discard requires resources');
+      return;
+    case 'pickGoldResources':
+      if (!Array.isArray(a.resources) || a.resources.length === 0 || !a.resources.every(isResource)) {
+        throw new Error('pickGoldResources requires resources: Resource[]');
+      }
       return;
     case 'bankTrade':
       if (!isResource(a.give)) throw new Error('bankTrade requires give');

@@ -6,9 +6,12 @@ export const RESOURCES: Resource[] = ['brick', 'lumber', 'ore', 'grain', 'wool']
 
 export type ResourceCount = Record<Resource, number>;
 
-export type Terrain = 'hills' | 'forest' | 'mountains' | 'fields' | 'pasture' | 'desert';
+// 'gold' produces no fixed resource — rolling it lets each adjacent settlement/city owner
+// pick any 1 resource (2 for a city) instead, via the 'pickGoldResources' action/'goldPick'
+// phase. Currently only used by the 'fog-of-war' preset.
+export type Terrain = 'hills' | 'forest' | 'mountains' | 'fields' | 'pasture' | 'desert' | 'gold';
 
-export const TERRAIN_RESOURCE: Record<Exclude<Terrain, 'desert'>, Resource> = {
+export const TERRAIN_RESOURCE: Record<Exclude<Terrain, 'desert' | 'gold'>, Resource> = {
   hills: 'brick',
   forest: 'lumber',
   mountains: 'ore',
@@ -26,7 +29,9 @@ export interface HexTile {
   id: string; // `${q},${r}`
   coord: AxialCoord;
   terrain: Terrain;
-  number: number | null; // null for desert
+  // null for desert, or (fog-of-war only) for an undiscovered hex whose number hasn't been
+  // randomly assigned yet — see 'fog-of-war' handling in rules.ts.
+  number: number | null;
 }
 
 export type PortType = Resource | 'generic'; // generic = 3:1
@@ -65,7 +70,7 @@ export interface Board {
   robberHexId: string;
 }
 
-export type MapPresetId = 'official-beginner' | 'balanced-random' | 'chaos' | 'extended-5-6p';
+export type MapPresetId = 'official-beginner' | 'balanced-random' | 'chaos' | 'extended-5-6p' | 'fog-of-war';
 
 export interface MapPreset {
   id: MapPresetId;
@@ -96,6 +101,9 @@ export type GamePhase =
   | 'main'
   | 'discard'
   | 'robber'
+  // One or more players rolled a gold hex's number and must each pick their resource(s)
+  // before play resumes — see pendingGoldPicks on RoomState.
+  | 'goldPick'
   | 'gameOver';
 
 export const PLAYER_COLORS = ['red', 'blue', 'white', 'orange', 'green', 'brown'] as const;
@@ -195,6 +203,14 @@ export interface RoomState {
   paused: boolean;
   pausedAt: number | null; // Date.now() when `paused` flipped true; used to shift turnStartedAt forward by the pause duration on unpause, so elapsed-time math resumes where it left off.
   pauseVotes: string[]; // uids currently voting to flip `paused` the opposite way of its current value
+  // fog-of-war only (null on every other preset): hex ids whose terrain is revealed to
+  // players and which produce resources on a roll. Starts as the board's corner hexes, the
+  // desert, and the gold hex (see board.ts); a road reaching a new hex reveals it — see
+  // 'buildRoad' in rules.ts.
+  discoveredHexIds: string[] | null;
+  // Players who rolled a gold hex's number this turn and still owe a resource pick (1 per
+  // settlement, 2 per city touching it) — see 'pickGoldResources' and the 'goldPick' phase.
+  pendingGoldPicks: { uid: string; amount: number }[];
   // Added by game/rules.ts (additive, optional so other constructors aren't broken):
   devCardPlayedThisTurn?: boolean; // at most one dev card may be played per turn
   lastSetupSettlementVertexId?: VertexId | null; // anchors the free setup road to the settlement just placed
@@ -231,6 +247,9 @@ export type GameAction =
   | { type: 'playMonopoly'; uid: string; devCardId: string; resource: Resource }
   | { type: 'moveRobber'; uid: string; robberHexId: string; stealFromUid: string | null } // post-7 roll, no card
   | { type: 'discard'; uid: string; resources: Partial<ResourceCount> }
+  // fog-of-war only: pays out a pending gold-hex pick (see pendingGoldPicks/'goldPick' phase).
+  // resources.length must exactly match the owed amount; entries need not be distinct.
+  | { type: 'pickGoldResources'; uid: string; resources: Resource[] }
   | { type: 'bankTrade'; uid: string; give: Resource; giveAmount: number; receive: Resource }
   | { type: 'proposeTrade'; uid: string; give: Partial<ResourceCount>; receive: Partial<ResourceCount>; targetUid: string | null }
   | { type: 'respondTrade'; uid: string; tradeId: string; accept: boolean }

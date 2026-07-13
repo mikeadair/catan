@@ -18,6 +18,7 @@ import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
 import DiscardModal from '../components/DiscardModal';
+import GoldPickModal from '../components/GoldPickModal';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
 
@@ -429,6 +430,9 @@ export default function Game(): JSX.Element {
   } else if (room.phase === 'discard' && !room.pendingDiscardUids.includes(uid) && room.pendingDiscardUids.length > 0) {
     const names = room.pendingDiscardUids.map((u) => players[u]?.displayName ?? 'someone');
     phaseBanner = `Waiting for ${names.join(', ')} to discard…`;
+  } else if (room.phase === 'goldPick' && !room.pendingGoldPicks.some((p) => p.uid === uid) && room.pendingGoldPicks.length > 0) {
+    const names = room.pendingGoldPicks.map((p) => players[p.uid]?.displayName ?? 'someone');
+    phaseBanner = `Waiting for ${names.join(', ')} to pick their gold…`;
   }
 
   // Dice rolling only makes sense in roll/main; the toolbar itself (build/trade/hand) is
@@ -572,6 +576,13 @@ export default function Game(): JSX.Element {
         visible={room.phase === 'discard' && room.pendingDiscardUids.includes(uid)}
         resources={resources}
         onDiscard={(discarded) => void runAction({ type: 'discard', uid, resources: discarded })}
+      />
+
+      <GoldPickModal
+        visible={room.phase === 'goldPick' && room.pendingGoldPicks.some((p) => p.uid === uid)}
+        amount={room.pendingGoldPicks.find((p) => p.uid === uid)?.amount ?? 0}
+        bank={room.bank}
+        onPick={(picked) => void runAction({ type: 'pickGoldResources', uid, resources: picked })}
       />
 
       <RobberModal

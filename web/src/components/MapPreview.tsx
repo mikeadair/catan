@@ -3,7 +3,7 @@
 // startGame). Reuses the real Board component so the preview always matches what actually
 // renders in-game.
 import { useMemo, type JSX } from 'react';
-import { generateBoard, type MapPresetId, type RoomState } from '@catan/engine';
+import { generateBoard, initialFogRevealHexIds, type MapPresetId, type RoomState } from '@catan/engine';
 import Board from './Board';
 import './MapPreview.css';
 
@@ -49,6 +49,8 @@ export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewPr
       paused: false,
       pausedAt: null,
       pauseVotes: [],
+      discoveredHexIds: mapPreset === 'fog-of-war' ? initialFogRevealHexIds(board.hexes) : null,
+      pendingGoldPicks: [],
     };
   }, [mapPreset]);
 
