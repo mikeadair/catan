@@ -180,6 +180,7 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     botDifficulty: BotDifficulty,
     hand: Partial<Record<Resource, number>>,
     trade: { give: Partial<Record<Resource, number>>; receive: Partial<Record<Resource, number>> },
+    targetUid: string | null = null,
   ): { bundle: GameStateBundle; botUid: string } {
     const bundle = createGame(
       { id: 'r-respond', code: 'ABCDE', hostUid: 'p0', mapPreset: 'official-beginner', seed: 'bots-respond-test' },
@@ -195,7 +196,7 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     bundle.trades.push({
       id: 't1',
       proposerUid: 'p1',
-      targetUid: null,
+      targetUid,
       give: trade.give,
       receive: trade.receive,
       status: 'pending',
@@ -235,6 +236,56 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
       tradeId: 't1',
       accept: true,
     });
+  });
+
+  // Regression coverage: decideTradeResponse used to return null (no action at all) whenever
+  // it decided not to accept, which left a trade *targeted* at a specific bot pending
+  // forever — the bot would never actually answer unless it happened to like the offer. A
+  // targeted trade now always gets a definitive respondTrade, accept or explicit reject.
+  it('explicitly rejects a targeted trade it cannot afford, rather than leaving it pending', () => {
+    const trade = { give: { lumber: 1 }, receive: { ore: 3 } }; // bot has 0 ore — can't afford
+    const { bundle, botUid } = makeTradeResponseGame('normal', { ore: 0, lumber: 5 }, trade, 'p0');
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: false });
+  });
+
+  it('explicitly rejects an unfavorable targeted trade, rather than leaving it pending', () => {
+    // Same losing trade as the "easy accepts, normal/hard reject" case above, but targeted
+    // directly at the bot instead of open — normal/hard must now answer, not stay silent.
+    const trade = { give: { lumber: 1 }, receive: { brick: 2 } };
+
+    const normal = makeTradeResponseGame('normal', { brick: 5, lumber: 0 }, trade, 'p0');
+    expect(decideBotAction(normal.bundle, normal.botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
+
+    const hard = makeTradeResponseGame('hard', { brick: 5, lumber: 0 }, trade, 'p0');
+    expect(decideBotAction(hard.bundle, hard.botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
+  });
+
+  it('leaves an unwanted OPEN trade alone (no action) rather than rejecting it', () => {
+    // Open trades use interestedUids opt-in, not accept/reject — a bot that was never
+    // interested has nothing to withdraw, so decideTradeResponse should stay silent here,
+    // unlike the targeted case above.
+    const trade = { give: { lumber: 1 }, receive: { brick: 2 } };
+    const { bundle, botUid } = makeTradeResponseGame('normal', { brick: 5, lumber: 0 }, trade, null);
+
+    expect(decideBotAction(bundle, botUid)).toBeNull();
+  });
+
+  it('still accepts a favorable targeted trade', () => {
+    const trade = { give: { ore: 2 }, receive: { lumber: 1 } };
+    const { bundle, botUid } = makeTradeResponseGame('normal', { lumber: 3, ore: 0 }, trade, 'p0');
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: true });
   });
 });
 

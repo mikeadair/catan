@@ -22,6 +22,10 @@ describe('assertValidActionShape', () => {
       { type: 'cancelTrade', uid: 'p0', tradeId: 't1' },
       { type: 'endTurn', uid: 'p0' },
       { type: 'removeSeat', uid: 'p0', targetUid: 'p0' },
+      { type: 'timeoutEndTurn', uid: 'p0' },
+      { type: 'expireTrades', uid: 'p0' },
+      { type: 'voteToPause', uid: 'p0' },
+      { type: 'voteToUnpause', uid: 'p0' },
     ];
     for (const action of valid) {
       expect(() => assertValidActionShape(action)).not.toThrow();

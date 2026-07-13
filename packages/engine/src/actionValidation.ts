@@ -21,6 +21,7 @@ const ACTION_TYPES: GameAction['type'][] = [
   'endTurn',
   'removeSeat',
   'timeoutEndTurn',
+  'expireTrades',
   'voteToPause',
   'voteToUnpause',
   'pickGoldResources',
@@ -60,6 +61,7 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
     case 'buyDevCard':
     case 'endTurn':
     case 'timeoutEndTurn':
+    case 'expireTrades':
     case 'voteToPause':
     case 'voteToUnpause':
       return;

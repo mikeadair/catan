@@ -35,6 +35,7 @@ import {
   RESOURCES,
   STARTING_BANK,
   TERRAIN_RESOURCE,
+  TRADE_EXPIRY_MS,
 } from './types';
 import { generateBoard, initialFogRevealHexIds } from './board';
 import { createRng, shuffle } from './rng';
@@ -1141,6 +1142,24 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       break;
     }
 
+    case 'expireTrades': {
+      // No requireCurrentPlayer/requirePhase gate — like timeoutEndTurn, any room member may
+      // report this, and it's re-validated against the real clock below rather than trusted.
+      // A trade's proposer identity (not action.uid) determines what happened; action.uid is
+      // just whoever's client noticed first.
+      const now = Date.now();
+      let expiredAny = false;
+      for (const trade of trades) {
+        if (trade.status !== 'pending' || now - trade.createdAt < TRADE_EXPIRY_MS) continue;
+        trade.status = 'expired';
+        trade.interestedUids = [];
+        expiredAny = true;
+        addLog(room, `${players[trade.proposerUid]?.displayName ?? 'A player'}'s trade offer expired.`);
+      }
+      if (!expiredAny) throw new Error('No trade offers have expired yet');
+      break;
+    }
+
     case 'voteToPause': {
       const player = requirePlayer(players, action.uid);
       if (player.isBot) throw new Error('Bots cannot vote');
@@ -1273,6 +1292,13 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     return types;
   }
   if (!player.isBot) types.push('voteToPause');
+
+  // Not gated to a particular phase or to isCurrent — a trade proposed earlier in the
+  // proposer's turn can still be sitting 'pending' during discard/robber/goldPick, and any
+  // room member may report an expiry (mirrors timeoutEndTurn just below).
+  if (trades.some((t) => t.status === 'pending' && Date.now() - t.createdAt >= TRADE_EXPIRY_MS)) {
+    types.push('expireTrades');
+  }
 
   if (room.phase === 'discard') {
     if (room.pendingDiscardUids.includes(uid)) types.push('discard');
