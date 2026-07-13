@@ -491,6 +491,19 @@ export default function Game(): JSX.Element {
         )}
       </div>
 
+      <div className="game__trades-column">
+        <TradeOffers
+          uid={uid}
+          players={players}
+          ownResources={resources}
+          trades={trades}
+          blocked={pendingActionType !== null}
+          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
+          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
+        />
+      </div>
+
       <aside className="game__sidebar">
         <div className="game__sidebar-top">
           <button
@@ -513,16 +526,6 @@ export default function Game(): JSX.Element {
             Leave game
           </button>
         </div>
-        <TradeOffers
-          uid={uid}
-          players={players}
-          ownResources={resources}
-          trades={trades}
-          blocked={pendingActionType !== null}
-          onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
-          onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
-          onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
-        />
         <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeckCount} />
         <PlayerRoster
           players={players}
