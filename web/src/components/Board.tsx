@@ -170,6 +170,19 @@ function edgeConnectsToOwnNetwork(
   return false;
 }
 
+/** Mirrors rules.ts's hexProtectsWeakPlayer: true if a settlement/city on this hex belongs to
+ * a player with fewer than 3 visible victory points, making it off-limits for the robber
+ * while Safe Mode is on. */
+function hexProtectsWeakPlayer(board: Board, room: RoomState, players: Record<string, PublicPlayer>, hexId: string): boolean {
+  return Object.values(board.vertices)
+    .filter((v) => v.adjacentHexIds.includes(hexId))
+    .some((v) => {
+      const building = room.vertices[v.id];
+      const owner = building && players[building.uid];
+      return !!owner && owner.visibleVictoryPoints < 3;
+    });
+}
+
 export default function BoardView({
   room,
   players,
@@ -292,8 +305,13 @@ export default function BoardView({
   const candidateHexes = useMemo(() => {
     if (!board) return new Set<string>();
     if (interactionMode !== 'placeRobber') return new Set<string>();
-    return new Set(board.hexes.filter((h) => h.id !== board.robberHexId).map((h) => h.id));
-  }, [board, interactionMode]);
+    const movable = board.hexes.filter((h) => h.id !== board.robberHexId);
+    if (!room.safeMode) return new Set(movable.map((h) => h.id));
+    const unprotected = movable.filter((h) => !hexProtectsWeakPlayer(board, room, players, h.id));
+    // Fail open, matching the server: if Safe Mode would protect every remaining hex, allow
+    // them all rather than soft-locking the robber move entirely.
+    return new Set((unprotected.length > 0 ? unprotected : movable).map((h) => h.id));
+  }, [board, room, players, interactionMode]);
 
   // If the armed candidate falls out of the legal set for some other reason (e.g. another
   // player takes the same spot first in a live game), un-arm it rather than leaving a
