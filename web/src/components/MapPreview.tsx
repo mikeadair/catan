@@ -9,9 +9,11 @@ import './MapPreview.css';
 
 export interface MapPreviewProps {
   mapPreset: MapPresetId;
+  /** 'thumbnail' renders a small, fixed-height card suitable for a picker grid. */
+  variant?: 'full' | 'thumbnail';
 }
 
-export default function MapPreview({ mapPreset }: MapPreviewProps): JSX.Element {
+export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewProps): JSX.Element {
   const room = useMemo<RoomState>(() => {
     const board = generateBoard(mapPreset, `lobby-preview:${mapPreset}`);
     return {
@@ -48,7 +50,7 @@ export default function MapPreview({ mapPreset }: MapPreviewProps): JSX.Element 
   }, [mapPreset]);
 
   return (
-    <div className="map-preview">
+    <div className={`map-preview${variant === 'thumbnail' ? ' map-preview--thumbnail' : ''}`}>
       <Board room={room} players={{}} uid={null} interactionMode="none" />
     </div>
   );

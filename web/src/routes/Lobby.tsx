@@ -1,10 +1,10 @@
 import { useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { addBot, removeSeat, startGame, updatePlayerColor, updateRoomSettings } from '../firebase/rooms';
-import { MAP_PRESETS } from '@catan/engine';
 import { PLAYER_COLORS, type MapPresetId, type PlayerColor } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import MapPreview from '../components/MapPreview';
+import MapPickerGrid from '../components/MapPickerGrid';
 import './Lobby.css';
 
 const MAX_SEATS = PLAYER_COLORS.length;
@@ -16,6 +16,10 @@ const TURN_TIMER_MIN = 30;
 const TURN_TIMER_MAX = 600;
 const DEFAULT_TURN_TIMER_SECONDS_FALLBACK = 120;
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function Lobby(): JSX.Element {
   const uid = useGameStore((s) => s.uid);
   const roomId = useGameStore((s) => s.roomId);
@@ -26,13 +30,6 @@ export default function Lobby(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [editingSettings, setEditingSettings] = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState<{
-    mapPreset: MapPresetId;
-    victoryPointsToWin: number;
-    discardLimit: number;
-    turnTimerSeconds: number | null;
-  } | null>(null);
 
   if (!room || !roomId || !uid) {
     return (
@@ -43,9 +40,7 @@ export default function Lobby(): JSX.Element {
   }
 
   const isHost = uid === room.hostUid;
-  const preset = MAP_PRESETS.find((p) => p.id === room.mapPreset);
   const canStart = room.turnOrder.length >= 2;
-  const previewPreset = settingsDraft?.mapPreset ?? room.mapPreset;
 
   async function run(action: () => Promise<unknown>) {
     setError(null);
@@ -93,23 +88,26 @@ export default function Lobby(): JSX.Element {
     run(() => updatePlayerColor(roomId!, uid!, color));
   }
 
-  function openSettingsEditor() {
-    setSettingsDraft({
-      mapPreset: room!.mapPreset,
-      victoryPointsToWin: room!.victoryPointsToWin,
-      discardLimit: room!.discardLimit,
-      turnTimerSeconds: room!.turnTimerSeconds,
-    });
-    setEditingSettings(true);
+  function handleChangeMap(id: MapPresetId) {
+    run(() => updateRoomSettings(roomId!, { mapPreset: id }));
   }
 
-  function handleSaveSettings() {
-    if (!settingsDraft) return;
-    run(async () => {
-      await updateRoomSettings(roomId!, settingsDraft);
-      setEditingSettings(false);
-      setSettingsDraft(null);
-    });
+  function handleChangeVictoryPoints(value: number) {
+    run(() => updateRoomSettings(roomId!, { victoryPointsToWin: clamp(value, VP_MIN, VP_MAX) }));
+  }
+
+  function handleChangeDiscardLimit(value: number) {
+    run(() => updateRoomSettings(roomId!, { discardLimit: clamp(value, DISCARD_MIN, DISCARD_MAX) }));
+  }
+
+  function handleToggleTurnTimer(enabled: boolean) {
+    run(() =>
+      updateRoomSettings(roomId!, { turnTimerSeconds: enabled ? DEFAULT_TURN_TIMER_SECONDS_FALLBACK : null }),
+    );
+  }
+
+  function handleChangeTurnTimerSeconds(value: number) {
+    run(() => updateRoomSettings(roomId!, { turnTimerSeconds: clamp(value, TURN_TIMER_MIN, TURN_TIMER_MAX) }));
   }
 
   const seats = room.turnOrder
@@ -118,241 +116,179 @@ export default function Lobby(): JSX.Element {
     .sort((a, b) => a.seatIndex - b.seatIndex);
 
   const openSeatCount = Math.max(0, MAX_SEATS - room.turnOrder.length);
+  const fieldsDisabled = !isHost || busy;
 
   return (
     <div className="lobby">
-      <div className="lobby__card lobby__card--code">
-        <div className="lobby__code-label">Room code</div>
-        <div className="lobby__code">{room.code}</div>
-        <button className="lobby__button" onClick={handleCopyInvite}>
-          {copied ? 'Copied!' : 'Copy invite link'}
-        </button>
-      </div>
+      <div className="lobby__column lobby__column--left">
+        <div className="lobby__card lobby__card--code">
+          <div className="lobby__code-label">Room code</div>
+          <div className="lobby__code">{room.code}</div>
+          <button className="lobby__button" onClick={handleCopyInvite}>
+            {copied ? 'Copied!' : 'Copy invite link'}
+          </button>
+        </div>
 
-      <div className="lobby__card">
-        <h2>Players</h2>
-        <ul className="lobby__seats">
-          {seats.map((p) => {
-            const isMe = p.uid === uid;
-            const takenColors = new Set(seats.filter((s) => s.uid !== p.uid).map((s) => s.color));
-            return (
-              <li key={p.uid} className="lobby__seat">
-                {isMe ? (
-                  <button
-                    type="button"
-                    className="lobby__swatch lobby__swatch--pickable"
-                    style={{ background: PLAYER_COLOR_HEX[p.color] }}
-                    onClick={() => setColorPickerOpen((v) => !v)}
-                    disabled={busy}
-                    aria-label="Change your color"
-                    title="Change your color"
-                  />
-                ) : (
-                  <span className="lobby__swatch" style={{ background: PLAYER_COLOR_HEX[p.color] }} />
-                )}
-                <span className="lobby__seat-name">{p.displayName}</span>
-                {p.isBot && <span className="lobby__badge">bot</span>}
-                {p.uid === room.hostUid && <span className="lobby__badge lobby__badge--host">host</span>}
-                {isHost && p.isBot && (
-                  <button
-                    className="lobby__seat-remove"
-                    onClick={() => handleRemoveSeat(p.uid)}
-                    disabled={busy}
-                    aria-label={`Remove ${p.displayName}`}
-                  >
-                    ✕
-                  </button>
-                )}
-                {isMe && colorPickerOpen && (
-                  <div className="lobby__color-picker">
-                    {PLAYER_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        className={`lobby__swatch lobby__swatch--option${c === p.color ? ' lobby__swatch--selected' : ''}`}
-                        style={{ background: PLAYER_COLOR_HEX[c] }}
-                        disabled={busy || takenColors.has(c)}
-                        title={takenColors.has(c) ? 'Already taken' : c}
-                        aria-label={c}
-                        onClick={() => {
-                          handlePickColor(c);
-                          setColorPickerOpen(false);
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
+        <div className="lobby__card">
+          <h2>Players</h2>
+          <ul className="lobby__seats">
+            {seats.map((p) => {
+              const isMe = p.uid === uid;
+              const takenColors = new Set(seats.filter((s) => s.uid !== p.uid).map((s) => s.color));
+              return (
+                <li key={p.uid} className="lobby__seat">
+                  {isMe ? (
+                    <button
+                      type="button"
+                      className="lobby__swatch lobby__swatch--pickable"
+                      style={{ background: PLAYER_COLOR_HEX[p.color] }}
+                      onClick={() => setColorPickerOpen((v) => !v)}
+                      disabled={busy}
+                      aria-label="Change your color"
+                      title="Change your color"
+                    />
+                  ) : (
+                    <span className="lobby__swatch" style={{ background: PLAYER_COLOR_HEX[p.color] }} />
+                  )}
+                  <span className="lobby__seat-name">{p.displayName}</span>
+                  {p.isBot && <span className="lobby__badge">bot</span>}
+                  {p.uid === room.hostUid && <span className="lobby__badge lobby__badge--host">host</span>}
+                  {isHost && p.isBot && (
+                    <button
+                      className="lobby__seat-remove"
+                      onClick={() => handleRemoveSeat(p.uid)}
+                      disabled={busy}
+                      aria-label={`Remove ${p.displayName}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                  {isMe && colorPickerOpen && (
+                    <div className="lobby__color-picker">
+                      {PLAYER_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className={`lobby__swatch lobby__swatch--option${c === p.color ? ' lobby__swatch--selected' : ''}`}
+                          style={{ background: PLAYER_COLOR_HEX[c] }}
+                          disabled={busy || takenColors.has(c)}
+                          title={takenColors.has(c) ? 'Already taken' : c}
+                          aria-label={c}
+                          onClick={() => {
+                            handlePickColor(c);
+                            setColorPickerOpen(false);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {Array.from({ length: openSeatCount }).map((_, i) => (
+              <li key={`open-${i}`} className="lobby__seat lobby__seat--open">
+                <span className="lobby__swatch lobby__swatch--empty" />
+                <span className="lobby__seat-name lobby__seat-name--empty">Open seat</span>
               </li>
-            );
-          })}
-          {Array.from({ length: openSeatCount }).map((_, i) => (
-            <li key={`open-${i}`} className="lobby__seat lobby__seat--open">
-              <span className="lobby__swatch lobby__swatch--empty" />
-              <span className="lobby__seat-name lobby__seat-name--empty">Open seat</span>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </ul>
 
-        {error && <div className="lobby__error">{error}</div>}
+          {error && <div className="lobby__error">{error}</div>}
 
-        <div className="lobby__actions">
-          {isHost ? (
-            <>
-              <button
-                className="lobby__button"
-                onClick={handleAddBot}
-                disabled={busy || room.turnOrder.length >= MAX_SEATS}
-              >
-                Add bot
+          <div className="lobby__actions">
+            {isHost ? (
+              <>
+                <button
+                  className="lobby__button"
+                  onClick={handleAddBot}
+                  disabled={busy || room.turnOrder.length >= MAX_SEATS}
+                >
+                  Add bot
+                </button>
+                <button
+                  className="lobby__button lobby__button--primary"
+                  onClick={handleStart}
+                  disabled={busy || !canStart}
+                  title={canStart ? undefined : 'Need at least 2 players to start'}
+                >
+                  Start game
+                </button>
+                {!canStart && <div className="lobby__hint">Need at least 2 players to start.</div>}
+              </>
+            ) : (
+              <button className="lobby__button lobby__button--danger" onClick={handleLeave} disabled={busy}>
+                Leave
               </button>
-              <button
-                className="lobby__button lobby__button--primary"
-                onClick={handleStart}
-                disabled={busy || !canStart}
-                title={canStart ? undefined : 'Need at least 2 players to start'}
-              >
-                Start game
-              </button>
-              {!canStart && <div className="lobby__hint">Need at least 2 players to start.</div>}
-            </>
-          ) : (
-            <button className="lobby__button lobby__button--danger" onClick={handleLeave} disabled={busy}>
-              Leave
-            </button>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="lobby__card">
-        <div className="lobby__settings-header">
+      <div className="lobby__column lobby__column--right">
+        <div className="lobby__card">
           <h2>Game settings</h2>
-          {isHost && !editingSettings && (
-            <button type="button" className="lobby__button" onClick={openSettingsEditor} disabled={busy}>
-              Edit
-            </button>
-          )}
-        </div>
 
-        <MapPreview mapPreset={previewPreset} />
+          <MapPreview mapPreset={room.mapPreset} />
 
-        {editingSettings && settingsDraft ? (
+          <MapPickerGrid
+            selected={room.mapPreset}
+            onSelect={isHost ? handleChangeMap : undefined}
+            disabled={busy}
+          />
+
           <div className="lobby__settings-form">
             <label className="lobby__field">
-              <span>Map</span>
-              <select
-                value={settingsDraft.mapPreset}
-                onChange={(e) => setSettingsDraft({ ...settingsDraft, mapPreset: e.target.value as MapPresetId })}
-              >
-                {MAP_PRESETS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="lobby__field">
-              <span>Victory points to win ({VP_MIN}–{VP_MAX})</span>
+              <span>
+                Victory points to win ({VP_MIN}–{VP_MAX})
+              </span>
               <input
                 type="number"
                 min={VP_MIN}
                 max={VP_MAX}
-                value={settingsDraft.victoryPointsToWin}
-                onChange={(e) =>
-                  setSettingsDraft({
-                    ...settingsDraft,
-                    victoryPointsToWin: Math.min(VP_MAX, Math.max(VP_MIN, Number(e.target.value) || VP_MIN)),
-                  })
-                }
+                value={room.victoryPointsToWin}
+                disabled={fieldsDisabled}
+                onChange={(e) => handleChangeVictoryPoints(Number(e.target.value) || VP_MIN)}
               />
             </label>
             <label className="lobby__field">
-              <span>Discard limit ({DISCARD_MIN}–{DISCARD_MAX})</span>
+              <span>
+                Discard limit ({DISCARD_MIN}–{DISCARD_MAX})
+              </span>
               <input
                 type="number"
                 min={DISCARD_MIN}
                 max={DISCARD_MAX}
-                value={settingsDraft.discardLimit}
-                onChange={(e) =>
-                  setSettingsDraft({
-                    ...settingsDraft,
-                    discardLimit: Math.min(DISCARD_MAX, Math.max(DISCARD_MIN, Number(e.target.value) || DISCARD_MIN)),
-                  })
-                }
+                value={room.discardLimit}
+                disabled={fieldsDisabled}
+                onChange={(e) => handleChangeDiscardLimit(Number(e.target.value) || DISCARD_MIN)}
               />
             </label>
             <label className="lobby__field lobby__field--checkbox">
               <input
                 type="checkbox"
-                checked={settingsDraft.turnTimerSeconds !== null}
-                onChange={(e) =>
-                  setSettingsDraft({
-                    ...settingsDraft,
-                    turnTimerSeconds: e.target.checked ? DEFAULT_TURN_TIMER_SECONDS_FALLBACK : null,
-                  })
-                }
+                checked={room.turnTimerSeconds !== null}
+                disabled={fieldsDisabled}
+                onChange={(e) => handleToggleTurnTimer(e.target.checked)}
               />
               <span>Turn timer</span>
             </label>
-            {settingsDraft.turnTimerSeconds !== null && (
+            {room.turnTimerSeconds !== null && (
               <label className="lobby__field">
-                <span>Seconds per turn ({TURN_TIMER_MIN}–{TURN_TIMER_MAX})</span>
+                <span>
+                  Seconds per turn ({TURN_TIMER_MIN}–{TURN_TIMER_MAX})
+                </span>
                 <input
                   type="number"
                   min={TURN_TIMER_MIN}
                   max={TURN_TIMER_MAX}
-                  value={settingsDraft.turnTimerSeconds}
-                  onChange={(e) =>
-                    setSettingsDraft({
-                      ...settingsDraft,
-                      turnTimerSeconds: Math.min(
-                        TURN_TIMER_MAX,
-                        Math.max(TURN_TIMER_MIN, Number(e.target.value) || TURN_TIMER_MIN),
-                      ),
-                    })
-                  }
+                  value={room.turnTimerSeconds}
+                  disabled={fieldsDisabled}
+                  onChange={(e) => handleChangeTurnTimerSeconds(Number(e.target.value) || TURN_TIMER_MIN)}
                 />
               </label>
             )}
-            <div className="lobby__settings-form-actions">
-              <button
-                type="button"
-                className="lobby__button"
-                onClick={() => {
-                  setEditingSettings(false);
-                  setSettingsDraft(null);
-                }}
-                disabled={busy}
-              >
-                Cancel
-              </button>
-              <button type="button" className="lobby__button lobby__button--primary" onClick={handleSaveSettings} disabled={busy}>
-                Save
-              </button>
-            </div>
           </div>
-        ) : (
-          <dl className="lobby__settings">
-            <div className="lobby__settings-row">
-              <dt>Map</dt>
-              <dd>
-                {preset?.name ?? room.mapPreset}
-                {preset && <div className="lobby__settings-desc">{preset.description}</div>}
-              </dd>
-            </div>
-            <div className="lobby__settings-row">
-              <dt>Victory points to win</dt>
-              <dd>{room.victoryPointsToWin}</dd>
-            </div>
-            <div className="lobby__settings-row">
-              <dt>Discard limit</dt>
-              <dd>{room.discardLimit}</dd>
-            </div>
-            <div className="lobby__settings-row">
-              <dt>Turn timer</dt>
-              <dd>{room.turnTimerSeconds ? `${room.turnTimerSeconds}s` : 'Off'}</dd>
-            </div>
-          </dl>
-        )}
+        </div>
       </div>
     </div>
   );
