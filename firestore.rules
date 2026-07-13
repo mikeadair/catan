@@ -121,5 +121,12 @@ service cloud.firestore {
       allow create: if isMember(roomId) && request.auth.uid == request.resource.data.uid;
       allow update, delete: if false;
     }
+
+    // Per-account preference doc (display name + preferred color), written once a guest
+    // upgrades to a real (email) account — see web/src/firebase/users.ts. Strictly own-doc
+    // only, both directions; nobody else may read or write another uid's preferences.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
   }
 }
