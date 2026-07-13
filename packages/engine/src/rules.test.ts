@@ -209,6 +209,20 @@ describe('dice roll and resource distribution', () => {
     expect(bundle.room.diceRoll![0] + bundle.room.diceRoll![1]).toBe(adjacentHex.number);
     expect(totalAfter).toBeGreaterThan(totalBefore);
     expect(bundle.room.phase).toBe('main');
+
+    const logMeta = bundle.room.log.at(-1)?.meta;
+    expect(logMeta).toMatchObject({ kind: 'diceRoll', roll: [d1, d2] });
+    expect(logMeta?.kind === 'diceRoll' && logMeta.gains?.[uid]).toBeTruthy();
+  });
+
+  it('logs a diceRoll entry with no gains field on a roll of 7 (no resources distributed)', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    mockDice(3, 4); // 7
+    bundle = applyAction(bundle, { type: 'rollDice', uid });
+    const logMeta = bundle.room.log.at(-1)?.meta;
+    expect(logMeta).toEqual({ kind: 'diceRoll', roll: [3, 4] });
   });
 
   it('computeRollGains previews exactly what applyAction actually grants', () => {
@@ -580,6 +594,13 @@ describe('trading', () => {
     expect(bundle.hands[other].resources.grain).toBe(1);
     expect(bundle.hands[other].resources.brick).toBe(1);
     expect(bundle.trades[0].status).toBe('accepted');
+    expect(bundle.room.log.at(-1)?.meta).toEqual({
+      kind: 'resourceTrade',
+      fromUid: uid,
+      toUid: other,
+      give: { brick: 1 },
+      receive: { grain: 1 },
+    });
   });
 
   it('rejects responding to your own trade', () => {
@@ -636,6 +657,13 @@ describe('trading', () => {
     expect(bundle.hands[uid].resources).toEqual({ brick: 1, lumber: 0, ore: 0, grain: 1, wool: 0 });
     expect(bundle.hands[otherB].resources).toEqual({ brick: 1, lumber: 0, ore: 0, grain: 1, wool: 0 });
     expect(bundle.hands[otherA].resources).toEqual({ brick: 0, lumber: 0, ore: 0, grain: 2, wool: 0 });
+    expect(bundle.room.log.at(-1)?.meta).toEqual({
+      kind: 'resourceTrade',
+      fromUid: uid,
+      toUid: otherB,
+      give: { brick: 1 },
+      receive: { grain: 1 },
+    });
   });
 
   it('rejects finalizeTrade from anyone but the proposer', () => {
@@ -707,6 +735,13 @@ describe('trading', () => {
     const after = applyAction(bundle, { type: 'bankTrade', uid, give: 'brick', giveAmount: rate, receive: 'ore' });
     expect(after.hands[uid].resources.brick).toBe(0);
     expect(after.hands[uid].resources.ore).toBe(1);
+    expect(after.room.log.at(-1)?.meta).toEqual({
+      kind: 'resourceTrade',
+      fromUid: uid,
+      toUid: null,
+      give: { brick: rate },
+      receive: { ore: 1 },
+    });
   });
 });
 
@@ -998,10 +1033,12 @@ describe('fog-of-war and gold hex', () => {
     expect(bundle.room.phase).toBe('goldPick'); // uidB still pending
     expect(bundle.hands[uidA].resources.ore).toBe(oreBeforeA + 1);
     expect(bundle.room.bank.ore).toBe(oreBefore - 1);
+    expect(bundle.room.log.at(-1)?.meta).toEqual({ kind: 'resourceGain', uid: uidA, resources: { ore: 1 } });
 
     bundle = applyAction(bundle, { type: 'pickGoldResources', uid: uidB, resources: ['brick', 'brick'] });
     expect(bundle.room.phase).toBe('main');
     expect(bundle.hands[uidB].resources.brick).toBe(brickBeforeB + 2);
+    expect(bundle.room.log.at(-1)?.meta).toEqual({ kind: 'resourceGain', uid: uidB, resources: { brick: 2 } });
   });
 
   it('rejects a gold pick with the wrong resource count', () => {

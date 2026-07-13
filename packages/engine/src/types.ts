@@ -140,7 +140,25 @@ export interface LogEntry {
   id: string;
   ts: number;
   message: string;
+  // Optional structured payload so the client can render small inline graphics (dice pips,
+  // mini resource-card icons) instead of parsing `message` text — fragile, and `message` is
+  // already generated server-side, so it's cheaper for the server to also emit structured
+  // data for the entry kinds worth illustrating. `message` remains the source of truth /
+  // fallback: entry kinds that don't bother with `meta`, and any log entries persisted
+  // before this field existed, are `meta`-less and must keep rendering fine from `message`
+  // alone (no migration needed).
+  //
+  // Only ever carries information that's already public in the physical game (dice rolls,
+  // bank/player trades, roll/Monopoly/Year-of-Plenty resource gains) — never anything meant
+  // to stay hidden, like which specific resource a robber steal yielded.
+  meta?: LogEntryMeta;
 }
+
+export type LogEntryMeta =
+  | { kind: 'diceRoll'; roll: [number, number]; gains?: Record<string, Partial<ResourceCount>> }
+  | { kind: 'resourceGain'; uid: string; resources: Partial<ResourceCount> }
+  // toUid: null = traded with the bank (no counterparty player).
+  | { kind: 'resourceTrade'; fromUid: string; toUid: string | null; give: Partial<ResourceCount>; receive: Partial<ResourceCount> };
 
 export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'countered' | 'expired';
 

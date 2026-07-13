@@ -533,7 +533,7 @@ export default function Game(): JSX.Element {
           largestArmyUid={room.largestArmyUid}
           ownHand={ownHand}
         />
-        <GameLog log={room.log} chat={chat} onSend={(text) => void sendChatMessage(text)} />
+        <GameLog log={room.log} chat={chat} players={players} onSend={(text) => void sendChatMessage(text)} />
       </aside>
 
       <footer className="game__toolbar">
