@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { TRADE_EXPIRY_MS, type GameAction, type TradeOffer } from '@catan/engine';
+import { DISCARD_TIMEOUT_SECONDS, TRADE_EXPIRY_MS, type GameAction, type TradeOffer } from '@catan/engine';
 import { devDeckRef, handRef, playerRef, roomRef, tradeRef } from './db';
 import { submitActionHandler, type SubmitActionRequest } from './submitAction';
 import { freshRoomId, seedPlayingRoom } from './testHelpers';
@@ -314,6 +314,70 @@ describe('submitActionHandler', () => {
       expect(handASnap.data()!.resources).toEqual({ brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 });
       expect(handBSnap.data()!.resources).toEqual({ brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 });
       expect(tradeSnap.data()!.status).toBe('accepted');
+    });
+  });
+
+  describe('timeoutDiscard', () => {
+    // Regression coverage: timeoutDiscard needs every pending discarder's hand loaded into
+    // the transaction (neededHandUidsFor), not just the reporting caller's — exercised
+    // against the real submitAction path so a gap there (like the finalizeTrade one above)
+    // would actually fail here instead of only in packages/engine's own fully-populated-bundle
+    // unit tests.
+    it('auto-discards down to the required count for every pending player once the timer has elapsed', async () => {
+      const bundle = await seedPlayingRoom(
+        roomId,
+        [
+          { uid: 'p0', displayName: 'Host', isBot: false },
+          { uid: 'p1', displayName: 'Two', isBot: false },
+          { uid: 'p2', displayName: 'Three', isBot: false },
+        ],
+        { phase: 'discard' },
+      );
+      const [uidA, uidB, uidC] = bundle.room.turnOrder;
+      await roomRef(roomId).set(
+        {
+          pendingDiscardUids: [uidB, uidC],
+          discardPhaseStartedAt: Date.now() - DISCARD_TIMEOUT_SECONDS * 1000 - 1000,
+        },
+        { merge: true },
+      );
+      await handRef(roomId, uidB).set({ resources: { brick: 3, lumber: 3, ore: 0, grain: 0, wool: 0 }, devCards: [] });
+      await handRef(roomId, uidC).set({ resources: { brick: 0, lumber: 0, ore: 4, grain: 4, wool: 0 }, devCards: [] });
+
+      const action: GameAction = { type: 'timeoutDiscard', uid: uidA };
+      const res = await submitActionHandler(fakeRequest({ roomId, action }, uidA));
+      expect(res).toEqual({ ok: true });
+
+      const [handBSnap, handCSnap, roomSnap] = await Promise.all([
+        handRef(roomId, uidB).get(),
+        handRef(roomId, uidC).get(),
+        roomRef(roomId).get(),
+      ]);
+      const total = (r: { brick: number; lumber: number; ore: number; grain: number; wool: number }) =>
+        r.brick + r.lumber + r.ore + r.grain + r.wool;
+      expect(total(handBSnap.data()!.resources)).toBe(3);
+      expect(total(handCSnap.data()!.resources)).toBe(4);
+      expect(roomSnap.data()!.phase).toBe('robber');
+      expect(roomSnap.data()!.pendingDiscardUids).toEqual([]);
+      expect(roomSnap.data()!.discardPhaseStartedAt).toBeNull();
+    });
+
+    it('rejects when the discard timer has not actually elapsed yet', async () => {
+      const bundle = await seedPlayingRoom(
+        roomId,
+        [
+          { uid: 'p0', displayName: 'Host', isBot: false },
+          { uid: 'p1', displayName: 'Two', isBot: false },
+        ],
+        { phase: 'discard' },
+      );
+      const [uidA, uidB] = bundle.room.turnOrder;
+      await roomRef(roomId).set(
+        { pendingDiscardUids: [uidB], discardPhaseStartedAt: Date.now() },
+        { merge: true },
+      );
+      const action: GameAction = { type: 'timeoutDiscard', uid: uidA };
+      await expectHttpsErrorCode(submitActionHandler(fakeRequest({ roomId, action }, uidA)), 'failed-precondition');
     });
   });
 });

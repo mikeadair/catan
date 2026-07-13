@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { computeRollGains, legalActionTypes, type GameStateBundle } from '@catan/engine';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '@catan/engine';
-import { MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES } from '@catan/engine';
+import { DISCARD_TIMEOUT_SECONDS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
@@ -254,6 +254,20 @@ export default function Game(): JSX.Element {
     }, remaining);
     return () => clearTimeout(timer);
   }, [room?.paused, room?.phase, room?.turnStartedAt, room?.turnTimerSeconds, uid, dispatchQuiet]);
+
+  // Discard-timer expiry auto-discards a random selection for every pending player at once
+  // (see 'timeoutDiscard' in rules.ts) — same "any connected client may report it, server
+  // re-validates elapsed time" pattern as the turn timer above, fixed at DISCARD_TIMEOUT_SECONDS
+  // rather than a configurable house rule.
+  useEffect(() => {
+    if (!room || !uid) return;
+    if (room.paused || room.phase !== 'discard' || room.discardPhaseStartedAt === null) return;
+    const remaining = Math.max(0, DISCARD_TIMEOUT_SECONDS * 1000 - (Date.now() - room.discardPhaseStartedAt));
+    const timer = setTimeout(() => {
+      void dispatchQuiet({ type: 'timeoutDiscard', uid });
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [room?.paused, room?.phase, room?.discardPhaseStartedAt, uid, dispatchQuiet]);
 
   if (!uid || !room) {
     return <div className="game-loading">Loading game…</div>;
@@ -669,6 +683,9 @@ export default function Game(): JSX.Element {
         visible={room.phase === 'discard' && room.pendingDiscardUids.includes(uid)}
         resources={resources}
         onDiscard={(discarded) => void runAction({ type: 'discard', uid, resources: discarded })}
+        discardPhaseStartedAt={room.discardPhaseStartedAt}
+        paused={room.paused}
+        pausedAt={room.pausedAt}
       />
 
       <GoldPickModal

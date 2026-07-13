@@ -9,11 +9,22 @@ export interface TurnTimerProps {
    * at exactly what it was the instant the game paused, instead of continuing to count
    * down a clock the server has actually stopped enforcing. */
   pausedAt: number | null;
+  /** Tooltip/aria label prefix — defaults to "Turn timer", but this same countdown display
+   * is reused for other server-enforced clocks (e.g. DiscardModal's discard timer). */
+  label?: string;
 }
 
-/** Turn timer — expiry is enforced server-side (see 'timeoutEndTurn' in rules.ts); this is
- * just the matching countdown display, frozen while the game is paused. */
-export default function TurnTimer({ turnStartedAt, turnTimerSeconds, paused, pausedAt }: TurnTimerProps): JSX.Element | null {
+/** Countdown display for a server-enforced clock (turn timer via 'timeoutEndTurn', discard
+ * timer via 'timeoutDiscard' — see rules.ts); frozen while the game is paused. Despite the
+ * prop names (kept from this component's original turn-timer-only use), it works for any
+ * "started at X, expires after N seconds" clock. */
+export default function TurnTimer({
+  turnStartedAt,
+  turnTimerSeconds,
+  paused,
+  pausedAt,
+  label = 'Turn timer',
+}: TurnTimerProps): JSX.Element | null {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -34,7 +45,7 @@ export default function TurnTimer({ turnStartedAt, turnTimerSeconds, paused, pau
   return (
     <div
       className={`turn-timer${low ? ' turn-timer--low' : ''}${paused ? ' turn-timer--paused' : ''}`}
-      title={paused ? 'Turn timer (paused)' : 'Turn timer'}
+      title={paused ? `${label} (paused)` : label}
     >
       {paused ? '⏸ ' : ''}
       {minutes}:{seconds.toString().padStart(2, '0')}

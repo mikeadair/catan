@@ -215,6 +215,10 @@ export interface RoomState {
   turnStartedAt: number;
   setupRound: 1 | 2 | null;
   pendingDiscardUids: string[]; // players who must discard on a 7
+  // Date.now() when the room entered the 'discard' phase; null whenever it isn't. Drives the
+  // fixed DISCARD_TIMEOUT_SECONDS countdown (see 'timeoutDiscard' in rules.ts) shared by every
+  // pending discarder, unlike the per-turn timer which only ever concerns one player at a time.
+  discardPhaseStartedAt: number | null;
   botActionClaim: { turnNumber: number; ts: number } | null;
   log: LogEntry[];
   createdAt: number;
@@ -262,6 +266,10 @@ export const DEFAULT_DISCARD_LIMIT = 7;
 export const DEFAULT_TURN_TIMER_SECONDS = 120;
 export const LONGEST_ROAD_MIN = 5;
 export const LARGEST_ARMY_MIN = 3;
+// Fixed (not a configurable house rule, unlike turnTimerSeconds) — every pending discarder
+// gets this long from the moment the room entered the 'discard' phase before 'timeoutDiscard'
+// may auto-discard a random selection on their behalf. See rules.ts.
+export const DISCARD_TIMEOUT_SECONDS = 30;
 
 // --- Game actions: the single vocabulary of legal moves, applied via game/rules.ts ---
 export type GameAction =
@@ -276,6 +284,11 @@ export type GameAction =
   | { type: 'playMonopoly'; uid: string; devCardId: string; resource: Resource }
   | { type: 'moveRobber'; uid: string; robberHexId: string; stealFromUid: string | null } // post-7 roll, no card
   | { type: 'discard'; uid: string; resources: Partial<ResourceCount> }
+  // Any room member may submit this once DISCARD_TIMEOUT_SECONDS has actually elapsed since
+  // room.discardPhaseStartedAt (re-validated server-side, never trusted from the client) —
+  // randomly discards down to the required count for every uid still in pendingDiscardUids,
+  // not just one, since a 7 roll can leave several players owing a discard simultaneously.
+  | { type: 'timeoutDiscard'; uid: string }
   // fog-of-war only: pays out a pending gold-hex pick (see pendingGoldPicks/'goldPick' phase).
   // resources.length must exactly match the owed amount; entries need not be distinct.
   | { type: 'pickGoldResources'; uid: string; resources: Resource[] }

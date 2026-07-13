@@ -27,6 +27,7 @@ import {
   DEFAULT_DISCARD_LIMIT,
   DEFAULT_TURN_TIMER_SECONDS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
+  DISCARD_TIMEOUT_SECONDS,
   LARGEST_ARMY_MIN,
   LONGEST_ROAD_MIN,
   MAX_CITIES,
@@ -99,6 +100,21 @@ function credit(target: ResourceCount, gain: Partial<ResourceCount>): void {
 
 function handSize(hand: PrivateHand): number {
   return RESOURCES.reduce((sum, r) => sum + hand.resources[r], 0);
+}
+
+/** Picks `required` cards to discard at random from `hand` (a genuine card-by-card shuffle,
+ * not a per-type weighting) — used by 'timeoutDiscard' for whichever players didn't discard
+ * themselves in time. Deliberately Math.random(), not the board's seeded RNG: this is a
+ * live, non-reproducible fallback, same as discoverHexesAtEdge's random number tokens. */
+function randomDiscardSelection(hand: PrivateHand, required: number): Partial<ResourceCount> {
+  const pool: Resource[] = [];
+  for (const r of RESOURCES) {
+    for (let i = 0; i < hand.resources[r]; i++) pool.push(r);
+  }
+  const picked = shuffle(pool, Math.random).slice(0, required);
+  const result: Partial<ResourceCount> = {};
+  for (const r of picked) result[r] = (result[r] ?? 0) + 1;
+  return result;
 }
 
 function addLog(room: RoomState, message: string, meta?: LogEntryMeta): void {
@@ -529,6 +545,7 @@ export function createGame(
     turnStartedAt: Date.now(),
     setupRound: 1,
     pendingDiscardUids: [],
+    discardPhaseStartedAt: null,
     botActionClaim: null,
     log: [],
     createdAt: Date.now(),
@@ -627,6 +644,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         const discardUids = room.turnOrder.filter((uid) => handSize(hands[uid]) > room.discardLimit);
         if (discardUids.length > 0) {
           room.pendingDiscardUids = discardUids;
+          room.discardPhaseStartedAt = Date.now();
           room.phase = 'discard';
         } else {
           room.phase = 'robber';
@@ -692,7 +710,32 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       addLog(room, `${players[action.uid].displayName} discarded ${required} cards.`);
       if (room.pendingDiscardUids.length === 0) {
         room.phase = 'robber';
+        room.discardPhaseStartedAt = null;
       }
+      break;
+    }
+
+    case 'timeoutDiscard': {
+      requirePhase(room, ['discard']);
+      if (room.discardPhaseStartedAt === null) throw new Error('No discard timer is running');
+      const elapsedMs = Date.now() - room.discardPhaseStartedAt;
+      if (elapsedMs < DISCARD_TIMEOUT_SECONDS * 1000) {
+        throw new Error('Discard timer has not expired yet');
+      }
+      // Auto-discards every player still owing one, not just one — a single 7 roll can leave
+      // several players simultaneously pending, and they all share the same discardPhaseStartedAt.
+      for (const discardUid of [...room.pendingDiscardUids]) {
+        const hand = requireHand(hands, discardUid);
+        const required = Math.floor(handSize(hand) / 2);
+        const picked = randomDiscardSelection(hand, required);
+        deduct(hand.resources, picked);
+        credit(room.bank, picked);
+        players[discardUid].resourceCount = handSize(hand);
+        addLog(room, `${players[discardUid].displayName}'s discard timed out — ${required} card${required === 1 ? '' : 's'} discarded at random.`);
+      }
+      room.pendingDiscardUids = [];
+      room.discardPhaseStartedAt = null;
+      room.phase = 'robber';
       break;
     }
 
@@ -1237,10 +1280,12 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (!room.paused) throw new Error('Game is not paused');
       if (!room.pauseVotes.includes(action.uid)) room.pauseVotes.push(action.uid);
       if (nonBotMajorityReached(room, players, room.pauseVotes)) {
-        // Shift turnStartedAt forward by however long the game sat paused, so the turn
-        // timer (and AFK auto-roll) resume with the same remaining time they had at pause.
+        // Shift turnStartedAt (and discardPhaseStartedAt, if a discard is pending) forward by
+        // however long the game sat paused, so the turn timer (and AFK auto-roll / auto-
+        // discard) resume with the same remaining time they had at pause.
         const pausedDurationMs = room.pausedAt !== null ? Date.now() - room.pausedAt : 0;
         room.turnStartedAt += pausedDurationMs;
+        if (room.discardPhaseStartedAt !== null) room.discardPhaseStartedAt += pausedDurationMs;
         room.paused = false;
         room.pausedAt = null;
         room.pauseVotes = [];
@@ -1360,6 +1405,12 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   if (room.phase === 'discard') {
     if (room.pendingDiscardUids.includes(uid)) types.push('discard');
+    if (
+      room.discardPhaseStartedAt !== null &&
+      Date.now() - room.discardPhaseStartedAt >= DISCARD_TIMEOUT_SECONDS * 1000
+    ) {
+      types.push('timeoutDiscard');
+    }
     return types;
   }
 

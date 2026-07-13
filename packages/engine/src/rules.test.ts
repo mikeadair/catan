@@ -3,7 +3,7 @@ import { applyAction, computeRollGains, createGame, legalActionTypes, recalcLarg
 import { initialFogRevealHexIds } from './board';
 import type { GameStateBundle } from './rules';
 import type { Board, Building, PrivateHand, PublicPlayer, VertexId } from './types';
-import { RESOURCES, TRADE_EXPIRY_MS } from './types';
+import { DISCARD_TIMEOUT_SECONDS, RESOURCES, TRADE_EXPIRY_MS } from './types';
 
 function makeGame(
   playerCount = 4,
@@ -280,6 +280,46 @@ describe('dice roll and resource distribution', () => {
     bundle = applyAction(bundle, { type: 'discard', uid: other, resources: { brick: 3 } });
     expect(handTotal(bundle.hands[other])).toBe(3);
     expect(bundle.room.phase).toBe('robber');
+    expect(bundle.room.discardPhaseStartedAt).toBeNull();
+  });
+
+  it('rejects timeoutDiscard before the discard timer has actually elapsed', () => {
+    let bundle = makeGame(2, { discardLimit: 5 });
+    bundle = driveSetup(bundle);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[other].resources = { brick: 3, lumber: 3, ore: 0, grain: 0, wool: 0 };
+    mockDice(3, 4);
+    bundle = applyAction(bundle, { type: 'rollDice', uid });
+    expect(bundle.room.phase).toBe('discard');
+
+    expect(() => applyAction(bundle, { type: 'timeoutDiscard', uid })).toThrow(/has not expired yet/i);
+    expect(legalActionTypes(bundle, uid)).not.toContain('timeoutDiscard');
+  });
+
+  it('timeoutDiscard randomly discards down to the required count for every pending player at once', () => {
+    let bundle = makeGame(3, { discardLimit: 5 });
+    bundle = driveSetup(bundle);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const [otherA, otherB] = bundle.room.turnOrder.filter((u) => u !== uid);
+    bundle.hands[otherA].resources = { brick: 3, lumber: 3, ore: 0, grain: 0, wool: 0 }; // 6 > 5
+    bundle.hands[otherB].resources = { brick: 0, lumber: 0, ore: 4, grain: 4, wool: 0 }; // 8 > 5
+
+    mockDice(3, 4);
+    bundle = applyAction(bundle, { type: 'rollDice', uid });
+    expect(bundle.room.phase).toBe('discard');
+    expect(new Set(bundle.room.pendingDiscardUids)).toEqual(new Set([otherA, otherB]));
+    expect(bundle.room.discardPhaseStartedAt).not.toBeNull();
+
+    bundle.room.discardPhaseStartedAt = Date.now() - DISCARD_TIMEOUT_SECONDS * 1000 - 1000;
+    bundle = applyAction(bundle, { type: 'timeoutDiscard', uid });
+
+    expect(bundle.room.phase).toBe('robber');
+    expect(bundle.room.pendingDiscardUids).toEqual([]);
+    expect(bundle.room.discardPhaseStartedAt).toBeNull();
+    expect(handTotal(bundle.hands[otherA])).toBe(3);
+    expect(handTotal(bundle.hands[otherB])).toBe(4);
+    expect(bundle.room.log.some((l) => l.message.includes('timed out'))).toBe(true);
   });
 
   it('does not distribute a resource the bank cannot fully cover', () => {

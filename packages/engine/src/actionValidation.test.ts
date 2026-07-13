@@ -16,6 +16,7 @@ describe('assertValidActionShape', () => {
       { type: 'playMonopoly', uid: 'p0', devCardId: 'c1', resource: 'ore' },
       { type: 'moveRobber', uid: 'p0', robberHexId: 'h1', stealFromUid: null },
       { type: 'discard', uid: 'p0', resources: { ore: 2 } },
+      { type: 'timeoutDiscard', uid: 'p0' },
       { type: 'bankTrade', uid: 'p0', give: 'ore', giveAmount: 4, receive: 'grain' },
       { type: 'proposeTrade', uid: 'p0', give: { ore: 1 }, receive: { grain: 1 }, targetUid: null },
       { type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: true },

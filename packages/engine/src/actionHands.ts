@@ -22,5 +22,11 @@ export function neededHandUidsFor(action: GameAction, turnOrder: string[]): Set<
   if (action.type === 'finalizeTrade') {
     uids.add(action.withUid);
   }
+  if (action.type === 'timeoutDiscard') {
+    // Auto-discards every player still in room.pendingDiscardUids, not just one — but that
+    // set isn't visible here (only the action + turnOrder are), so load everyone's hand,
+    // same precedent as rollDice above.
+    turnOrder.forEach((u) => uids.add(u));
+  }
   return uids;
 }
