@@ -21,10 +21,18 @@ export async function addBots(page: Page, count: number): Promise<void> {
   }
 }
 
-/** Starts the game from the Lobby and waits for the board to render. */
+/**
+ * Starts the game from the Lobby and waits for the board to render.
+ *
+ * Waits on `.game__board-area` rather than `.catan-board` — the Lobby's "Game settings"
+ * section embeds a live, read-only board preview (MapPreview) that also carries the
+ * `catan-board` class, so `.catan-board` alone can resolve before the game has actually
+ * started, leaving the test to proceed as if setup began when it's really still stuck
+ * showing the lobby (e.g. behind a slow/failed `startGame` call).
+ */
 export async function startGame(page: Page): Promise<void> {
   await page.click('button:has-text("Start game")');
-  await page.waitForSelector('.catan-board', { timeout: 20000 });
+  await page.waitForSelector('.game__board-area', { timeout: 20000 });
   await page.waitForTimeout(500); // let the first layout/paint settle
 }
 

@@ -5,7 +5,12 @@ const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: false, // each test creates real Firestore rooms; keep runs simple and sequential
+  fullyParallel: false, // each test creates Firestore rooms (against the emulator); keep runs simple and sequential
+  // Cross-project parallelism (the 3 viewport projects below) would otherwise still run
+  // concurrently against the single local Functions/Firestore emulator processes, causing
+  // real deadline-exceeded errors under contention (cold starts + concurrent submitAction
+  // calls from bots). Force everything onto one worker so the whole suite is sequential.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   timeout: 60_000,
@@ -34,5 +39,12 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
+    // Point the dev server Playwright spawns at the Firebase Local Emulator Suite (see
+    // web/src/firebase/config.ts) instead of the real `mikeadair-catan` project. `test:e2e`
+    // wraps this whole run in `firebase emulators:exec`, which must already be up by the
+    // time this env var takes effect.
+    env: {
+      VITE_USE_FIREBASE_EMULATOR: 'true',
+    },
   },
 });

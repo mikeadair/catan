@@ -9,8 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "pretest:e2e": "npm run build --prefix ../packages/engine && npm run build --prefix ../functions",
+    "test:e2e": "firebase emulators:exec --project mikeadair-catan --only auth,firestore,functions \"playwright test\"",
+    "test:e2e:ui": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore,functions \"playwright test --ui\""
   },
   "dependencies": {
     "@catan/engine": "*",

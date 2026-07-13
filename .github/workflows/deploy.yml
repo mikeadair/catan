@@ -84,3 +84,39 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-key.json
           npx firebase-tools deploy --only firestore:rules,firestore:indexes --project mikeadair-catan --non-interactive
           rm -f /tmp/gcp-key.json
+
+  # Regenerates web/e2e/screenshots/*.png (home, lobby, setup, mid-game) and commits them
+  # back to main. Deliberately NOT a dependency of `deploy` (and vice versa) — e2e/Firestore
+  # timing can be flaky, and a flaky screenshot run should never block a real deploy. Runs
+  # against the Firebase Local Emulator Suite (see web/src/firebase/config.ts), not the live
+  # mikeadair-catan project, so this never touches production data.
+  capture-screenshots:
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+
+      # No args — `npm run test:e2e`'s `firebase emulators:exec ... "playwright test"` swallows
+      # anything appended after `--` into the *outer* emulators:exec command, not the quoted
+      # inner playwright command, so `-- layout.spec.ts` silently does nothing. Harmless today
+      # (layout.spec.ts is the only spec file), but don't rely on it if a second file is added.
+      - run: npm run test:e2e
+        working-directory: web
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: regenerate e2e screenshots [skip ci]"
+          file_pattern: web/e2e/screenshots/*.png
