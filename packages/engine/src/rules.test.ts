@@ -3,7 +3,14 @@ import { applyAction, computeRollGains, createGame, legalActionTypes, recalcLarg
 import { initialFogRevealHexIds } from './board';
 import type { GameStateBundle } from './rules';
 import type { Board, Building, PrivateHand, PublicPlayer, VertexId } from './types';
-import { DISCARD_TIMEOUT_SECONDS, RESOURCES, TRADE_EXPIRY_MS } from './types';
+import {
+  DISCARD_TIMEOUT_SECONDS,
+  MIN_OPEN_TRADE_WINDOW_MS,
+  RESOURCES,
+  TRADE_EXPIRY_MS,
+  TRADE_TURN_EXTENSION_MS,
+  TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
+} from './types';
 
 function makeGame(
   playerCount = 4,
@@ -782,6 +789,185 @@ describe('trading', () => {
       give: { brick: rate },
       receive: { ore: 1 },
     });
+  });
+
+  it('auto-rejects (does not throw) a targeted trade the responder can no longer afford at accept time', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[other].resources = { brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+
+    // The responder spends the very resource being asked of them (e.g. on a build) before
+    // responding.
+    bundle.hands[other].resources.grain = 0;
+
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true });
+    expect(bundle.trades[0].status).toBe('rejected');
+    // No resources moved.
+    expect(bundle.hands[uid].resources.brick).toBe(1);
+    expect(bundle.hands[other].resources.grain).toBe(0);
+    expect(bundle.room.log.at(-1)?.message).toMatch(/automatically rejected/i);
+  });
+
+  it('auto-rejects (does not throw) a targeted trade the proposer can no longer afford at accept time', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[other].resources = { brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+
+    // The proposer spends the resource they offered before the responder answers.
+    bundle.hands[uid].resources.brick = 0;
+
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true });
+    expect(bundle.trades[0].status).toBe('rejected');
+    expect(bundle.hands[other].resources.grain).toBe(1);
+  });
+
+  it('finalizeTrade drops a stale interested player who can no longer afford it, without throwing, and leaves the trade open', () => {
+    let bundle = makeGame(3);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const [otherA, otherB] = bundle.room.turnOrder.filter((u) => u !== uid);
+    bundle.hands[uid].resources = { brick: 2, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[otherA].resources = { brick: 0, lumber: 0, ore: 0, grain: 2, wool: 0 };
+    bundle.hands[otherB].resources = { brick: 0, lumber: 0, ore: 0, grain: 2, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    const tradeId = bundle.trades[0].id;
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: otherA, tradeId, accept: true });
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: otherB, tradeId, accept: true });
+
+    // otherB spends their grain in the interim (e.g. on a build).
+    bundle.hands[otherB].resources.grain = 0;
+
+    bundle = applyAction(bundle, { type: 'finalizeTrade', uid, tradeId, withUid: otherB });
+    expect(bundle.trades[0].status).toBe('pending');
+    expect(bundle.trades[0].interestedUids).toEqual([otherA]);
+    // No swap happened with otherB.
+    expect(bundle.hands[uid].resources.brick).toBe(2);
+  });
+
+  it('finalizeTrade auto-rejects the whole trade if the proposer can no longer afford it, without throwing', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[other].resources = { brick: 0, lumber: 0, ore: 0, grain: 1, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    const tradeId = bundle.trades[0].id;
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true });
+
+    bundle.hands[uid].resources.brick = 0;
+
+    bundle = applyAction(bundle, { type: 'finalizeTrade', uid, tradeId, withUid: other });
+    expect(bundle.trades[0].status).toBe('rejected');
+    expect(bundle.trades[0].interestedUids).toEqual([]);
+  });
+});
+
+describe('trade-driven turn timer extension', () => {
+  it('extends turnStartedAt by TRADE_TURN_EXTENSION_MS when a trade is proposed', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 100 });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 5, lumber: 5, ore: 0, grain: 0, wool: 0 };
+    const startedAt = bundle.room.turnStartedAt;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+
+    expect(bundle.room.turnStartedAt).toBe(startedAt + TRADE_TURN_EXTENSION_MS);
+    expect(bundle.room.turnTimerExtensionMs).toBe(TRADE_TURN_EXTENSION_MS);
+  });
+
+  it('caps cumulative extension at TURN_TIMER_EXTENSION_CAP_MULTIPLIER x the initial turnTimerSeconds', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 100 }); // max extension = 50_000ms
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 5, lumber: 5, ore: 0, grain: 0, wool: 0 };
+    const startedAt = bundle.room.turnStartedAt;
+    const maxExtensionMs = 100 * 1000 * (TURN_TIMER_EXTENSION_CAP_MULTIPLIER - 1);
+
+    // First proposal: full 30s extension.
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    expect(bundle.room.turnTimerExtensionMs).toBe(TRADE_TURN_EXTENSION_MS);
+
+    // Second proposal: only the remaining budget (20s) is granted, not the full 30s.
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { lumber: 1 }, receive: { grain: 1 }, targetUid: null });
+    expect(bundle.room.turnTimerExtensionMs).toBe(maxExtensionMs);
+    expect(bundle.room.turnStartedAt).toBe(startedAt + maxExtensionMs);
+
+    // Third proposal: budget is exhausted, no further extension.
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    expect(bundle.room.turnTimerExtensionMs).toBe(maxExtensionMs);
+    expect(bundle.room.turnStartedAt).toBe(startedAt + maxExtensionMs);
+  });
+
+  it('does not extend the timer when turnTimerSeconds is disabled (null)', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: null });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    const startedAt = bundle.room.turnStartedAt;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+
+    expect(bundle.room.turnStartedAt).toBe(startedAt);
+  });
+
+  it('resets the extension budget for the next player once the turn ends', () => {
+    let bundle = makeGame(2, { turnTimerSeconds: 100 });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    expect(bundle.room.turnTimerExtensionMs).toBe(TRADE_TURN_EXTENSION_MS);
+
+    bundle = applyAction(bundle, { type: 'endTurn', uid });
+    expect(bundle.room.turnTimerExtensionMs).toBe(0);
+  });
+});
+
+describe('trade expiry window', () => {
+  it('guarantees at least MIN_OPEN_TRADE_WINDOW_MS before TRADE_EXPIRY_MS can end an open trade', () => {
+    // Encodes the invariant itself (asserted at module load in types.ts) as a regular test
+    // too, so a future accidental shrink of TRADE_EXPIRY_MS shows up in a normal test failure,
+    // not just a thrown-at-import error that's easy to misattribute.
+    expect(TRADE_EXPIRY_MS).toBeGreaterThanOrEqual(MIN_OPEN_TRADE_WINDOW_MS);
+  });
+
+  it('does not expire an open trade before MIN_OPEN_TRADE_WINDOW_MS has elapsed', () => {
+    let bundle = makeGame(3);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    bundle.trades[0].createdAt = Date.now() - MIN_OPEN_TRADE_WINDOW_MS + 1000; // just under the floor
+
+    expect(() => applyAction(bundle, { type: 'expireTrades', uid: other })).toThrow(/have expired/i);
   });
 });
 

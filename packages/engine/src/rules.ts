@@ -38,6 +38,8 @@ import {
   STARTING_BANK,
   TERRAIN_RESOURCE,
   TRADE_EXPIRY_MS,
+  TRADE_TURN_EXTENSION_MS,
+  TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
 } from './types';
 import { generateBoard, initialFogRevealHexIds } from './board';
 import { createRng, shuffle } from './rng';
@@ -149,6 +151,26 @@ function requirePhase(room: RoomState, phases: RoomState['phase'][]): void {
   if (!phases.includes(room.phase)) {
     throw new Error(`Illegal action during phase '${room.phase}'`);
   }
+}
+
+/**
+ * Every proposeTrade (player- or bot-initiated) pushes the current turn's deadline back by
+ * TRADE_TURN_EXTENSION_MS, so an active negotiation isn't cut off by the turn timer mid-
+ * conversation. Mirrors voteToUnpause's turnStartedAt-shifting pattern (shifting the start
+ * time forward has the same effect as extending the deadline, without touching
+ * turnTimerSeconds itself), but tracks cumulative extension via turnTimerExtensionMs so
+ * repeated proposals in one turn can't push the effective deadline past
+ * TURN_TIMER_EXTENSION_CAP_MULTIPLIER x the room's initial turnTimerSeconds. No-op when the
+ * turn timer is disabled (turnTimerSeconds === null).
+ */
+function extendTurnTimerForTrade(room: RoomState): void {
+  if (room.turnTimerSeconds === null) return;
+  const maxExtensionMs = room.turnTimerSeconds * 1000 * (TURN_TIMER_EXTENSION_CAP_MULTIPLIER - 1);
+  const alreadyExtendedMs = room.turnTimerExtensionMs ?? 0;
+  const extension = Math.min(TRADE_TURN_EXTENSION_MS, Math.max(0, maxExtensionMs - alreadyExtendedMs));
+  if (extension <= 0) return;
+  room.turnStartedAt += extension;
+  room.turnTimerExtensionMs = alreadyExtendedMs + extension;
 }
 
 /** "At least half" of non-bot seats — bots never vote and are excluded from the denominator. */
@@ -543,6 +565,7 @@ export function createGame(
     winnerUid: null,
     turnNumber: 0,
     turnStartedAt: Date.now(),
+    turnTimerExtensionMs: 0,
     setupRound: 1,
     pendingDiscardUids: [],
     discardPhaseStartedAt: null,
@@ -1093,6 +1116,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         interestedUids: [],
       };
       trades.push(offer);
+      extendTurnTimerForTrade(room);
       addLog(room, `${players[action.uid].displayName} proposed a trade.`);
       break;
     }
@@ -1132,11 +1156,22 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       }
       const proposerHand = requireHand(hands, trade.proposerUid);
       const responderHand = requireHand(hands, action.uid);
+      // Either side's hand may have changed since the trade was proposed (e.g. a build spent
+      // the very resources being offered/asked for) — auto-reject rather than throwing, since
+      // from the accepting player's perspective this is a normal, recoverable outcome to
+      // surface as "the trade fell through," not a client bug.
       if (!canAfford(proposerHand.resources, trade.give)) {
-        throw new Error('Proposer can no longer afford this trade');
+        trade.status = 'rejected';
+        addLog(
+          room,
+          `${players[trade.proposerUid].displayName} could no longer afford their own trade offer, so it was automatically rejected.`,
+        );
+        break;
       }
       if (!canAfford(responderHand.resources, trade.receive)) {
-        throw new Error('You cannot afford this trade');
+        trade.status = 'rejected';
+        addLog(room, `${players[action.uid].displayName} could no longer afford this trade, so it was automatically rejected.`);
+        break;
       }
       deduct(proposerHand.resources, trade.give);
       credit(proposerHand.resources, trade.receive);
@@ -1168,10 +1203,26 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       const proposerHand = requireHand(hands, action.uid);
       const responderHand = requireHand(hands, action.withUid);
       if (!canAfford(proposerHand.resources, trade.give)) {
-        throw new Error('You can no longer afford this trade');
+        // The proposer spent the offered resources elsewhere since proposing — the trade can
+        // no longer complete with anyone, so auto-reject it outright rather than erroring.
+        trade.status = 'rejected';
+        trade.interestedUids = [];
+        addLog(
+          room,
+          `${players[action.uid].displayName} could no longer afford their own trade offer, so it was automatically rejected.`,
+        );
+        break;
       }
       if (!canAfford(responderHand.resources, trade.receive)) {
-        throw new Error(`${players[action.withUid].displayName} can no longer afford this trade`);
+        // Only this specific interested player can no longer afford it — drop their now-stale
+        // interest and leave the trade pending so the proposer can pick someone else, rather
+        // than erroring the whole finalize attempt.
+        trade.interestedUids = trade.interestedUids.filter((u) => u !== action.withUid);
+        addLog(
+          room,
+          `${players[action.withUid].displayName} could no longer afford this trade; the offer remains open to other interested players.`,
+        );
+        break;
       }
       deduct(proposerHand.resources, trade.give);
       credit(proposerHand.resources, trade.receive);
@@ -1214,6 +1265,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
       room.turnStartedAt = Date.now();
+      room.turnTimerExtensionMs = 0;
       addLog(room, `${players[action.uid].displayName} ended their turn.`);
       break;
     }
@@ -1239,6 +1291,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
       room.turnStartedAt = Date.now();
+      room.turnTimerExtensionMs = 0;
       addLog(room, `${players[timedOutUid].displayName}'s turn timed out.`);
       break;
     }
@@ -1367,6 +1420,7 @@ function advanceSetupTurn(room: RoomState): void {
       room.setupRound = null;
       room.turnNumber = 1;
       room.turnStartedAt = Date.now();
+      room.turnTimerExtensionMs = 0;
       room.devCardPlayedThisTurn = false;
       addLog(room, 'Setup complete.');
     } else {

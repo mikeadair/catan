@@ -394,7 +394,7 @@ function decideBankTrade(bundle: GameStateBundle, botUid: string): GameAction | 
  */
 function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
   if (difficulty === 'easy') return null;
-  const { hands, trades } = bundle;
+  const { room, hands, trades } = bundle;
   const hand = hands[botUid].resources;
   if (trades.some((t) => t.proposerUid === botUid && t.status === 'pending')) return null;
 
@@ -403,6 +403,11 @@ function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: 
     const deficits = resourceDeficits(hand, cost);
     const missingTypes = RESOURCES.filter((r) => deficits[r]);
     if (missingTypes.length === 0 || missingTypes.length > maxGapTypes) continue;
+    // Same bank-availability check decideBankTrade applies before treating a resource as a
+    // genuine need: don't ask another player for something the shared bank pool is fully out
+    // of. (Only the bank matters here, not other players' hands — a resource other players
+    // may still be holding is always a fine thing to ask for.)
+    if (missingTypes.some((r) => room.bank[r] <= 0)) continue;
 
     let remaining = missingTypes.reduce((s, r) => s + (deficits[r] ?? 0), 0);
     const give: Partial<ResourceCount> = {};

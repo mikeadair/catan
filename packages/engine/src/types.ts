@@ -168,6 +168,17 @@ export type TradeStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'c
 // there's otherwise no other TTL on a trade beyond the proposer's own next endTurn/timeout.
 export const TRADE_EXPIRY_MS = 90_000;
 
+// Floor on the above: an open (targetUid === null) trade must remain answerable for at least
+// this long, independent of how quickly bots resolve any *targeted* trade aimed at them (see
+// BOT_TRADE_RESPONSE_DELAY_*_MS in web/src/state/store.ts, which can fire in as little as
+// ~1s). A bot settling its own targeted trade fast must never shrink the window other human
+// players get to act on a separate open offer. Asserted below rather than just documented, so
+// a future change to TRADE_EXPIRY_MS can't silently violate it.
+export const MIN_OPEN_TRADE_WINDOW_MS = 15_000;
+if (TRADE_EXPIRY_MS < MIN_OPEN_TRADE_WINDOW_MS) {
+  throw new Error('TRADE_EXPIRY_MS must be at least MIN_OPEN_TRADE_WINDOW_MS');
+}
+
 export interface TradeOffer {
   id: string;
   proposerUid: string;
@@ -247,6 +258,11 @@ export interface RoomState {
   // Added by game/rules.ts (additive, optional so other constructors aren't broken):
   devCardPlayedThisTurn?: boolean; // at most one dev card may be played per turn
   lastSetupSettlementVertexId?: VertexId | null; // anchors the free setup road to the settlement just placed
+  // Total extension (ms) already granted to the current turn via proposeTrade (see
+  // extendTurnTimerForTrade in rules.ts) — tracked so repeated trade proposals in the same
+  // turn can't push the effective deadline past TURN_TIMER_EXTENSION_CAP_MULTIPLIER x the
+  // room's initial turnTimerSeconds. Reset to 0 whenever turnStartedAt resets for a new turn.
+  turnTimerExtensionMs?: number;
 }
 
 export const BUILD_COSTS: Record<'road' | 'settlement' | 'city' | 'devCard', Partial<ResourceCount>> = {
@@ -264,6 +280,13 @@ export const MAX_CITIES = 4;
 export const DEFAULT_VICTORY_POINTS_TO_WIN = 10;
 export const DEFAULT_DISCARD_LIMIT = 7;
 export const DEFAULT_TURN_TIMER_SECONDS = 120;
+// Every proposeTrade (player- or bot-initiated) pushes the current turn's deadline back by
+// this much — see extendTurnTimerForTrade in rules.ts — so an active trade negotiation isn't
+// cut off by the turn timer mid-conversation.
+export const TRADE_TURN_EXTENSION_MS = 30_000;
+// Cumulative trade-driven extensions within a single turn are capped so the effective
+// deadline never exceeds this multiple of the room's initial turnTimerSeconds.
+export const TURN_TIMER_EXTENSION_CAP_MULTIPLIER = 1.5;
 export const LONGEST_ROAD_MIN = 5;
 export const LARGEST_ARMY_MIN = 3;
 // Fixed (not a configurable house rule, unlike turnTimerSeconds) — every pending discarder

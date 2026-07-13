@@ -121,6 +121,21 @@ describe('decideBotAction: bank/player trading', () => {
     }
   });
 
+  it('does not propose a player trade for a resource the bank has none of left', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    // Same setup as the passing case above (bot is one wool short of a settlement), except the
+    // bank pool is fully depleted of wool — the bot should neither propose a player trade nor
+    // fall back to a bank trade for it, since both require room.bank[need] > 0.
+    bundle.room.bank.wool = 0;
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('endTurn');
+  });
+
   it('easy bot does not propose a trade (or bank-trade) in the same situation, and just ends its turn', () => {
     const { bundle, botUid } = makeMainPhaseGame(
       'easy',
