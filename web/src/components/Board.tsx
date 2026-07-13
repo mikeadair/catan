@@ -4,25 +4,11 @@ import { TERRAIN_RESOURCE } from '@catan/engine';
 import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { RESOURCE_ICON } from './resourceIcons';
-import hillsIcon from '../assets/terrain/hills.png';
-import forestIcon from '../assets/terrain/forest.png';
-import mountainsIcon from '../assets/terrain/mountains.png';
-import fieldsIcon from '../assets/terrain/fields.png';
-import pastureIcon from '../assets/terrain/pasture.png';
 import desertIcon from '../assets/terrain/desert.png';
 import robberIcon from '../assets/terrain/robber.png';
 import './Board.css';
 
 const SIZE = 56;
-
-const TERRAIN_ICON: Record<Exclude<Terrain, 'gold'>, string> = {
-  hills: hillsIcon,
-  forest: forestIcon,
-  mountains: mountainsIcon,
-  fields: fieldsIcon,
-  pasture: pastureIcon,
-  desert: desertIcon,
-};
 
 const DESERT_COLOR = '#c9b57a';
 const GOLD_COLOR = '#d9b64e';
@@ -56,6 +42,14 @@ function hexCornerPoints(center: { x: number; y: number }, size: number): { x: n
     pts.push({ x: center.x + size * Math.cos(angleRad), y: center.y + size * Math.sin(angleRad) });
   }
   return pts;
+}
+
+/** x-offsets (in dot-spacing units) for a row of `count` evenly-spaced pip dots, centered on
+ * 0 — used for the number-token probability pips (1-5 dots depending on the roll). */
+function pipDotOffsets(count: number): number[] {
+  const offsets: number[] = [];
+  for (let i = 0; i < count; i++) offsets.push(i - (count - 1) / 2);
+  return offsets;
 }
 
 /** Path for a simple house pictogram (roof + walls, roof peak up), centered on its own
@@ -358,13 +352,17 @@ export default function BoardView({
         // the number — desert/gold/fog have no number token (fog's is simply unknown yet),
         // so their icon/glyph can stay centered and a bit larger.
         const centeredIcon = isDesert || isGold || isFogged;
-        const iconSize = centeredIcon ? SIZE * 1.05 : SIZE * 0.62;
-        const iconCenterY = centeredIcon ? center.y : center.y + SIZE * 0.54;
+        // The card-style resource art (RESOURCE_ICON, shared with the hand/bank/trade UI) has
+        // a lot more transparent padding baked into the source PNG than the old terrain badge
+        // art did, so it needs a noticeably larger box to read at the same visual size — the
+        // desert's own dedicated icon keeps the old centered sizing.
+        const iconSize = centeredIcon ? SIZE * 1.05 : SIZE * 0.98;
+        const iconCenterY = centeredIcon ? center.y : center.y + SIZE * 0.5;
         return (
           <g key={hex.id}>
             <polygon points={points} fill={fill} stroke="var(--color-ocean-deep)" strokeWidth={2} />
             {!centeredIcon && (
-              <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.56} fill="rgba(0,0,0,0.16)" />
+              <circle cx={center.x} cy={iconCenterY} r={iconSize * 0.36} fill="rgba(0,0,0,0.16)" />
             )}
             {isFogged ? (
               <text
@@ -382,9 +380,22 @@ export default function BoardView({
               <text x={center.x} y={iconCenterY + 12} textAnchor="middle" fontSize={34} style={{ pointerEvents: 'none' }}>
                 ✨
               </text>
-            ) : (
+            ) : isDesert ? (
               <image
-                href={TERRAIN_ICON[hex.terrain as Exclude<Terrain, 'gold'>]}
+                href={desertIcon}
+                x={center.x - iconSize / 2}
+                y={iconCenterY - iconSize / 2}
+                width={iconSize}
+                height={iconSize}
+                style={{ pointerEvents: 'none' }}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            ) : (
+              // Card-style resource icon (shared with the hand/bank/trade UI) instead of the
+              // old terrain-specific badge art, so the same visual language is used everywhere
+              // a resource is depicted.
+              <image
+                href={RESOURCE_ICON[TERRAIN_RESOURCE[hex.terrain as Exclude<Terrain, 'desert' | 'gold'>]]}
                 x={center.x - iconSize / 2}
                 y={iconCenterY - iconSize / 2}
                 width={iconSize}
@@ -406,9 +417,17 @@ export default function BoardView({
                 >
                   {hex.number}
                 </text>
-                <text x={center.x} y={center.y + 16} textAnchor="middle" fontSize={7} letterSpacing={1} fill="#6b5b3a">
-                  {'•'.repeat(pipCount(hex.number))}
-                </text>
+                {/* Probability pips as real dots rather than a tiny bullet-character string —
+                    reads more clearly at a glance, especially for the 4-5 pip hot numbers. */}
+                {pipDotOffsets(pipCount(hex.number)).map((offset, i) => (
+                  <circle
+                    key={i}
+                    cx={center.x + offset * 4.6}
+                    cy={center.y + 14}
+                    r={1.8}
+                    fill={isHotHex ? '#c0392b' : '#6b5b3a'}
+                  />
+                ))}
               </g>
             )}
             {hex.id === board.robberHexId && (
@@ -476,6 +495,11 @@ export default function BoardView({
           (--resource-lumber, also #2f7a3d) and disappears entirely against it. */}
       {Object.entries(room.edges).map(([edgeId, ownerUid]) => {
         const edgeInfo = board.edges[edgeId];
+        // Defensive only: `room.board` is set once by createGame and never reassigned/
+        // regenerated for a live room (verified — no rematch/board-regen code path exists,
+        // and buildRoad/playRoadBuilding in rules.ts both validate action.edgeId against
+        // board.edges before ever writing room.edges[edgeId]), so this should be unreachable
+        // in practice. Left in rather than removed in case that invariant ever changes.
         if (!edgeInfo) return null;
         const [a, b] = edgeInfo.vertexIds;
         const pa = vertexPixel(a, board, SIZE);
@@ -485,6 +509,27 @@ export default function BoardView({
           <g key={edgeId} filter="url(#piece-shadow)">
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={5} strokeLinecap="round" />
+          </g>
+        );
+      })}
+
+      {/* Road Building preview: edges picked-but-not-yet-dispatched (the first of the two
+          edges the card grants, stashed in Game.tsx's local state and passed down as
+          extraOwnedEdgeIds) don't exist in room.edges yet — nothing above would render them —
+          so render them here as a same-style-as-committed, own-color preview. This mirrors the
+          armed-candidate preview pattern below (own color, not yet server-confirmed) rather
+          than leaving the first pick invisible until the second edge is also chosen. */}
+      {extraOwnedEdgeIds?.map((edgeId) => {
+        if (room.edges[edgeId]) return null; // already committed/rendered above
+        const edgeInfo = board.edges[edgeId];
+        if (!edgeInfo) return null;
+        const [a, b] = edgeInfo.vertexIds;
+        const pa = vertexPixel(a, board, SIZE);
+        const pb = vertexPixel(b, board, SIZE);
+        return (
+          <g key={`pending-${edgeId}`} filter="url(#piece-shadow)" opacity={0.85}>
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={ownColor} strokeWidth={5} strokeLinecap="round" />
           </g>
         );
       })}
