@@ -495,6 +495,11 @@ export default function BoardView({
           (--resource-lumber, also #2f7a3d) and disappears entirely against it. */}
       {Object.entries(room.edges).map(([edgeId, ownerUid]) => {
         const edgeInfo = board.edges[edgeId];
+        // Defensive only: `room.board` is set once by createGame and never reassigned/
+        // regenerated for a live room (verified — no rematch/board-regen code path exists,
+        // and buildRoad/playRoadBuilding in rules.ts both validate action.edgeId against
+        // board.edges before ever writing room.edges[edgeId]), so this should be unreachable
+        // in practice. Left in rather than removed in case that invariant ever changes.
         if (!edgeInfo) return null;
         const [a, b] = edgeInfo.vertexIds;
         const pa = vertexPixel(a, board, SIZE);
@@ -504,6 +509,27 @@ export default function BoardView({
           <g key={edgeId} filter="url(#piece-shadow)">
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={5} strokeLinecap="round" />
+          </g>
+        );
+      })}
+
+      {/* Road Building preview: edges picked-but-not-yet-dispatched (the first of the two
+          edges the card grants, stashed in Game.tsx's local state and passed down as
+          extraOwnedEdgeIds) don't exist in room.edges yet — nothing above would render them —
+          so render them here as a same-style-as-committed, own-color preview. This mirrors the
+          armed-candidate preview pattern below (own color, not yet server-confirmed) rather
+          than leaving the first pick invisible until the second edge is also chosen. */}
+      {extraOwnedEdgeIds?.map((edgeId) => {
+        if (room.edges[edgeId]) return null; // already committed/rendered above
+        const edgeInfo = board.edges[edgeId];
+        if (!edgeInfo) return null;
+        const [a, b] = edgeInfo.vertexIds;
+        const pa = vertexPixel(a, board, SIZE);
+        const pb = vertexPixel(b, board, SIZE);
+        return (
+          <g key={`pending-${edgeId}`} filter="url(#piece-shadow)" opacity={0.85}>
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
+            <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={ownColor} strokeWidth={5} strokeLinecap="round" />
           </g>
         );
       })}
