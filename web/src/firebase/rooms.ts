@@ -301,6 +301,41 @@ export async function addBot(roomId: string, difficulty: BotDifficulty): Promise
   });
 }
 
+/**
+ * Lets a seated player pick their own color while the room is still in lobby (already
+ * permitted by firestore.rules: a self-write to your own player doc during 'lobby' has no
+ * field restriction, same as any other lobby seat edit). Best-effort uniqueness check
+ * against currently-seated players' colors — like the rest of the lobby, this is the
+ * accepted client-authoritative trade-off (cosmetic-only stakes), not a transaction; a rare
+ * simultaneous pick by two players just means one of them has to try again.
+ */
+export async function updatePlayerColor(roomId: string, uid: string, color: PlayerColor): Promise<void> {
+  const playersSnap = await getDocs(collection(db, 'rooms', roomId, 'players'));
+  const taken = new Set<PlayerColor>();
+  playersSnap.forEach((d) => {
+    const p = d.data() as PublicPlayer;
+    if (p.uid !== uid) taken.add(p.color);
+  });
+  if (taken.has(color)) {
+    throw new Error('That color is already taken');
+  }
+  await updateDoc(playerRef(roomId, uid), { color });
+}
+
+export interface RoomSettingsUpdate {
+  mapPreset?: MapPresetId;
+  victoryPointsToWin?: number;
+  discardLimit?: number;
+  turnTimerSeconds?: number | null;
+}
+
+/** Host-only (enforced in the UI, same pattern as addBot/startGame — the underlying
+ * firestore.rules room-update rule already allows any seated member to update the room doc
+ * during lobby, same as it always has for turnOrder edits). */
+export async function updateRoomSettings(roomId: string, updates: RoomSettingsUpdate): Promise<void> {
+  await updateDoc(roomRef(roomId), { ...updates });
+}
+
 export async function removeSeat(roomId: string, uid: string): Promise<void> {
   const roomSnap = await getDoc(roomRef(roomId));
   if (!roomSnap.exists()) {

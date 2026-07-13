@@ -1,0 +1,55 @@
+// A small, non-interactive board rendering for the lobby's map picker — illustrative only
+// (a fixed preview seed, not the real game's board, which is generated fresh server-side by
+// startGame). Reuses the real Board component so the preview always matches what actually
+// renders in-game.
+import { useMemo, type JSX } from 'react';
+import { generateBoard, type MapPresetId, type RoomState } from '@catan/engine';
+import Board from './Board';
+import './MapPreview.css';
+
+export interface MapPreviewProps {
+  mapPreset: MapPresetId;
+}
+
+export default function MapPreview({ mapPreset }: MapPreviewProps): JSX.Element {
+  const room = useMemo<RoomState>(() => {
+    const board = generateBoard(mapPreset, `lobby-preview:${mapPreset}`);
+    return {
+      id: 'preview',
+      code: '',
+      hostUid: '',
+      status: 'lobby',
+      mapPreset,
+      seed: '',
+      board,
+      vertices: {},
+      edges: {},
+      turnOrder: [],
+      currentPlayerIndex: 0,
+      phase: 'lobby',
+      diceRoll: null,
+      devCardDeck: [],
+      devCardDeckCount: 0,
+      bank: { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 },
+      longestRoadUid: null,
+      largestArmyUid: null,
+      winnerUid: null,
+      turnNumber: 0,
+      turnStartedAt: 0,
+      setupRound: null,
+      pendingDiscardUids: [],
+      botActionClaim: null,
+      log: [],
+      createdAt: 0,
+      victoryPointsToWin: 10,
+      discardLimit: 7,
+      turnTimerSeconds: null,
+    };
+  }, [mapPreset]);
+
+  return (
+    <div className="map-preview">
+      <Board room={room} players={{}} uid={null} interactionMode="none" />
+    </div>
+  );
+}
