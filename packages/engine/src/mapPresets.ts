@@ -25,6 +25,6 @@ export const MAP_PRESETS: MapPreset[] = [
     id: 'fog-of-war',
     name: 'Fog of War',
     description:
-      'Only the 6 corner tiles, the desert, and a gold tile are known at the start — the rest reveal (with a freshly random number) as your roads reach them, granting a resource on discovery. The gold tile lets whoever rolls it pick their own resource, but can\'t be settled on at setup.',
+      'Only the outer ring is known at the start, plus a gold tile at the very center — the hidden inner ring reveals (with a freshly random number) as your roads reach it, granting a resource on discovery. The gold tile lets whoever rolls it pick their own resource, but can\'t be settled on at setup.',
   },
 ];

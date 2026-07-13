@@ -366,32 +366,15 @@ function hexCubeRadius(c: AxialCoord): number {
   return Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
 }
 
-/** The 6 hexes at a hex-hexagon's true geometric corners — where two of the three cube
- * coordinates simultaneously hit the board's outer radius. Used by the fog-of-war preset to
- * decide which hexes are revealed from the start ("the corners having a 6 tile area", read
- * as the 6 corner tiles of the hex-hexagon, one per corner). */
-function cornerHexIds(hexes: HexTile[]): Set<string> {
-  const radius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
-  const corners = new Set<string>();
-  for (const h of hexes) {
-    const x = h.coord.q;
-    const z = h.coord.r;
-    const y = -x - z;
-    const atRadius = [Math.abs(x), Math.abs(y), Math.abs(z)].filter((v) => v === radius).length;
-    if (atRadius >= 2) corners.add(h.id);
-  }
-  return corners;
-}
-
-/** Hex ids revealed from the start of a fog-of-war game: the 6 corner hexes, the desert,
- * and the gold hex (always known/plannable-around, never hidden) — everything else starts
- * hidden until a road reaches it (see 'buildRoad' in rules.ts). */
+/** Hex ids revealed from the start of a fog-of-war game: the entire outer ring (the board's
+ * perimeter, where initial settlements go — same as a normal game) plus the single hex dead
+ * center (always the gold hex; see generateBoard). Everything in between — the inner ring —
+ * starts hidden until a road reaches it (see 'buildRoad' in rules.ts). Matches real
+ * fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring around the outside,
+ * fog in the middle, a special tile at the very center) rather than isolated corner tiles. */
 export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
-  const revealed = cornerHexIds(hexes);
-  for (const h of hexes) {
-    if (h.terrain === 'desert' || h.terrain === 'gold') revealed.add(h.id);
-  }
-  return Array.from(revealed);
+  const maxRadius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
+  return hexes.filter((h) => hexCubeRadius(h.coord) === maxRadius || hexCubeRadius(h.coord) === 0).map((h) => h.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,11 +393,23 @@ export function generateBoard(presetId: MapPresetId, seed: string): Board {
     number: numbers[i],
   }));
 
-  // Fog-of-war: terrain is generated like any other preset, but only revealed hexes' number
-  // tokens are meaningful yet — the rest are nulled out here and assigned a genuinely random
-  // token at discovery time (see 'buildRoad' in rules.ts), matching "the number on it is
-  // completely random" rather than merely hidden-but-predetermined.
   if (presetId === 'fog-of-war') {
+    // The gold hex is always the single tile dead center (radius 0) — matching real
+    // fog-of-war Catan variants' "Volcano"/lake center tile — rather than wherever the
+    // fairness-checked shuffle happened to land it. Swap whichever hex IS gold with
+    // whatever landed at center; this only relocates two tiles' terrain+number pairs; it
+    // doesn't touch the rest of the fair distribution.
+    const centerHex = hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
+    const goldHex = hexes.find((h) => h.terrain === 'gold')!;
+    if (centerHex !== goldHex) {
+      [centerHex.terrain, goldHex.terrain] = [goldHex.terrain, centerHex.terrain];
+      [centerHex.number, goldHex.number] = [goldHex.number, centerHex.number];
+    }
+
+    // Terrain is generated like any other preset, but only revealed hexes' number tokens
+    // are meaningful yet — the rest are nulled out here and assigned a genuinely random
+    // token at discovery time (see 'buildRoad' in rules.ts), matching "the number on it is
+    // completely random" rather than merely hidden-but-predetermined.
     const revealed = new Set(initialFogRevealHexIds(hexes));
     for (const h of hexes) {
       if (!revealed.has(h.id)) h.number = null;

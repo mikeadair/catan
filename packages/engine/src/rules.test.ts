@@ -790,11 +790,14 @@ describe('fog-of-war and gold hex', () => {
     return createGame({ id: 'room1', code: 'ABCDE', hostUid: 'p0', mapPreset: 'fog-of-war', seed }, seatedPlayers);
   }
 
-  it('reveals exactly the corner, desert, and gold hexes at generation time', () => {
+  it('reveals exactly the outer ring plus the center (gold) hex at generation time', () => {
     const bundle = makeFogGame();
     const board = bundle.room.board!;
     expect(bundle.room.discoveredHexIds).toEqual(initialFogRevealHexIds(board.hexes));
     const revealed = new Set(bundle.room.discoveredHexIds);
+    const centerHex = board.hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
+    expect(centerHex.terrain).toBe('gold');
+    expect(revealed.has(centerHex.id)).toBe(true);
     for (const hex of board.hexes) {
       if (revealed.has(hex.id)) {
         if (hex.terrain !== 'desert') expect(hex.number).not.toBeNull();
