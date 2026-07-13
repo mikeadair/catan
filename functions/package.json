@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "npm run typecheck && esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=lib/index.js --external:firebase-admin --external:firebase-functions",
     "test": "vitest run",
-    "serve": "npm run build && firebase emulators:start --only functions,firestore,auth"
+    "serve": "npm run build && firebase emulators:start --only functions,firestore,auth",
+    "build:e2e-bridge": "esbuild src/e2eBridge.ts --bundle --platform=node --target=node22 --format=cjs --outfile=lib/e2eBridge.js --external:firebase-admin --external:firebase-functions",
+    "e2e-bridge": "npm run build:e2e-bridge && node lib/e2eBridge.js"
   },
   "dependencies": {
     "firebase-admin": "^13.10.0",

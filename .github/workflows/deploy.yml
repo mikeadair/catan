@@ -88,8 +88,10 @@ jobs:
   # Regenerates web/e2e/screenshots/*.png (home, lobby, setup, mid-game) and commits them
   # back to main. Deliberately NOT a dependency of `deploy` (and vice versa) — e2e/Firestore
   # timing can be flaky, and a flaky screenshot run should never block a real deploy. Runs
-  # against the Firebase Local Emulator Suite (see web/src/firebase/config.ts), not the live
-  # mikeadair-catan project, so this never touches production data.
+  # against the Firebase Local Emulator Suite for auth/firestore (see
+  # web/src/firebase/config.ts) — not the live mikeadair-catan project, so this never touches
+  # production data — plus functions/src/e2eBridge.ts standing in for the real Functions
+  # emulator (see that file's header comment for why: its worker process was unreliable here).
   capture-screenshots:
     needs: build-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -109,9 +111,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: web
 
-      # No args — `npm run test:e2e`'s `firebase emulators:exec ... "playwright test"` swallows
-      # anything appended after `--` into the *outer* emulators:exec command, not the quoted
-      # inner playwright command, so `-- layout.spec.ts` silently does nothing. Harmless today
+      # No args — `npm run test:e2e`'s `firebase emulators:exec ... "bash e2e/run-with-bridge.sh"`
+      # swallows anything appended after `--` into the *outer* emulators:exec command, not the
+      # quoted inner script, so `-- layout.spec.ts` silently does nothing. Harmless today
       # (layout.spec.ts is the only spec file), but don't rely on it if a second file is added.
       - run: npm run test:e2e
         working-directory: web
