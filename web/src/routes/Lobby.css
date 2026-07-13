@@ -1,5 +1,6 @@
 .lobby {
   flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
@@ -8,6 +9,7 @@
   grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
   align-items: start;
   gap: 20px;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 50% -10%, var(--color-ocean) 0%, transparent 60%),
     var(--color-ocean-deep);
