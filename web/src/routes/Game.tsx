@@ -446,8 +446,17 @@ export default function Game(): JSX.Element {
     cities: selfPlayer ? MAX_CITIES - selfPlayer.citiesBuilt : 0,
   };
 
+  // Fog-of-war boards benefit from extra screen real estate — the "?" fog tiles and the
+  // reveal-on-road-build feel are easier to read with more room, even though the underlying
+  // hex geometry/size stays the same (see Board.tsx's SIZE constant). Widen the board's grid
+  // track and shrink the sidebar's proportionally via a modifier class rather than touching
+  // hex-size math.
+  const isFogMap = room.mapPreset === 'fog-of-war';
+
   return (
-    <div className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}`}>
+    <div
+      className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}${isFogMap ? ' game--fog' : ''}`}
+    >
       <div className="game__board-area">
         {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
         {resourceGrantMessage && (

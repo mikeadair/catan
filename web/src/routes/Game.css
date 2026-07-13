@@ -26,6 +26,18 @@
   grid-column: 1;
 }
 
+/* Fog-of-war: give the board area more of the available width. Doesn't touch the underlying
+   hex geometry (Board.tsx's SIZE constant + viewBox math) — the SVG still scales to fill
+   whatever box it's given (.catan-board { width: 100%; height: 100% }), so a wider grid
+   column just gives it more room to scale up into. */
+.game--fog {
+  grid-template-columns: 1fr 260px;
+}
+
+.game--fog.game--sidebar-left {
+  grid-template-columns: 260px 1fr;
+}
+
 .game__board-area {
   position: relative;
   grid-column: 1;
