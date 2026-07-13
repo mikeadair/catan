@@ -13,14 +13,7 @@ import {
 } from '../firebase/auth';
 import { getUserProfile, saveUserProfile } from '../firebase/users';
 import { useGameStore } from '../state/store';
-import {
-  DEFAULT_VICTORY_POINTS_TO_WIN,
-  DEFAULT_DISCARD_LIMIT,
-  DEFAULT_TURN_TIMER_SECONDS,
-  PLAYER_COLORS,
-  type MapPresetId,
-  type PlayerColor,
-} from '@catan/engine';
+import { PLAYER_COLORS, type MapPresetId, type PlayerColor } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import MapPickerGrid from '../components/MapPickerGrid';
 import shipIcon from '../assets/decor/ship.png';
@@ -66,24 +59,11 @@ function persistColor(color: PlayerColor) {
   }
 }
 
-const VP_MIN = 5;
-const VP_MAX = 15;
-const DISCARD_MIN = 4;
-const DISCARD_MAX = 12;
-const TURN_TIMER_MIN = 30;
-const TURN_TIMER_MAX = 600;
-
 export default function Home({ uid }: { uid: string }): JSX.Element {
   const [name, setName] = useState<string>(loadStoredName);
   const [color, setColor] = useState<PlayerColor>(loadStoredColor);
 
   const [selectedPreset, setSelectedPreset] = useState<MapPresetId>('official-beginner');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [victoryPointsToWin, setVictoryPointsToWin] = useState(DEFAULT_VICTORY_POINTS_TO_WIN);
-  const [discardLimit, setDiscardLimit] = useState(DEFAULT_DISCARD_LIMIT);
-  const [turnTimerEnabled, setTurnTimerEnabled] = useState(true);
-  const [turnTimerSeconds, setTurnTimerSeconds] = useState(DEFAULT_TURN_TIMER_SECONDS);
-  const [safeMode, setSafeMode] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -205,11 +185,11 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       const finalName = effectiveName();
       persistName(finalName);
       setDisplayName(finalName).catch(() => {});
+      // Other room settings (victory points, discard limit, turn timer, safe mode) are left
+      // at createRoom's own sensible defaults — the host can change them from the lobby's
+      // "Game settings" panel once the room exists (see Lobby.tsx), rather than choosing them
+      // up front before there's even a room to configure.
       const { roomId } = await createRoom(uid, finalName, selectedPreset, {
-        victoryPointsToWin,
-        discardLimit,
-        turnTimerSeconds: turnTimerEnabled ? turnTimerSeconds : null,
-        safeMode,
         preferredColor: color,
       });
       await saveProfileIfSignedIn(finalName);
@@ -477,81 +457,6 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
             <span className="home__label">Map</span>
             <MapPickerGrid selected={selectedPreset} onSelect={setSelectedPreset} />
           </div>
-
-          <button
-            type="button"
-            className="home__advanced-toggle"
-            onClick={() => setShowAdvanced((v) => !v)}
-            aria-expanded={showAdvanced}
-          >
-            {showAdvanced ? 'Hide' : 'Show'} house rules
-          </button>
-
-          {showAdvanced && (
-            <div className="home__advanced">
-              <label className="home__field">
-                <span className="home__label">Victory points to win</span>
-                <input
-                  type="number"
-                  min={VP_MIN}
-                  max={VP_MAX}
-                  value={victoryPointsToWin}
-                  onChange={(e) =>
-                    setVictoryPointsToWin(
-                      Math.min(VP_MAX, Math.max(VP_MIN, Number(e.target.value) || VP_MIN))
-                    )
-                  }
-                />
-                <span className="home__field-hint">{VP_MIN}–{VP_MAX}</span>
-              </label>
-              <label className="home__field">
-                <span className="home__label">Discard limit (hand size on a 7)</span>
-                <input
-                  type="number"
-                  min={DISCARD_MIN}
-                  max={DISCARD_MAX}
-                  value={discardLimit}
-                  onChange={(e) =>
-                    setDiscardLimit(
-                      Math.min(DISCARD_MAX, Math.max(DISCARD_MIN, Number(e.target.value) || DISCARD_MIN))
-                    )
-                  }
-                />
-                <span className="home__field-hint">{DISCARD_MIN}–{DISCARD_MAX} cards</span>
-              </label>
-              <label className="home__field home__field--checkbox">
-                <span className="home__label">Turn timer</span>
-                <span className="home__checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={turnTimerEnabled}
-                    onChange={(e) => setTurnTimerEnabled(e.target.checked)}
-                  />
-                  <input
-                    type="number"
-                    min={TURN_TIMER_MIN}
-                    max={TURN_TIMER_MAX}
-                    step={15}
-                    disabled={!turnTimerEnabled}
-                    value={turnTimerSeconds}
-                    onChange={(e) =>
-                      setTurnTimerSeconds(
-                        Math.min(TURN_TIMER_MAX, Math.max(TURN_TIMER_MIN, Number(e.target.value) || TURN_TIMER_MIN))
-                      )
-                    }
-                  />
-                  <span className="home__field-hint">seconds per turn</span>
-                </span>
-              </label>
-              <label className="home__field home__field--checkbox">
-                <span className="home__checkbox-row">
-                  <input type="checkbox" checked={safeMode} onChange={(e) => setSafeMode(e.target.checked)} />
-                  <span className="home__label">Safe mode</span>
-                </span>
-                <span className="home__field-hint">The robber can't target a player with fewer than 3 victory points.</span>
-              </label>
-            </div>
-          )}
 
           {createError && <div className="home__error">{createError}</div>}
 
