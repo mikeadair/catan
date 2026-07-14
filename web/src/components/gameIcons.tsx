@@ -100,3 +100,41 @@ export function LongestRoadIcon(props: IconProps): JSX.Element {
     </svg>
   );
 }
+
+export function PauseIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+      <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function RoadBuildingIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <line x1="12" y1="21" x2="12" y2="12" stroke="currentColor" strokeWidth={4} strokeLinecap="round" />
+      <line x1="12" y1="12" x2="5" y2="4" stroke="currentColor" strokeWidth={4} strokeLinecap="round" />
+      <line x1="12" y1="12" x2="19" y2="4" stroke="currentColor" strokeWidth={4} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function YearOfPlentyIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <line x1="12" y1="22" x2="12" y2="10" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
+      <path d="M12 10 L7 4 M12 10 L17 4 M12 14 L6 9 M12 14 L18 9" stroke="currentColor" strokeWidth={2} strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+export function MonopolyIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <ellipse cx="12" cy="18" rx="8" ry="3" fill="currentColor" opacity={0.55} />
+      <ellipse cx="12" cy="13" rx="8" ry="3" fill="currentColor" opacity={0.75} />
+      <ellipse cx="12" cy="8" rx="8" ry="3" fill="currentColor" />
+    </svg>
+  );
+}

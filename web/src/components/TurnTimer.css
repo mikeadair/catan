@@ -25,6 +25,12 @@
   animation: none;
 }
 
+.turn-timer__icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+
 @keyframes turn-timer-pulse {
   0%,
   100% {

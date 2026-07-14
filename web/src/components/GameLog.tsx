@@ -4,6 +4,7 @@ import { RESOURCES } from '@catan/engine';
 import type { ChatMessage } from '../firebase/rooms';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import { PLAYER_COLOR_HEX } from './playerColors';
+import { PauseIcon } from './gameIcons';
 import './GameLog.css';
 
 export interface GameLogProps {
@@ -192,7 +193,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
             title={autoScroll ? 'Auto-scroll is on — click to pause' : 'Auto-scroll is off — click to resume'}
             onClick={() => setAutoScroll((prev) => !prev)}
           >
-            {autoScroll ? '⬇' : '⏸'}
+            {autoScroll ? '⬇' : <PauseIcon className="game-log__icon-svg" />}
           </button>
           <button
             type="button"

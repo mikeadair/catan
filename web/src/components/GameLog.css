@@ -72,6 +72,11 @@
   cursor: pointer;
 }
 
+.game-log__icon-svg {
+  width: 12px;
+  height: 12px;
+}
+
 .game-log__icon-btn[aria-pressed='true'] {
   color: var(--color-accent);
   border-color: var(--color-accent);

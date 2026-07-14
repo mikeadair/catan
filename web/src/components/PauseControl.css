@@ -24,3 +24,9 @@
   color: var(--color-accent);
   background: rgba(242, 177, 52, 0.1);
 }
+
+.pause-control__icon {
+  width: 11px;
+  height: 11px;
+  vertical-align: -1px;
+}

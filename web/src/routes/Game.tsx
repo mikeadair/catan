@@ -18,7 +18,7 @@ import DevCardPanel from '../components/DevCardPanel';
 import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
-import { TradeIcon } from '../components/gameIcons';
+import { PauseIcon, TradeIcon } from '../components/gameIcons';
 import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
@@ -207,7 +207,18 @@ export default function Game(): JSX.Element {
 
   // Callout when the setup-phase second-settlement resource grant lands — otherwise it's a
   // silent, easy-to-miss state change (the resource hand isn't even shown during setup).
+  //
+  // The clearing timer is tracked in a ref rather than via this effect's own cleanup
+  // function, deliberately: React runs an effect's cleanup from the *previous* invocation
+  // every time any dependency changes, not just when the component unmounts. ownHand changes
+  // on almost any board action anywhere in the game, so a re-render with no new gain (the
+  // common case) used to fire the cleanup — cancelling the pending clear — then hit the
+  // `gains.length === 0` early return before scheduling a replacement, leaving the message
+  // stuck on screen with nothing left to ever clear it. Explicitly clearing/rescheduling only
+  // when there's an actual new gain to show avoids that: the timer's lifetime is now tied to
+  // "is there a newer message to protect," not to "did some unrelated dependency change."
   const prevResourcesRef = useRef<ResourceCount | null>(null);
+  const resourceGrantTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const current = ownHand?.resources ?? null;
     const prev = prevResourcesRef.current;
@@ -218,16 +229,29 @@ export default function Game(): JSX.Element {
       (r) => `+${current[r] - prev[r]} ${RESOURCE_LABEL[r]}`,
     );
     if (gains.length === 0) return;
+    if (resourceGrantTimerRef.current) clearTimeout(resourceGrantTimerRef.current);
     setResourceGrantMessage(gains.join(', '));
-    const timer = setTimeout(() => setResourceGrantMessage(null), 2800);
-    return () => clearTimeout(timer);
+    resourceGrantTimerRef.current = setTimeout(() => {
+      setResourceGrantMessage(null);
+      resourceGrantTimerRef.current = null;
+    }, 2800);
   }, [ownHand, room?.phase]);
+  useEffect(() => {
+    return () => {
+      if (resourceGrantTimerRef.current) clearTimeout(resourceGrantTimerRef.current);
+    };
+  }, []);
 
   // Callout showing what EVERY player gained on the latest roll, not just yourself — board
   // layout, building ownership, and the roll itself are all already public, so this is a
   // pure client-side recomputation of the same claim rules.ts already applied server-side
   // (computeRollGains), not a new information exposure.
+  //
+  // Same ref-tracked-timer fix as the resource-grant callout above, and for the identical
+  // reason: room?.vertices/players change on nearly every action in the game, which used to
+  // cancel the pending clear on every such change without necessarily scheduling a new one.
   const prevDiceRollRef = useRef<[number, number] | null>(null);
+  const rollGainsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const current = room?.diceRoll ?? null;
     const prev = prevDiceRollRef.current;
@@ -245,10 +269,18 @@ export default function Game(): JSX.Element {
       .filter((s): s is string => s !== null);
     if (parts.length === 0) return;
 
+    if (rollGainsTimerRef.current) clearTimeout(rollGainsTimerRef.current);
     setRollGainsMessage(parts.join('   •   '));
-    const timer = setTimeout(() => setRollGainsMessage(null), 4000);
-    return () => clearTimeout(timer);
+    rollGainsTimerRef.current = setTimeout(() => {
+      setRollGainsMessage(null);
+      rollGainsTimerRef.current = null;
+    }, 4000);
   }, [room?.diceRoll, room?.board, room?.vertices, players]);
+  useEffect(() => {
+    return () => {
+      if (rollGainsTimerRef.current) clearTimeout(rollGainsTimerRef.current);
+    };
+  }, []);
 
   // Trades were easy to miss entirely — tucked behind a toggle button with no cue that
   // anything changed. Pending trades relevant to you now render persistently in the
@@ -576,8 +608,14 @@ export default function Game(): JSX.Element {
     ? `Round ${room.setupRound} of 2${room.setupRound === 2 ? ' (reversed order)' : ''} — `
     : '';
 
-  let phaseBanner: string | null = null;
-  if (room.paused) phaseBanner = '⏸ Game paused';
+  let phaseBanner: JSX.Element | string | null = null;
+  if (room.paused) {
+    phaseBanner = (
+      <>
+        <PauseIcon className="game__phase-banner-icon" /> Game paused
+      </>
+    );
+  }
   else if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
   else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
   else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';

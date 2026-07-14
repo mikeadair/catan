@@ -71,6 +71,12 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
+.game__phase-banner-icon {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+}
+
 .game__resource-grant {
   position: absolute;
   top: 56px;
@@ -84,6 +90,10 @@
   z-index: 50;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   animation: resource-grant-in 0.25s ease-out, resource-grant-out 0.3s ease-in 2.5s forwards;
+  /* Purely informational — must never intercept clicks meant for the board underneath it,
+     including in the (now fixed, but kept as a second line of defense) case where its own
+     clearing timer somehow doesn't fire and it lingers on screen. */
+  pointer-events: none;
 }
 
 @keyframes resource-grant-in {
@@ -120,6 +130,8 @@
   z-index: 50;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   animation: resource-grant-in 0.25s ease-out, resource-grant-out 0.3s ease-in 3.7s forwards;
+  /* Same rationale as .game__resource-grant above. */
+  pointer-events: none;
 }
 
 /* Pending trades overlay, anchored inside the board's own empty water margin (the `pad = 50`

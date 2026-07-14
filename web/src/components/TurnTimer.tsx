@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from 'react';
+import { PauseIcon } from './gameIcons';
 import './TurnTimer.css';
 
 export interface TurnTimerProps {
@@ -47,7 +48,7 @@ export default function TurnTimer({
       className={`turn-timer${low ? ' turn-timer--low' : ''}${paused ? ' turn-timer--paused' : ''}`}
       title={paused ? `${label} (paused)` : label}
     >
-      {paused ? '⏸ ' : ''}
+      {paused && <PauseIcon className="turn-timer__icon" />}
       {minutes}:{seconds.toString().padStart(2, '0')}
     </div>
   );

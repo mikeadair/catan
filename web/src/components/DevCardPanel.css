@@ -40,7 +40,16 @@
 }
 
 .dev-card-panel__icon {
-  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dev-card-panel__icon-svg {
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent);
 }
 
 .dev-card-panel__info {

@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import type { DevCard, DevCardType } from '@catan/engine';
+import { KnightIcon, MonopolyIcon, RoadBuildingIcon, VictoryPointIcon, YearOfPlentyIcon } from './gameIcons';
 import './DevCardPanel.css';
 
 const CARD_LABEL: Record<DevCardType, string> = {
@@ -10,12 +11,16 @@ const CARD_LABEL: Record<DevCardType, string> = {
   victoryPoint: 'Victory Point',
 };
 
-const CARD_ICON: Record<DevCardType, string> = {
-  knight: '⚔️',
-  roadBuilding: '🛤️',
-  yearOfPlenty: '🌾',
-  monopoly: '💰',
-  victoryPoint: '🏆',
+// Was raw emoji (⚔️ 🛤️ 🌾 💰 🏆) — inconsistent rendering across platforms/fonts (and outright
+// missing/tofu glyphs in some environments, this repo's own CI runner among them) — swapped
+// for the app's existing custom SVG icon set (gameIcons.tsx), already used correctly elsewhere
+// (e.g. PlayerRoster's knights-played stat).
+const CARD_ICON: Record<DevCardType, (props: { className?: string }) => JSX.Element> = {
+  knight: KnightIcon,
+  roadBuilding: RoadBuildingIcon,
+  yearOfPlenty: YearOfPlentyIcon,
+  monopoly: MonopolyIcon,
+  victoryPoint: VictoryPointIcon,
 };
 
 const CARD_DESCRIPTION: Record<DevCardType, string> = {
@@ -66,9 +71,12 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked
               : !playableCard
                 ? 'Cannot play a card the same turn it was bought'
                 : null;
+          const Icon = CARD_ICON[type];
           return (
             <div key={type} className="dev-card-panel__card">
-              <span className="dev-card-panel__icon">{CARD_ICON[type]}</span>
+              <span className="dev-card-panel__icon">
+                <Icon className="dev-card-panel__icon-svg" />
+              </span>
               <div className="dev-card-panel__info">
                 <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
                 <span className="dev-card-panel__desc">{CARD_DESCRIPTION[type]}</span>

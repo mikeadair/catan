@@ -680,7 +680,20 @@ export default function BoardView({
           // verifying every committed room.edges entry has exactly one correctly-colored
           // rendered road and no phantom roads exist — purely additive, no visual/behavioral
           // change.
-          <g key={edgeId} filter="url(#piece-shadow)" data-testid={`road-${edgeId}`} data-owner-uid={ownerUid}>
+          //
+          // Deliberately NOT using the piece-shadow filter (see settlements/cities below) —
+          // that filter's region is defined in objectBoundingBox percentages, and a perfectly
+          // vertical edge (x1 === x2, which a real fraction of hex edges are) gives its <g> a
+          // geometrically zero-width bounding box. Per the SVG spec, a percentage-based filter
+          // region computed against a zero-width (or zero-height) bounding box is invalid,
+          // and browsers respond by rendering the filtered element as nothing at all — not a
+          // squished shadow, the *entire* road disappears despite the DOM/data being entirely
+          // correct. Settlements/cities are 2D house shapes with nonzero extent in both
+          // dimensions no matter their position, so they're not at risk; roads already have a
+          // hard dark outline (the wider #1c1c1c line underneath) for the same
+          // terrain-contrast legibility the filter was providing elsewhere, so dropping it
+          // here loses only the soft blur, not the legibility itself.
+          <g key={edgeId} data-testid={`road-${edgeId}`} data-owner-uid={ownerUid}>
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={5} strokeLinecap="round" />
           </g>
@@ -701,12 +714,10 @@ export default function BoardView({
         const pa = vertexPixel(a, board, SIZE);
         const pb = vertexPixel(b, board, SIZE);
         return (
-          <g
-            key={`pending-${edgeId}`}
-            filter="url(#piece-shadow)"
-            opacity={0.85}
-            data-testid={`road-preview-${edgeId}`}
-          >
+          // No piece-shadow filter here either — see the committed-road comment above for why
+          // (a perfectly vertical edge's zero-width bounding box breaks the filter's
+          // percentage-based region entirely, not just its blur).
+          <g key={`pending-${edgeId}`} opacity={0.85} data-testid={`road-preview-${edgeId}`}>
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={ownColor} strokeWidth={5} strokeLinecap="round" />
           </g>
