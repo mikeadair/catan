@@ -230,13 +230,18 @@
 .game__toolbar > .trade-bar {
   position: absolute;
   left: 14px;
-  right: 14px;
+  /* Compact, content-sized width rather than stretching the full toolbar edge-to-edge — a
+     full-width bar with the want-cards on one side and the actions squeezed onto the other
+     end of the same row read as sprawling. Capped (not a fixed width) so it still shrinks
+     to fit on narrower viewports instead of overflowing. */
+  width: fit-content;
+  max-width: min(560px, calc(100% - 28px));
   bottom: 100%;
   margin-bottom: 10px;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   z-index: 40;
 }

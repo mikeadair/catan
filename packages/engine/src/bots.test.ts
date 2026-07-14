@@ -97,7 +97,18 @@ function makeMainPhaseGame(
   player.citiesBuilt = opts.citiesMaxed ? MAX_CITIES : 0;
   player.roadsBuilt = opts.roadsMaxed ? MAX_ROADS : 0;
   player.settlementsBuilt = opts.settlementsMaxed ? 5 : 0;
-  for (const r of RESOURCES) bundle.hands[botUid].resources[r] = hand[r] ?? 0;
+  // Keep room.bank consistent with resource conservation (STARTING_BANK[r] always equals
+  // room.bank[r] + every player's hand[r] in a real game) as we grant the bot's hand —
+  // othersMayHave (bots.ts) relies on exactly this invariant to work out whether any other
+  // player could conceivably hold a resource the bot wants, using only public info plus its
+  // own hand. Whatever's left over after this (STARTING_BANK[r] - hand[r]) sits in room.bank,
+  // i.e. genuinely untouched/unheld by anyone else, unless a test explicitly moves some of it
+  // to another player's hand (see the "close to another player" tests below).
+  for (const r of RESOURCES) {
+    const amount = hand[r] ?? 0;
+    bundle.hands[botUid].resources[r] = amount;
+    bundle.room.bank[r] -= amount;
+  }
   return { bundle, botUid };
 }
 
@@ -108,6 +119,11 @@ describe('decideBotAction: bank/player trading', () => {
       { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
       { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
     );
+    // The wool the bot needs has to actually be *somewhere else* for a player trade to make
+    // sense — give some to the other player (moved out of the bank to keep conservation
+    // intact), matching what othersMayHave (bots.ts) expects a real game to look like.
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
     const action = decideBotAction(bundle, botUid);
     expect(action?.type).toBe('proposeTrade');
     if (action?.type === 'proposeTrade') {
@@ -121,17 +137,18 @@ describe('decideBotAction: bank/player trading', () => {
     }
   });
 
-  it('does not propose a player trade for a resource the bank has none of left', () => {
+  it('does not propose a player trade for a resource nobody else could possibly hold', () => {
     const { bundle, botUid } = makeMainPhaseGame(
       'normal',
       { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
       { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
     );
-    // Same setup as the passing case above (bot is one wool short of a settlement), except the
-    // bank pool is fully depleted of wool — the bot should neither propose a player trade nor
-    // fall back to a bank trade for it, since both require room.bank[need] > 0.
-    bundle.room.bank.wool = 0;
-
+    // Same setup as the passing case above (bot is one wool short of a settlement), except
+    // nothing moves the wool the bot needs anywhere — it's still fully sitting in the bank,
+    // untouched, so by resource conservation no other *player* could have any (othersMayHave
+    // is false), and a player trade should never be proposed. A bank trade doesn't fire as a
+    // fallback either here, but only incidentally: none of brick(2)/lumber(2)/ore(3)/grain(2)
+    // reach the 4:1 no-port exchange rate, so there's nothing to actually offer the bank.
     const action = decideBotAction(bundle, botUid);
     expect(action?.type).toBe('endTurn');
   });
@@ -151,6 +168,12 @@ describe('decideBotAction: bank/player trading', () => {
     const opts = { settlementsMaxed: true, roadsMaxed: true, devCardDeckCount: 0 };
 
     const hard = makeMainPhaseGame('hard', hand, opts);
+    // Both resources the bot is short on (ore, grain) need to actually be held by someone
+    // else for a player trade to make sense — see othersMayHave (bots.ts).
+    hard.bundle.hands['p1'].resources.ore = 2;
+    hard.bundle.room.bank.ore -= 2;
+    hard.bundle.hands['p1'].resources.grain = 2;
+    hard.bundle.room.bank.grain -= 2;
     const hardAction = decideBotAction(hard.bundle, hard.botUid);
     expect(hardAction?.type).toBe('proposeTrade');
     if (hardAction?.type === 'proposeTrade') {
@@ -162,6 +185,31 @@ describe('decideBotAction: bank/player trading', () => {
     // Normal only ever closes a single-resource-type gap (city here is short on two: ore
     // and grain), so it falls back to a bank trade instead of proposing to another player.
     expect(normalAction?.type).not.toBe('proposeTrade');
+  });
+
+  // Regression coverage: decidePlayerTrade used to skip proposing whenever room.bank[r] <= 0,
+  // even though the bank isn't the counterparty for a player trade — a resource fully drained
+  // from the bank is very often sitting in another player's hand instead, which is exactly
+  // when a player trade is *most* worth proposing, not least. othersMayHave replaces that
+  // bank-only check with real resource-conservation math (STARTING_BANK[r] - bank[r] -
+  // ownHand[r]) so the bot only skips when literally nobody else could hold it.
+  it('still proposes a player trade for a resource the bank is fully out of, as long as another player could hold it', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    // Bank is completely out of wool, but it's not gone — every remaining copy is in the
+    // other player's hand, so a player trade for it is exactly the right move (a bank trade
+    // is correctly impossible here: room.bank.wool === 0).
+    bundle.room.bank.wool = 0;
+    bundle.hands['p1'].resources.wool = 19;
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('proposeTrade');
+    if (action?.type === 'proposeTrade') {
+      expect(action.receive).toEqual({ wool: 1 });
+    }
   });
 
   it('does not re-propose a trade while one from the bot is already pending', () => {

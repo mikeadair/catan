@@ -19,9 +19,10 @@ import type {
   GameAction,
   Resource,
   ResourceCount,
+  RoomState,
   VertexId,
 } from './types';
-import { BUILD_COSTS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, TERRAIN_RESOURCE } from './types';
+import { BUILD_COSTS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, STARTING_BANK, TERRAIN_RESOURCE } from './types';
 import { pipCount, vertexLegalForFogSetup } from './board';
 import type { GameStateBundle } from './rules';
 
@@ -374,6 +375,17 @@ function resourceDeficits(hand: ResourceCount, cost: Partial<ResourceCount>): Pa
   return out;
 }
 
+/** Whether anyone *other than this bot* could conceivably hold resource `r`, computed from
+ * public information alone: room.bank[r] plus every player's hand[r] always sums to the
+ * fixed STARTING_BANK[r] total (resources move between bank and hands — building costs are
+ * credited back to the bank, trades/steals move card-for-card — but the total per resource
+ * type is always conserved). So "how much do other players collectively hold" is exactly
+ * STARTING_BANK[r] - room.bank[r] - thisBot'sOwnHand[r], with no need to see any other
+ * player's actual (private) hand. */
+function othersMayHave(room: RoomState, hand: ResourceCount, r: Resource): boolean {
+  return STARTING_BANK[r] - room.bank[r] - hand[r] > 0;
+}
+
 /** Bank-trade target: the resource that would unlock the highest-priority build it's
  * exactly one resource TYPE short of, falling back to "whatever I have least of" if no
  * build is that close. */
@@ -422,11 +434,15 @@ function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: 
     const deficits = resourceDeficits(hand, cost);
     const missingTypes = RESOURCES.filter((r) => deficits[r]);
     if (missingTypes.length === 0 || missingTypes.length > maxGapTypes) continue;
-    // Same bank-availability check decideBankTrade applies before treating a resource as a
-    // genuine need: don't ask another player for something the shared bank pool is fully out
-    // of. (Only the bank matters here, not other players' hands — a resource other players
-    // may still be holding is always a fine thing to ask for.)
-    if (missingTypes.some((r) => room.bank[r] <= 0)) continue;
+    // A *player* trade's counterparty is other players, not the bank — checking room.bank
+    // here (as decideBankTrade correctly does for its own, bank-counterparty case) was
+    // actually testing the wrong thing: the bank being empty says nothing about whether
+    // other players hold the resource, and by the same token a nonempty bank doesn't rule
+    // out the degenerate case where this bot itself already holds every remaining copy.
+    // othersMayHave uses only public information (room.bank, the fixed total supply) plus
+    // this bot's own hand — never another player's private hand — to work out whether
+    // *anyone but this bot* could conceivably hold any, via resource conservation.
+    if (missingTypes.some((r) => !othersMayHave(room, hand, r))) continue;
 
     let remaining = missingTypes.reduce((s, r) => s + (deficits[r] ?? 0), 0);
     const give: Partial<ResourceCount> = {};

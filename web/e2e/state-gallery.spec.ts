@@ -396,10 +396,14 @@ test.describe('State gallery: trade flows', () => {
       });
 
       // --- Targeted trade, rejected by its sole responder -> the brief all-rejected red-flash
-      // dismiss state (TradeOffers.tsx's ALL_REJECTED_FLASH_MS window).
+      // dismiss state (TradeOffers.tsx's ALL_REJECTED_FLASH_MS window). The composer's give/
+      // receive/target selection is cleared automatically once a trade actually goes through
+      // (see Game.tsx's handleProposeTrade), so both sides need staging fresh here rather than
+      // assuming last trade's "want wool" selection is still sitting there.
       const clearGiveBtn = p1Page.locator('.game__toolbar-clear-give');
       if ((await clearGiveBtn.count()) > 0) await clearGiveBtn.click({ timeout: 10000 });
       await p1Page.locator('[data-testid="hand-card"][data-resource="brick"]').first().click({ timeout: 15000 });
+      await p1Page.locator('button[aria-label="Add Wool to what you want"]').click({ timeout: 15000 });
       await p1Page.locator('select[aria-label="Trade target"]').selectOption(uidP2, { timeout: 15000 });
       await p1Page.locator('button:has-text("Offer Trade")').click({ timeout: 15000 });
 

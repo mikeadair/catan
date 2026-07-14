@@ -1,23 +1,24 @@
 .trade-bar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
-  flex-wrap: wrap;
   width: 100%;
   /* Rendered as a floating panel positioned above .game__toolbar (see Game.css's
      `.game__toolbar > .trade-bar`), not a layout-participating row — so unlike before, it no
      longer competes with the board for vertical space, and growing taller (e.g. the want row
-     wrapping to two lines at the larger ~2x card size below) just overlays a bit more of the
-     board instead of pushing anything around. */
+     wrapping across more lines at a narrower panel width) just overlays a bit more of the
+     board instead of pushing anything around. Stacked (want row, then actions row) and capped
+     to a compact width (see Game.css) rather than stretching edge-to-edge — a full-width bar
+     read as sprawling, especially with the actions squeezed off to one side of the same row. */
 }
 
 .trade-bar__want {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
 }
 
 .trade-bar__want-label {
@@ -131,7 +132,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  /* Bottom row of the stacked panel (see .trade-bar) — pushed to the far edges so the target
+     picker and the two trade buttons don't visually run together in a narrower panel. */
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.trade-bar__actions-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .trade-bar__actions select {

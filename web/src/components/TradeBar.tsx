@@ -193,12 +193,14 @@ export default function TradeBar({
             </option>
           ))}
         </select>
-        <button type="button" onClick={handlePropose} disabled={!canPropose} title={proposeReason}>
-          Offer Trade
-        </button>
-        <button type="button" onClick={handleBankTrade} disabled={!canBankTrade} title={bankTradeReason}>
-          Bank Trade
-        </button>
+        <div className="trade-bar__actions-buttons">
+          <button type="button" onClick={handlePropose} disabled={!canPropose} title={proposeReason}>
+            Offer Trade
+          </button>
+          <button type="button" onClick={handleBankTrade} disabled={!canBankTrade} title={bankTradeReason}>
+            Bank Trade
+          </button>
+        </div>
       </div>
     </div>
   );
