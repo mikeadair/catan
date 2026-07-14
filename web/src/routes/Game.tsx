@@ -21,6 +21,7 @@ import ResourceHand from '../components/ResourceHand';
 import { PauseIcon, TradeIcon } from '../components/gameIcons';
 import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
+import GameOverStandings from '../components/GameOverStandings';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
 
@@ -399,6 +400,14 @@ export default function Game(): JSX.Element {
         <div className="game-over__card">
           <h1>{winner ? (room.winnerUid === uid ? 'You win!' : `${winner.displayName} wins!`) : 'Game over'}</h1>
           <p>Victory points reached {room.victoryPointsToWin}.</p>
+          <GameOverStandings
+            players={players}
+            turnOrder={room.turnOrder}
+            localUid={uid}
+            longestRoadUid={room.longestRoadUid}
+            largestArmyUid={room.largestArmyUid}
+            ownHand={ownHand}
+          />
           <button type="button" className="game-over__button" onClick={() => leaveRoom()}>
             Back to home
           </button>

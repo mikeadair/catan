@@ -62,8 +62,14 @@ export interface ResourceHandProps {
    * ResourceHand.design-notes.md). Read-only (no `onChange`) for a player's own hand display;
    * with `selected`/`onChange` it becomes interactive — tapping a specific face toggles exactly
    * that face, and the overflow slot's stepper adds/removes from the count it represents — used
-   * by the trade bar and discard modal so players pick straight from their actual hand. */
-  variant?: 'chip' | 'cards';
+   * by the trade bar and discard modal so players pick straight from their actual hand.
+   * 'card-steppers': the same resource-tinted card shell as 'cards', but exactly one card per
+   * resource type (no per-unit fan) with its own +/- stepper — for pickers where the individual
+   * units being chosen from aren't distinct "cards" a player already holds (e.g. picking from
+   * the bank), so faking a multi-card stack would misrepresent what's being selected. Visually
+   * this is just the 'cards' variant's trailing overflow-stepper card shape, promoted to be the
+   * only card per resource instead of a cap-triggered afterthought. */
+  variant?: 'chip' | 'cards' | 'card-steppers';
 }
 
 export default function ResourceHand({
@@ -323,6 +329,50 @@ export default function ResourceHand({
                     <span className="resource-card__label">+{stepperMax}</span>
                   </div>
                 ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (variant === 'card-steppers') {
+    return (
+      <div className="resource-hand resource-hand--cards">
+        {RESOURCES.flatMap((r) => {
+          const count = unlimited ? Infinity : (resources[r] ?? 0);
+          if (count === 0) return [];
+          const selCount = sel[r] ?? 0;
+          const incDisabled = selCount >= count || (max !== undefined && selectedTotal >= max);
+          return (
+            <div
+              key={r}
+              className={`resource-card resource-card--${r} resource-card--overflow resource-card--single${
+                selCount > 0 ? ' resource-card--selected' : ''
+              }`}
+            >
+              <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon resource-card__icon--small" />
+              <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
+              <div className="resource-card__stepper">
+                <button
+                  type="button"
+                  onClick={() => dec(r)}
+                  disabled={selCount <= 0}
+                  aria-label={`Remove ${RESOURCE_LABEL[r]}`}
+                >
+                  −
+                </button>
+                <span className="resource-card__selected">{selCount}</span>
+                <button
+                  type="button"
+                  onClick={() => inc(r)}
+                  disabled={incDisabled}
+                  aria-label={`Add ${RESOURCE_LABEL[r]}`}
+                >
+                  +
+                </button>
+              </div>
+              {!unlimited && <span className="resource-card__overflow-of">of {count}</span>}
             </div>
           );
         })}

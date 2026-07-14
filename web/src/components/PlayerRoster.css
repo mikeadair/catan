@@ -221,18 +221,26 @@
 .player-roster__mini-stats {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   padding-left: 2px;
 }
 
+/* Each stat gets its own pill (rather than floating icon+number pairs side by side) so the
+   two stats read as clearly separate badges — without a boundary here, the road icon (a bare
+   diagonal line, easily mistaken for a "/" glyph) sitting next to the knight count made the
+   pair look like a single fraction (e.g. "0/2") instead of two independent stats. */
 .player-roster__mini-stat {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-dim);
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 1px 6px 1px 5px;
 }
 
 .player-roster__mini-stat-icon {

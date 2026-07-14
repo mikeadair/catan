@@ -140,6 +140,17 @@
   white-space: nowrap;
 }
 
+/* Every face in a group shows the same resource name, so a non-frontmost face's label has
+   nothing new to say — worse, the ~40% sliver an overlapped face reveals cuts through the
+   middle of that text, leaving a stray tail of letters (e.g. "ck" from a second "Brick")
+   poking out next to the frontmost card's full label, which reads as broken/glitched text
+   rather than "there's another card behind this one." The icon alone still identifies the
+   resource in that sliver; only the frontmost face (first-child, see the zIndex comment on
+   .resource-card above) needs the name spelled out. */
+.resource-card:not(:first-child):not(.resource-card--overflow) .resource-card__label {
+  display: none;
+}
+
 .resource-card--interactive {
   cursor: pointer;
 }
@@ -198,6 +209,16 @@
 .resource-card--overflow:hover,
 .resource-card--overflow.resource-card--selected {
   transform: translateY(-10px);
+}
+
+/* 'card-steppers' variant: one full standalone card per resource, not a trailing slot at the
+   end of a fanned group — undo the overflow shell's group-only styling (the pull-left overlap
+   that assumes a preceding face to tuck under, and pointer-events: none, which exists only to
+   let a hidden face underneath still register clicks). Ordered after .resource-card--overflow
+   above so it wins on the shared properties despite matching specificity. */
+.resource-card--single {
+  margin-left: 0;
+  pointer-events: auto;
 }
 
 .resource-card__overflow-of {

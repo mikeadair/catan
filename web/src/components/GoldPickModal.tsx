@@ -34,7 +34,7 @@ export default function GoldPickModal({ visible, amount, bank, onPick }: GoldPic
         <p>
           Pick {amount} resource{amount === 1 ? '' : 's'} from the bank ({selectedTotal}/{amount} selected).
         </p>
-        <ResourceHand resources={bank} selected={selected} onChange={setSelected} max={amount} />
+        <ResourceHand resources={bank} selected={selected} onChange={setSelected} max={amount} variant="card-steppers" />
         <div className="modal__actions">
           <button type="button" className="modal__confirm" onClick={handleConfirm} disabled={selectedTotal !== amount}>
             Take

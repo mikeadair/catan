@@ -360,10 +360,15 @@
   padding: 32px 40px;
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  width: min(420px, 90vw);
+}
+
+.game-over__card .game-over-standings {
+  margin-top: 20px;
 }
 
 .game-over__button {
-  margin-top: 16px;
+  margin-top: 20px;
   background: var(--color-accent);
   color: #1c1c1c;
   border: none;
