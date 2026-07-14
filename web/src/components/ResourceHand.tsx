@@ -51,7 +51,7 @@ export interface ResourceHandProps {
   unlimited?: boolean;
   /** 'chip' (default): compact icon+count, used for pickers and the bank strip (where counts
    * run up to 19 and individual card faces would be unusable). 'cards': one resource-tinted
-   * card per unit owned, fanned with a heavy (~75%) overlap within each resource's group so a
+   * card per unit owned, fanned with a heavy (~60%) overlap within each resource's group so a
    * handful of cards of the same type take up a fraction of the width fully-separate cards
    * would — capped at `RESOURCE_GROUP_CAP` slots per resource (individually-tappable faces,
    * plus a trailing +/- stepper once a resource's count reaches the cap), so one resource's

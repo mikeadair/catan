@@ -143,6 +143,13 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
   const [autoScroll, setAutoScroll] = useState(true);
   const [logSize, setLogSize] = useState<LogSize>('medium');
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Set right before the effect below programmatically corrects scrollTop, cleared on the next
+  // frame. Assigning scrollTop fires a native 'scroll' event same as a real user scroll would,
+  // so without this, handleScroll reacts to our *own* correction — and if it fires a frame late
+  // (e.g. a font/layout settle after paint) scrollHeight can have grown further in the meantime,
+  // making the correction look short of the bottom and incorrectly flipping autoScroll off right
+  // after a message that should have kept it on.
+  const isAutoScrollingRef = useRef(false);
 
   const items: TimelineItem[] = [
     ...log.map((l): TimelineItem => ({ kind: 'log', id: l.id, ts: l.ts, message: l.message, meta: l.meta })),
@@ -159,10 +166,16 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
   useEffect(() => {
     if (!autoScroll) return;
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    isAutoScrollingRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      isAutoScrollingRef.current = false;
+    });
   }, [items.length, autoScroll, logSize]);
 
   function handleScroll() {
+    if (isAutoScrollingRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
