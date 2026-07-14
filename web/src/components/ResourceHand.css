@@ -49,17 +49,35 @@
 .resource-chip--grain { border-left-color: var(--resource-grain); }
 .resource-chip--wool { border-left-color: var(--resource-wool); }
 
+/* Fanned, heavily-overlapped card faces, grouped per resource type (see .resource-card-group
+   below) and capped at RESOURCE_GROUP_CAP slots per group in ResourceHand.tsx, so one
+   resource's group has a fixed max width no matter how many of it are held — a big hand still
+   wraps onto at most a row or two instead of the old one-element-per-card grid's up-to-6 rows.
+   Groups themselves never wrap internally; only whole groups wrap onto a new line, which is
+   what makes it safe to bring the overlap technique back after an earlier, uncapped version of
+   it (see ResourceHand.design-notes.md) was pulled specifically for not wrapping cleanly. */
 .resource-hand--cards {
-  gap: 6px;
-  align-content: flex-start;
+  gap: 14px; /* between different resources' groups — wider than the in-group overlap so the boundary between resources reads clearly even though color/tint already carries most of that */
+  row-gap: 6px;
+  align-items: flex-start;
+}
+
+.resource-card-group {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  /* Room for a selected/hovered card's upward lift + shadow without clipping against
+     neighboring rows. */
+  padding: 6px 0 10px;
 }
 
 .resource-card {
   position: relative;
-  width: 52px;
-  height: 74px;
+  width: 46px;
+  height: 66px;
+  flex-shrink: 0;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.4);
   background: var(--color-panel-light);
   display: flex;
   flex-direction: column;
@@ -67,12 +85,23 @@
   justify-content: center;
   gap: 3px;
   padding: 5px 3px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-  transition: transform 0.12s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  transform: rotate(var(--card-rotate, 0deg));
+}
+
+/* Each individual card face overlaps ~75% of the one before it (reveals ~25% = 11.5px of a
+   46px-wide card) — the core of the fanned look. Deliberately excludes the trailing overflow/
+   counter slot (.resource-card--overflow below), which uses a *shallower* overlap into just its
+   one true neighbor instead — see that rule's own comment for why reusing this exact -34.5px
+   pullback for a frontmost element would actually cover several individual faces at once, not
+   just the one immediately behind it. */
+.resource-card:not(:first-child):not(.resource-card--overflow) {
+  margin-left: -34.5px;
 }
 
 .resource-card:hover {
-  transform: translateY(-4px);
+  transform: rotate(var(--card-rotate, 0deg)) translateY(-10px);
 }
 
 .resource-card::before {
@@ -80,7 +109,7 @@
   position: absolute;
   inset: 0;
   border-radius: 8px;
-  opacity: 0.28;
+  opacity: 0.3;
 }
 
 .resource-card--brick::before { background: var(--resource-brick); }
@@ -90,32 +119,25 @@
 .resource-card--wool::before { background: var(--resource-wool); }
 
 .resource-card__icon {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
   image-rendering: pixelated;
   z-index: 1;
 }
 
+.resource-card__icon--small {
+  width: 18px;
+  height: 18px;
+}
+
 .resource-card__label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--color-text);
   z-index: 1;
-}
-
-.resource-card__overflow {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--color-accent);
-  color: #1c1c1c;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 1px 5px;
-  z-index: 2;
+  white-space: nowrap;
 }
 
 .resource-card--interactive {
@@ -123,7 +145,6 @@
 }
 
 .resource-card--interactive:hover {
-  transform: translateY(-4px);
   border-color: var(--color-accent);
 }
 
@@ -132,11 +153,102 @@
   outline-offset: 2px;
 }
 
+/* Selected faces are brought to the very front of their group (see the inline zIndex bump in
+   ResourceHand.tsx) and lifted, so a selection stays legible at a glance even from the middle
+   of a heavily-overlapped fan — otherwise a later, unselected card in front would still cover
+   most of it. */
 .resource-card--selected {
   border-color: var(--color-accent);
   border-width: 2px;
-  box-shadow: 0 0 0 1px var(--color-accent), 0 2px 6px rgba(0, 0, 0, 0.4);
-  transform: translateY(-6px);
+  box-shadow: 0 0 0 1px var(--color-accent), 0 3px 8px rgba(0, 0, 0, 0.45);
+  transform: rotate(var(--card-rotate, 0deg)) translateY(-10px);
+}
+
+/* The trailing "everything beyond the cap" slot — same card shell, a bit wider to fit the
+   stepper controls, upright (no fan rotation) since it's a control rather than a card face.
+   Joins the overlap chain (not a detached, separately-spaced box) and always sits frontmost in
+   its group (z-index set inline in ResourceHand.tsx, above even a selected face's own
+   front-of-group bump) — "the one on top of the others".
+   Uses a *shallower* -11.5px pullback rather than the individual faces' shared -34.5px one
+   (see the exclusion in the rule above): reusing the same -34.5px value here, at the highest
+   z-index in the group, was tried first and visually swallowed not just the one face directly
+   behind it but *three* individual faces at once — with only 11.5px between each face's start
+   position, a 34.5px pullback reaches back across three of them, and being frontmost meant it
+   painted over all three, collapsing the fan into what looked like a single card next to one
+   big box (see ResourceHand.design-notes.md's round-3 section for the full geometry and a
+   screenshot of the failed attempt). -11.5px is exactly the same per-card *reveal* increment
+   used throughout the fan, just applied relative to this element's one true neighbor (the last
+   individual face) instead of inheriting a pullback sized for a different-width predecessor —
+   so it still overlaps for real, joining the chain, but only ever covers that one face, not
+   several. That one face does become fully covered (the accepted trade-off: the boundary
+   between "individual card" and "counter" has to blend *somewhere*, and only sacrificing the
+   single face immediately adjacent to the counter — still reachable by tapping the counter's +
+   as normal, see stepGroup in ResourceHand.tsx — reads far better than losing three). The
+   `pointer-events: none` below (with the stepper opting back in) keeps that face's tap target
+   technically reachable even though it's no longer visible, rather than dead-clicking on empty
+   overflow-shell background. */
+.resource-card--overflow {
+  width: 62px;
+  margin-left: -11.5px;
+  transform: none;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.resource-card--overflow:hover,
+.resource-card--overflow.resource-card--selected {
+  transform: translateY(-10px);
+}
+
+.resource-card__overflow-of {
+  font-size: 8px;
+  color: var(--color-text-dim);
+  z-index: 1;
+}
+
+.resource-card__stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 1;
+  cursor: default;
+  /* Opts back into pointer events despite the overflow shell's own pointer-events: none
+     (see .resource-card--overflow above) — this is the one part of that shell that must stay
+     genuinely, reliably clickable. */
+  pointer-events: auto;
+}
+
+.resource-card__stepper button {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  font-size: 11px;
+}
+
+.resource-card__stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.resource-card__stepper button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.resource-card__selected {
+  min-width: 13px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--color-accent);
+  z-index: 1;
 }
 
 .resource-card__check {

@@ -524,13 +524,14 @@ test.describe('State gallery: mid-game board, build toolbar, game log, pause & l
     await capture(page, 'leave-confirm-modal');
     await page.locator('.modal', { hasText: 'Leave game?' }).locator('button', { hasText: 'Cancel' }).click({ timeout: 10000 });
 
-    // --- Unpause + discard modal (rolled-a-7 with a big hand, also shows ResourceHand's "+N"
-    // card-face overflow badge — MAX_CARD_FACES_PER_RESOURCE is 8, so 12 lumber overflows).
+    // --- Unpause + discard modal (rolled-a-7 with a big, lopsided hand — ResourceHand's
+    // 'cards' variant renders one stack per resource type rather than one element per card, so
+    // 12 lumber renders as a single "12" stack rather than a wall of card faces).
     await forceRoomFields(roomId, { paused: false, pausedAt: null });
     await forceHand(roomId, uid, { resources: { brick: 2, lumber: 12, ore: 2, grain: 1, wool: 1 }, devCards: [] });
     await forceRoomFields(roomId, { phase: 'discard', pendingDiscardUids: [uid], discardPhaseStartedAt: Date.now() });
     await page.locator('.discard-modal').waitFor({ timeout: 15000 });
-    await capture(page, 'discard-modal-with-hand-overflow');
+    await capture(page, 'discard-modal-with-large-hand');
   });
 });
 

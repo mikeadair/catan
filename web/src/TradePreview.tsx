@@ -115,7 +115,10 @@ export default function TradePreview(): JSX.Element {
     room.edges[edgeIds[6]] = 'p0';
 
     const ownHand: PrivateHand = {
-      resources: { brick: 2, lumber: 2, ore: 1, grain: 1, wool: 1 },
+      // ore intentionally over ResourceHand's RESOURCE_GROUP_CAP (6) so the 'cards' hand variant's
+      // overlap fan + trailing overflow/counter slot both render by default — otherwise every snap
+      // of the hand/toolbar components would only ever show the plain under-cap look.
+      resources: { brick: 2, lumber: 2, ore: 12, grain: 1, wool: 1 },
       devCards: [{ id: 'dc1', type: 'knight', boughtTurn: 1 }],
     };
 
