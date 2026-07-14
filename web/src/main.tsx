@@ -9,7 +9,11 @@ const Root =
     ? (await import('./DevPreview.tsx')).default
     : previewMode === 'trade'
       ? (await import('./TradePreview.tsx')).default
-      : App
+      : previewMode === 'home'
+        ? (await import('./HomePreview.tsx')).default
+        : previewMode === 'lobby'
+          ? (await import('./LobbyPreview.tsx')).default
+          : App
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

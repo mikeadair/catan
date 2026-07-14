@@ -16,7 +16,11 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list']],
-  timeout: 30_000,
+  // A no-arg default sweep is one Playwright *test* covering every SNAP_COMPONENTS + SNAP_SCENARIOS
+  // entry sequentially (each ~1-2s), so this is a whole-sweep budget, not a per-capture one — sized
+  // generously above the registry's current ~40 entries so growing the registry doesn't require
+  // bumping this again for a while.
+  timeout: 120_000,
   use: {
     baseURL,
     trace: 'off',

@@ -397,7 +397,7 @@ export default function Game(): JSX.Element {
     return (
       <div className="game-over">
         <div className="game-over__card">
-          <h1>{winner ? `${winner.displayName} wins!` : 'Game over'}</h1>
+          <h1>{winner ? (room.winnerUid === uid ? 'You win!' : `${winner.displayName} wins!`) : 'Game over'}</h1>
           <p>Victory points reached {room.victoryPointsToWin}.</p>
           <button type="button" className="game-over__button" onClick={() => leaveRoom()}>
             Back to home

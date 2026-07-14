@@ -3,12 +3,25 @@
 // zustand store directly with a fake room/players/hand/trades and mounts the real <Game/>
 // route, so TradeBar/TradeOffers/ResourceHand all run exactly as they do in production.
 // Wired in from main.tsx behind ?preview=trade. Delete before shipping.
+//
+// ?preview=trade&state=<name> overrides a handful of room fields after the base state below is
+// built, to reach modal/end-state UI that the default 'main' phase never shows — see the
+// `stateOverrides` map. Kept as a flat field-merge (not a second full RoomState literal per
+// state) so every state variant still gets the same board/players/hand as the default preview.
 import { useEffect, type JSX } from 'react';
 import { generateBoard } from '@catan/engine';
 import type { RoomState, PublicPlayer, PrivateHand, TradeOffer } from '@catan/engine';
 import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from '@catan/engine';
 import { useGameStore } from './state/store';
 import Game from './routes/Game';
+
+const stateOverrides: Record<string, Partial<RoomState>> = {
+  discard: { phase: 'discard', pendingDiscardUids: ['p0'], discardPhaseStartedAt: Date.now() - 5_000 },
+  'robber-hex': { phase: 'robber', robberPhaseStartedAt: Date.now() - 5_000 },
+  'gold-pick': { phase: 'goldPick', pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
+  'game-over': { phase: 'gameOver', winnerUid: 'p0' },
+  paused: { paused: true, pausedAt: Date.now() - 3_000 },
+};
 
 export default function TradePreview(): JSX.Element {
   useEffect(() => {
@@ -161,6 +174,13 @@ export default function TradePreview(): JSX.Element {
         rejectedUids: ['p0', 'p2'],
       },
     ];
+
+    const stateName = new URLSearchParams(window.location.search).get('state');
+    if (stateName) {
+      const overrides = stateOverrides[stateName];
+      if (!overrides) throw new Error(`[TradePreview] unknown ?state=${stateName} — known: ${Object.keys(stateOverrides).join(', ')}`);
+      Object.assign(room, overrides);
+    }
 
     useGameStore.setState({
       uid: 'p0',

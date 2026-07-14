@@ -6,15 +6,22 @@
 //
 // `SNAP_LIST=1 npm run snap` prints this whole registry (components + scenarios) without
 // navigating anywhere, if you just want to check what's available.
-export type SnapPreview = 'trade' | 'board';
+export type SnapPreview = 'home' | 'lobby' | 'trade' | 'board';
+export type SnapScreen = 'main-menu' | 'lobby' | 'game';
 
 export interface SnapComponent {
   /** CSS selector for the element to screenshot (first match). */
   selector: string;
-  /** Which `?preview=` dev harness (TradePreview.tsx / DevPreview.tsx) renders this component. */
+  /** Which `?preview=` dev harness renders this component (HomePreview/LobbyPreview/TradePreview/DevPreview.tsx). */
   preview: SnapPreview;
+  /** Which screen this belongs to — drives the output subfolder (e2e/snap-screenshots/<screen>/<name>.png). */
+  screen: SnapScreen;
   /** Shown by SNAP_LIST and in error messages — what a reviewer would recognize this region as. */
   description: string;
+  /** Extra query-string params (no leading '&'/'?') appended to the preview URL — for harness
+   * variants that aren't reached by clicking (e.g. LobbyPreview's `seats=full`, TradePreview's
+   * `state=discard`), as opposed to `clicks` below, which drives in-page interaction. */
+  query?: string;
   /** Selectors to click, in order, before this component exists/is visible at all — e.g. the
    * trade composer only mounts once its toggle button is clicked. Distinct from a *scenario*'s
    * clicks (below), which go further than "make it visible" into a specific interaction state. */
@@ -22,29 +29,113 @@ export interface SnapComponent {
 }
 
 export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
+  // --- main-menu screen (HomePreview.tsx, ?preview=home) ---
+  home: {
+    selector: '.home',
+    preview: 'home',
+    screen: 'main-menu',
+    description: 'Whole main-menu / home screen',
+  },
+  'home-name-card': {
+    selector: '.home__card--name',
+    preview: 'home',
+    screen: 'main-menu',
+    description: '"Play as" card — display name, color picker, sign-in/account entry point',
+  },
+  'home-create-room-card': {
+    selector: '.home__grid > form:first-of-type',
+    preview: 'home',
+    screen: 'main-menu',
+    description: 'Create-a-room card (map picker + create button)',
+  },
+  'home-join-room-card': {
+    selector: '.home__grid > form:last-of-type',
+    preview: 'home',
+    screen: 'main-menu',
+    description: 'Join-a-room card (room code input + join button)',
+  },
+  'map-picker': {
+    selector: '.map-picker-grid',
+    preview: 'home',
+    screen: 'main-menu',
+    description: 'Map preset picker grid (used by both the home create-room card and the lobby settings card)',
+  },
+
+  // --- lobby screen (LobbyPreview.tsx, ?preview=lobby) ---
+  lobby: {
+    selector: '.lobby',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Whole lobby screen, as the host, partially seated',
+  },
+  'lobby-room-code': {
+    selector: '.lobby__card--code',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Room code + copy-invite-link card',
+  },
+  'lobby-players-card': {
+    selector: '.lobby__column--left .lobby__card:not(.lobby__card--code)',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Seat list card (players, bot controls, start/leave)',
+  },
+  'lobby-settings-card': {
+    selector: '.lobby__column--right .lobby__card',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Game settings card (map, victory points, discard limit, turn timer, safe mode)',
+  },
+  'map-preview': {
+    selector: '.map-preview',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Small rendered-board preview swatch atop the lobby settings card',
+  },
+  'lobby-full': {
+    selector: '.lobby',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Lobby with every seat filled (6/6) — tests the seat list at max density',
+    query: 'seats=full',
+  },
+  'lobby-guest-view': {
+    selector: '.lobby',
+    preview: 'lobby',
+    screen: 'lobby',
+    description: 'Lobby as a non-host seated player — host-only controls hidden (add bot/start) or disabled (map/settings fields)',
+    query: 'role=guest',
+  },
+
+  // --- game screen (TradePreview.tsx / DevPreview.tsx) ---
   hand: {
     selector: '.game__toolbar-hand',
     preview: 'trade',
+    screen: 'game',
     description: "Player's own resource hand / trade card picker, in the toolbar",
   },
   toolbar: {
     selector: '.game__toolbar',
     preview: 'trade',
+    screen: 'game',
     description: 'Whole bottom action toolbar (hand, trade toggle, dev cards, build toolbar, turn timer, end turn)',
   },
   'build-toolbar': {
     selector: '.build-toolbar',
     preview: 'trade',
+    screen: 'game',
     description: 'Road/settlement/city/dev-card build buttons with live affordability chips',
   },
   'dev-cards': {
     selector: '.dev-card-panel',
     preview: 'trade',
+    screen: 'game',
     description: 'Development card panel',
   },
   'trade-bar': {
     selector: '.trade-bar',
     preview: 'trade',
+    screen: 'game',
     description: 'Floating trade composer panel ("you want" cards + offer/bank/target controls)',
     // The toggle button (Game.tsx) reuses BuildToolbar's `.build-toolbar__button` class for
     // visual consistency but, unlike BuildToolbar's own road/settlement/city/dev-card buttons,
@@ -56,42 +147,77 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
   'trade-offers': {
     selector: '.game__trades-overlay',
     preview: 'trade',
+    screen: 'game',
     description: 'Pending trade offers overlay, top-right of the board (TradePreview seeds 3 fake trades)',
   },
   board: {
     selector: '.catan-board',
     preview: 'board',
+    screen: 'game',
     description: 'Hex board SVG (use ?preview=board&map=<preset> via SNAP_URL directly for a non-default map)',
   },
   sidebar: {
     selector: '.game__sidebar',
     preview: 'trade',
+    screen: 'game',
     description: 'Whole right-hand sidebar (bank, players, log)',
   },
   bank: {
     selector: '.bank-panel',
     preview: 'trade',
+    screen: 'game',
     description: 'Bank resource-count strip',
   },
   players: {
     selector: '.player-roster',
     preview: 'trade',
+    screen: 'game',
     description: 'Player roster / scoreboard',
   },
   'game-log': {
     selector: '.game-log',
     preview: 'trade',
+    screen: 'game',
     description: 'Game log & chat panel',
   },
   'dice-roller': {
     selector: '.dice-roller',
     preview: 'trade',
+    screen: 'game',
     description: 'Dice roller widget',
+  },
+  'discard-modal': {
+    selector: '.discard-modal',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Post-7-roll discard modal (rules.ts "discard" phase)',
+    query: 'state=discard',
+  },
+  'robber-banner': {
+    selector: '.robber-banner',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Robber-phase "choose a hex" banner (the victim-picker sub-modal needs an actual board click, not just a fixed state — not covered here, see CLAUDE.md gap notes)',
+    query: 'state=robber-hex',
+  },
+  'gold-pick-modal': {
+    selector: '.discard-modal', // GoldPickModal reuses discard-modal's stylesheet/class, not its own
+    preview: 'trade',
+    screen: 'game',
+    description: 'Fog-of-war gold-hex resource picker modal (rules.ts "goldPick" phase)',
+    query: 'state=gold-pick',
+  },
+  'game-over': {
+    selector: '.game-over',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Game-over / victory screen',
+    query: 'state=game-over',
   },
 };
 
 export interface SnapScenario {
-  /** Which SNAP_COMPONENTS entry to resolve the selector/preview/base clicks from. */
+  /** Which SNAP_COMPONENTS entry to resolve the selector/preview/screen/base clicks from. */
   component: string;
   /** Extra clicks applied *after* the component's own `clicks` (if any) — the interaction that
    * actually produces the state being demonstrated, not just what makes the component exist. */
@@ -137,5 +263,10 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
       ...Array(7).fill('[data-testid="hand-card-overflow"][data-resource="ore"] button[aria-label="Add one more Ore to trade"]'),
     ],
     description: 'Ore over the cap, counter clicked 7x — faces full, stepper now climbing past them (total 7)',
+  },
+  'home-signin-panel-open': {
+    component: 'home-name-card',
+    clicks: ['.home__link-button'],
+    description: 'Home name card with the sign-in/create-account panel expanded (email+password tab)',
   },
 };
