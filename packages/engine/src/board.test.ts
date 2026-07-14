@@ -134,8 +134,8 @@ describe('generateBoard: extended-5-6p', () => {
 
 describe('generateBoard: fog-of-war', () => {
   const EXPECTED_FOG_NUMBERS = [
-    2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 9, 9, 9,
-    9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12,
+    2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9,
+    9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 12, 12, 12,
   ].sort((a, b) => a - b);
 
   it('has 61 hexes with correct terrain/port counts, one pasture swapped to gold', () => {
@@ -143,18 +143,25 @@ describe('generateBoard: fog-of-war', () => {
     expect(board.hexes).toHaveLength(61);
 
     const counts = terrainCounts(board);
-    expect(counts.hills).toBe(10);
-    expect(counts.forest).toBe(13);
-    expect(counts.mountains).toBe(10);
-    expect(counts.fields).toBe(13);
-    expect(counts.pasture).toBe(11); // 12 in the pool, minus the one swapped to gold
-    expect(counts.desert).toBe(3);
+    expect(counts.hills).toBe(9);
+    expect(counts.forest).toBe(12);
+    expect(counts.mountains).toBe(9);
+    expect(counts.fields).toBe(12);
+    expect(counts.pasture).toBe(12); // 13 in the pool, minus the one swapped to gold
+    expect(counts.desert).toBe(6);
     expect(board.hexes.filter((h) => h.terrain === 'gold')).toHaveLength(1);
 
     const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
-    expect(desertHexes).toHaveLength(3);
+    expect(desertHexes).toHaveLength(6);
     for (const d of desertHexes) expect(d.number).toBeNull();
     expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
+
+    // Desert is fixed at the 6 corner hexes of the radius-2 ring (the hidden ring bordering
+    // the revealed area), not shuffled — the 6 compass-direction axial corners at that radius
+    // are exactly (2,0),(2,-2),(0,-2),(-2,0),(-2,2),(0,2). Verified by exact coordinate set,
+    // not just the count, since a bug could still produce 6 deserts in the wrong spots.
+    const desertCoords = new Set(desertHexes.map((d) => `${d.coord.q},${d.coord.r}`));
+    expect(desertCoords).toEqual(new Set(['2,0', '2,-2', '0,-2', '-2,0', '-2,2', '0,2']));
 
     // Row widths 5,6,7,8,9,8,7,6,5 (9 rows) — a true radius-4 hexagon, unlike extended-5-6p's
     // asymmetric shape. Verified directly (not just the 61 count) since that's what makes
@@ -167,6 +174,16 @@ describe('generateBoard: fog-of-war', () => {
     ]);
 
     expect(board.ports).toHaveLength(9);
+  });
+
+  it('never places desert anywhere but the 6 fixed corner hexes, across many seeds', () => {
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('fog-of-war', `fog-desert-seed-${i}`);
+      const desertCoords = new Set(
+        board.hexes.filter((h) => h.terrain === 'desert').map((d) => `${d.coord.q},${d.coord.r}`),
+      );
+      expect(desertCoords, `seed ${i}`).toEqual(new Set(['2,0', '2,-2', '0,-2', '-2,0', '-2,2', '0,2']));
+    }
   });
 
   it('the gold hex sits dead center and every non-desert hex gets a number from the fog pool', () => {

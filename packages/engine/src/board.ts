@@ -133,37 +133,46 @@ const EXTENDED_NUMBER_POOL = [
   2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
 ];
 
-// fog-of-war pool: the board is the 61-hex true radius-4 hexagon (fogHexCoords) — 10 hills,
-// 13 forest, 10 mountains, 13 fields, 12 pasture, 3 desert = 61. One pasture becomes the gold
-// hex (same swap-to-center trick as before), still needs a number token like any other
-// non-desert hex.
-const FOG_TERRAIN_POOL: Terrain[] = (() => {
+// fog-of-war pool: the board is the 61-hex true radius-4 hexagon (fogHexCoords). Unlike every
+// other preset, desert isn't randomly shuffled in — it's fixed at the 6 "corner" hexes of the
+// hidden ring bordering the revealed area (radius 2; see FOG_DESERT_RING_RADIUS /
+// isHexRingCorner and buildFogTerrainNumberAssignment below), so revealed tiles are never
+// desert and the desert positions read as deliberate landmarks along the board's 6 compass
+// directions rather than wherever a shuffle happened to land them. The remaining 55 hexes (61
+// - 6 fixed desert) are randomized from this pool: 9 hills, 12 forest, 9 mountains, 12 fields,
+// 13 pasture = 55. One pasture becomes the gold hex (same swap-to-center trick as every other
+// fog-of-war generation), still needs a number token like any other non-desert hex.
+const FOG_NON_DESERT_TERRAIN_POOL: Terrain[] = (() => {
   const pool: Terrain[] = [
-    'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
-    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
-    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
-    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
-    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
-    'desert', 'desert', 'desert',
+    'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
+    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
   ];
   pool[pool.lastIndexOf('pasture')] = 'gold';
   return pool;
 })();
-// 58 number tokens for the 58 non-desert hexes in FOG_TERRAIN_POOL (61 - 3 desert). Follows
-// the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL — the (2,12) pair (the rarest, lowest-pip
-// numbers) stays scarcer than the rest of the middle values.
-const FOG_NUMBER_POOL = [
-  2, 2, 2, 2, 2,
+// 55 number tokens for the 55 non-desert, non-fixed hexes above (every one of them needs a
+// number, since none are desert). Follows the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL —
+// the (2,12) pair (the rarest, lowest-pip numbers) stays scarcer than the rest of the middle
+// values; 55 doesn't divide evenly across 5 symmetric pairs, so 6 gets one extra copy over its
+// pip-partner 8 rather than forcing an uneven extremes/middle split.
+const FOG_NON_DESERT_NUMBER_POOL = [
+  2, 2, 2,
   3, 3, 3, 3, 3, 3,
   4, 4, 4, 4, 4, 4,
   5, 5, 5, 5, 5, 5,
-  6, 6, 6, 6, 6, 6,
+  6, 6, 6, 6, 6, 6, 6,
   8, 8, 8, 8, 8, 8,
   9, 9, 9, 9, 9, 9,
   10, 10, 10, 10, 10, 10,
   11, 11, 11, 11, 11, 11,
-  12, 12, 12, 12, 12,
+  12, 12, 12,
 ];
+// The hidden ring whose 6 corner hexes are always desert — see FOG_NON_DESERT_TERRAIN_POOL's
+// comment above.
+const FOG_DESERT_RING_RADIUS = 2;
 
 // Fixed official-beginner layout (row order matches standardHexCoords()).
 const OFFICIAL_TERRAIN: Terrain[] = [
@@ -194,6 +203,58 @@ function violatesNoAdjacent68(coords: AxialCoord[], numbers: (number | null)[]):
   return false;
 }
 
+/** Whether the hex at `coord` (already known to be at cube-radius `radius` from center) is
+ * one of that ring's 6 "corner" hexes — laid out along the board's 6 compass directions —
+ * rather than one of the 6*(radius-1) "edge" hexes between them. Corners are exactly the
+ * cells where at least two of the three cube coordinates hit the ring's own radius (an edge
+ * cell only ever has one). Used by fog-of-war's fixed desert placement below. */
+function isHexRingCorner(coord: AxialCoord, radius: number): boolean {
+  const x = coord.q;
+  const z = coord.r;
+  const y = -x - z;
+  const atRadius = [Math.abs(x), Math.abs(y), Math.abs(z)].filter((v) => v === radius).length;
+  return atRadius >= 2;
+}
+
+/** fog-of-war's terrain/number assignment. Unlike every other preset, desert isn't shuffled
+ * in at random with everything else — it's fixed at the 6 corner hexes of
+ * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why), so revealed
+ * tiles are never desert and the fixed positions read as deliberate compass-direction
+ * landmarks rather than wherever a shuffle happened to land. Everything else is shuffled from
+ * FOG_NON_DESERT_TERRAIN_POOL/FOG_NON_DESERT_NUMBER_POOL across the remaining hexes, with the
+ * same no-adjacent-6/8 fairness retry every other randomized preset uses. */
+function buildFogTerrainNumberAssignment(coords: AxialCoord[], rng: () => number): { terrains: Terrain[]; numbers: (number | null)[] } {
+  const desertIndices = new Set(
+    coords
+      .map((_, i) => i)
+      .filter((i) => hexCubeRadius(coords[i]) === FOG_DESERT_RING_RADIUS && isHexRingCorner(coords[i], FOG_DESERT_RING_RADIUS)),
+  );
+  const otherIndices = coords.map((_, i) => i).filter((i) => !desertIndices.has(i));
+
+  let terrains: Terrain[] = [];
+  let numbers: (number | null)[] = [];
+  let attempts = 0;
+  const MAX_ATTEMPTS = 2000;
+
+  do {
+    const shuffledTerrains = shuffle(FOG_NON_DESERT_TERRAIN_POOL, rng);
+    const shuffledNumbers = shuffle(FOG_NON_DESERT_NUMBER_POOL, rng);
+    terrains = new Array<Terrain>(coords.length);
+    numbers = new Array<number | null>(coords.length);
+    for (const i of desertIndices) {
+      terrains[i] = 'desert';
+      numbers[i] = null;
+    }
+    otherIndices.forEach((i, k) => {
+      terrains[i] = shuffledTerrains[k];
+      numbers[i] = shuffledNumbers[k];
+    });
+    attempts++;
+  } while (attempts < MAX_ATTEMPTS && violatesNoAdjacent68(coords, numbers));
+
+  return { terrains, numbers };
+}
+
 function buildTerrainNumberAssignment(
   presetId: MapPresetId,
   coords: AxialCoord[],
@@ -202,12 +263,15 @@ function buildTerrainNumberAssignment(
   if (presetId === 'official-beginner') {
     return { terrains: OFFICIAL_TERRAIN.slice(), numbers: OFFICIAL_NUMBERS.slice() };
   }
+  if (presetId === 'fog-of-war') {
+    return buildFogTerrainNumberAssignment(coords, rng);
+  }
 
   // extended-5-6p has no authored "official" arrangement (unlike official-beginner) — it's
   // always randomized, same as balanced-random/chaos, just from the bigger pool.
-  const terrainPool = presetId === 'extended-5-6p' ? EXTENDED_TERRAIN_POOL : presetId === 'fog-of-war' ? FOG_TERRAIN_POOL : TERRAIN_POOL;
-  const numberPool = presetId === 'extended-5-6p' ? EXTENDED_NUMBER_POOL : presetId === 'fog-of-war' ? FOG_NUMBER_POOL : NUMBER_POOL;
-  const requireFair = presetId === 'balanced-random' || presetId === 'extended-5-6p' || presetId === 'fog-of-war';
+  const terrainPool = presetId === 'extended-5-6p' ? EXTENDED_TERRAIN_POOL : TERRAIN_POOL;
+  const numberPool = presetId === 'extended-5-6p' ? EXTENDED_NUMBER_POOL : NUMBER_POOL;
+  const requireFair = presetId === 'balanced-random' || presetId === 'extended-5-6p';
   let terrains: Terrain[] = [];
   let numbers: (number | null)[] = [];
   let attempts = 0;
