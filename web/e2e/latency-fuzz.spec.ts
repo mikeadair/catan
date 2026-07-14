@@ -228,6 +228,104 @@ test.describe('Latency fuzz: build actions', () => {
   });
 });
 
+test.describe('Latency fuzz: setup phase', () => {
+  // Regression coverage for a bug the "build actions" test above structurally can never catch:
+  // that test deliberately runs setup with NO latency (see its comment at line ~114) and only
+  // starts injecting latency afterward, so it never exercised setup-phase placement under real
+  // network delay. The bug: Game.tsx derived setupNeedsSettlement/setupNeedsRoad directly from
+  // players[uid]'s settlementsBuilt/roadsBuilt — a *separate* Firestore listener from `room`,
+  // with no ordering guarantee against it (see firebase/rooms.ts). Under latency, the players
+  // snapshot landing first could flip interactionMode/candidateEdges/candidateVertices before
+  // room.vertices/room.edges actually had the new piece — the same invisible-piece race as the
+  // already-fixed buildMode bug, just in the one code path every single game always exercises
+  // (every player places 2 settlements + 2 roads in setup), which is exactly why it kept
+  // surfacing after that other fix landed. Fixed by deriving both flags from room.vertices/
+  // room.edges directly instead.
+  test('setup settlement + road placement render correctly under latency from the very start', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const rng = mulberry32(SEED + 2);
+
+    const { context: p1Context, page: p1Page } = await newContextAndPage(browser);
+
+    await setDisplayName(p1Page, 'LatencySetupP1');
+    const code = await createRoom(p1Page);
+    await addBots(p1Page, 1);
+    await startGame(p1Page);
+    await p1Page.waitForSelector('.game__board-area', { timeout: 20000 });
+
+    const roomId = await fetchRoomIdByCode(code);
+
+    // Latency is live from the moment the game starts — the opposite of the build-actions
+    // test's deliberate "fast setup" shortcut, since setup itself is what's under test here.
+    const p1Latency = await startRandomLatency(p1Context, p1Page, rng, 'P1 (setup)');
+    try {
+      // Wait for it to actually be P1's turn (the bot may go first) — candidate vertex
+      // hotspots only render once interactionMode flips to 'placeSettlement' for this client.
+      const vertexHotspot = p1Page.locator('[data-testid^="hotspot-vertex-"]').first();
+      await vertexHotspot.waitFor({ timeout: 30000 });
+      await maybeCaptureScreenshot(rng, p1Page, SEED, 'setup-phase', 'settlement-candidates', 'P1');
+
+      const vertexTestId = await vertexHotspot.getAttribute('data-testid');
+      const vertexId = vertexTestId!.slice('hotspot-vertex-'.length);
+      const vertexLocator = p1Page.locator(`[data-testid="hotspot-vertex-${vertexId}"]`);
+      await vertexLocator.click({ force: true, timeout: 10000 }); // arm
+      await p1Page.waitForTimeout(200);
+
+      const settlementGaps = await withFailureScreenshots({ P1: p1Page }, SEED, 'setup-phase', 'settlement-gap-check', async () => {
+        await vertexLocator.click({ force: true, timeout: 10000 }); // confirm -> dispatches buildSettlement(free)
+        const g: string[] = [];
+        const deadline = Date.now() + 8000;
+        for (;;) {
+          const represented = await isVertexVisuallyRepresented(p1Page, vertexId);
+          if (!represented) g.push(`tick ${Date.now()}: neither settlement nor armed preview rendered for vertex ${vertexId}`);
+          const liveRoom = await fetchRoom(roomId);
+          if (liveRoom.vertices[vertexId]) break; // server has committed it
+          if (Date.now() > deadline) break;
+          await p1Page.waitForTimeout(75);
+        }
+        return g;
+      });
+      expect(
+        settlementGaps,
+        `vertex ${vertexId}: gap(s) with neither a settlement nor an armed preview rendered between confirm and server commit`,
+      ).toEqual([]);
+      await maybeCaptureScreenshot(rng, p1Page, SEED, 'setup-phase', 'settlement-settled', 'P1');
+
+      // --- The free road connected to that settlement ---
+      const edgeHotspot = p1Page.locator('[data-testid^="hotspot-edge-"]').first();
+      await edgeHotspot.waitFor({ timeout: 15000 });
+      const edgeTestId = await edgeHotspot.getAttribute('data-testid');
+      const edgeId = edgeTestId!.slice('hotspot-edge-'.length);
+      const edgeLocator = p1Page.locator(`[data-testid="hotspot-edge-${edgeId}"]`);
+      await edgeLocator.click({ force: true, timeout: 10000 }); // arm
+      await p1Page.waitForTimeout(200);
+
+      const roadGaps = await withFailureScreenshots({ P1: p1Page }, SEED, 'setup-phase', 'road-gap-check', async () => {
+        await edgeLocator.click({ force: true, timeout: 10000 }); // confirm -> dispatches buildRoad(free)
+        const g: string[] = [];
+        const deadline = Date.now() + 8000;
+        for (;;) {
+          const represented = await isEdgeVisuallyRepresented(p1Page, edgeId);
+          if (!represented) g.push(`tick ${Date.now()}: neither road nor armed preview rendered for edge ${edgeId}`);
+          const liveRoom = await fetchRoom(roomId);
+          if (liveRoom.edges[edgeId]) break; // server has committed it
+          if (Date.now() > deadline) break;
+          await p1Page.waitForTimeout(75);
+        }
+        return g;
+      });
+      expect(
+        roadGaps,
+        `edge ${edgeId}: gap(s) with neither a road nor an armed preview rendered between confirm and server commit`,
+      ).toEqual([]);
+      await maybeCaptureScreenshot(rng, p1Page, SEED, 'setup-phase', 'road-settled', 'P1');
+    } finally {
+      await p1Latency.stop();
+      await p1Context.close();
+    }
+  });
+});
+
 test.describe('Latency fuzz: robber phase', () => {
   test('manual robber placement racing the auto-timeout never leaves the hex-picker stuck open', async ({ browser }) => {
     test.setTimeout(120_000);

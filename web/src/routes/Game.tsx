@@ -481,9 +481,22 @@ export default function Game(): JSX.Element {
     if (ok) setMonopolyPending(null);
   }
 
-  // --- Setup-phase flow: fully derived from public player build counts, no local state needed.
+  // --- Setup-phase flow: derived from the player's actual pieces in room.vertices/room.edges
+  // — the same data Board's own candidateEdges/candidateVertices use — rather than
+  // players[uid]'s settlementsBuilt/roadsBuilt counts. players is a *separate* Firestore
+  // listener from room (see firebase/rooms.ts), written atomically together server-side but
+  // with no ordering guarantee for when each listener's snapshot arrives on the client. Under
+  // latency, the players snapshot landing first would flip setupNeedsRoad/setupNeedsSettlement
+  // (and so Board's interactionMode/candidateEdges/candidateVertices) before room.edges/
+  // room.vertices actually had the new piece — the exact same invisible-piece race as the
+  // buildMode fix elsewhere in this file (see the pendingBuild effects above), just in the
+  // setup-phase path, which every player hits on every game (hence "still sometimes" after
+  // that other fix landed). Counting from room here guarantees this and Board's own un-arm
+  // effect fire off the identical room snapshot.
   const setupActive = (room.phase === 'setup1' || room.phase === 'setup2') && isCurrentPlayer;
-  const setupNeedsSettlement = setupActive && players[uid] && players[uid].settlementsBuilt === players[uid].roadsBuilt;
+  const selfRoadsFromRoom = Object.values(room.edges).filter((ownerUid) => ownerUid === uid).length;
+  const selfSettlementsFromRoom = Object.values(room.vertices).filter((v) => v.uid === uid).length;
+  const setupNeedsSettlement = setupActive && selfSettlementsFromRoom === selfRoadsFromRoom;
   const setupNeedsRoad = setupActive && !setupNeedsSettlement;
 
   const robberHexStep = !robberMoveSubmitted && ((room.phase === 'robber' && isCurrentPlayer) || !!knightPending);
