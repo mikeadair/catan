@@ -597,7 +597,11 @@ export default function BoardView({
               </g>
             )}
             {hex.id === board.robberHexId && (
-              <g transform={`translate(${center.x + SIZE * 0.42}, ${center.y - SIZE * 0.5})`}>
+              <g
+                transform={`translate(${center.x + SIZE * 0.42}, ${center.y - SIZE * 0.5})`}
+                data-testid="robber"
+                data-hex-id={hex.id}
+              >
                 <circle r={14} fill="#1c1c1c" stroke="#e8e9ec" strokeWidth={1.5} />
                 <image
                   href={robberIcon}
@@ -672,7 +676,11 @@ export default function BoardView({
         const pb = vertexPixel(b, board, SIZE);
         const color = players[ownerUid] ? PLAYER_COLOR_HEX[players[ownerUid].color] : '#888';
         return (
-          <g key={edgeId} filter="url(#piece-shadow)">
+          // data-testid/data-owner-uid: test-only hooks (e2e/latency-fuzz.spec.ts's oracle) for
+          // verifying every committed room.edges entry has exactly one correctly-colored
+          // rendered road and no phantom roads exist — purely additive, no visual/behavioral
+          // change.
+          <g key={edgeId} filter="url(#piece-shadow)" data-testid={`road-${edgeId}`} data-owner-uid={ownerUid}>
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={color} strokeWidth={5} strokeLinecap="round" />
           </g>
@@ -693,7 +701,12 @@ export default function BoardView({
         const pa = vertexPixel(a, board, SIZE);
         const pb = vertexPixel(b, board, SIZE);
         return (
-          <g key={`pending-${edgeId}`} filter="url(#piece-shadow)" opacity={0.85}>
+          <g
+            key={`pending-${edgeId}`}
+            filter="url(#piece-shadow)"
+            opacity={0.85}
+            data-testid={`road-preview-${edgeId}`}
+          >
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#1c1c1c" strokeWidth={11} strokeLinecap="round" />
             <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={ownColor} strokeWidth={5} strokeLinecap="round" />
           </g>
@@ -708,7 +721,14 @@ export default function BoardView({
         const color = players[building.uid] ? PLAYER_COLOR_HEX[players[building.uid].color] : '#888';
         if (building.type === 'city') {
           return (
-            <g key={vertexId} transform={`translate(${p.x}, ${p.y})`} filter="url(#piece-shadow)">
+            <g
+              key={vertexId}
+              transform={`translate(${p.x}, ${p.y})`}
+              filter="url(#piece-shadow)"
+              data-testid={`building-${vertexId}`}
+              data-owner-uid={building.uid}
+              data-building-type="city"
+            >
               {/* City: a taller main house plus a smaller wing, reading as "grown" from a
                   single settlement house without needing a second color/legend. */}
               <path d={housePath(7.5, 12.5)} transform="translate(-3.5, -1)" fill={color} stroke="#1c1c1c" strokeWidth={2} />
@@ -725,6 +745,9 @@ export default function BoardView({
             fill={color}
             stroke="#1c1c1c"
             strokeWidth={2}
+            data-testid={`building-${vertexId}`}
+            data-owner-uid={building.uid}
+            data-building-type="settlement"
           />
         );
       })}
@@ -748,6 +771,7 @@ export default function BoardView({
               tabIndex={0}
               aria-label={isArmed ? 'Confirm settlement here' : 'Build settlement here'}
               aria-pressed={isArmed}
+              data-testid={`hotspot-vertex-${vid}`}
               onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapVertex(vid))}
             />
           );
@@ -769,6 +793,7 @@ export default function BoardView({
               tabIndex={0}
               aria-label={isArmed ? 'Confirm city upgrade here' : 'Upgrade to city here'}
               aria-pressed={isArmed}
+              data-testid={`hotspot-vertex-${vid}`}
               onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapVertex(vid))}
             />
           );
@@ -790,6 +815,7 @@ export default function BoardView({
               tabIndex={0}
               aria-label={isArmed ? 'Confirm road here' : 'Build road here'}
               aria-pressed={isArmed}
+              data-testid={`hotspot-edge-${eid}`}
               onKeyDown={(e) => activateOnEnterOrSpace(e, () => tapEdge(eid))}
             >
               <line
@@ -831,7 +857,7 @@ export default function BoardView({
           const p = vertexPixel(armed.id, board, SIZE);
           const size = interactionMode === 'placeCity' ? housePath(7.5, 12.5) : housePath(8, 11);
           return (
-            <g key="armed-vertex-preview">
+            <g key="armed-vertex-preview" data-testid="armed-preview-vertex" data-armed-id={armed.id}>
               <path
                 d={size}
                 transform={`translate(${p.x}, ${p.y})`}
@@ -858,7 +884,7 @@ export default function BoardView({
           const pb = vertexPixel(edgeInfo.vertexIds[1], board, SIZE);
           const mid = edgeMidpoint(armed.id, board, SIZE);
           return (
-            <g key="armed-edge-preview">
+            <g key="armed-edge-preview" data-testid="armed-preview-edge" data-armed-id={armed.id}>
               <line
                 x1={pa.x}
                 y1={pa.y}
@@ -892,6 +918,7 @@ export default function BoardView({
                 role="button"
                 tabIndex={0}
                 aria-label="Move the robber to this hex"
+                data-testid={`hotspot-hex-${hex.id}`}
                 onKeyDown={(e) => activateOnEnterOrSpace(e, () => onHexClick?.(hex.id))}
               />
             );

@@ -14,6 +14,17 @@ export async function createRoom(page: Page): Promise<string> {
   return (await page.textContent('.lobby__code'))?.trim() ?? '';
 }
 
+/** Joins an existing room by its lobby code from Home (the `displayName` field must already
+ * be reachable — this navigates to '/' itself, same as createRoom's callers do via
+ * setDisplayName). Used by multi-human-context suites (e.g. e2e/latency-fuzz.spec.ts) where a
+ * second simulated player needs to join a room a different page already created. */
+export async function joinRoomByCode(page: Page, displayName: string, code: string): Promise<void> {
+  await setDisplayName(page, displayName);
+  await page.fill('.home__input--code', code);
+  await page.click('button:has-text("Join room")');
+  await page.waitForSelector('.lobby__code', { timeout: 20000 });
+}
+
 export async function addBots(page: Page, count: number): Promise<void> {
   for (let i = 0; i < count; i++) {
     await page.click('button:has-text("Add bot")');
@@ -39,16 +50,27 @@ export async function startGame(page: Page): Promise<void> {
 /**
  * Drives the local human player's own setup-phase placements (nothing auto-plays for a
  * human, unlike bots). Polls the phase banner and clicks the first available hotspot
- * whenever it's this player's turn, until the game reaches a normal turn (banner clears
- * and the bottom build toolbar appears) or `maxRounds` polls are exhausted.
+ * whenever it's this player's turn, until the game reaches a normal turn (the dice roller
+ * mounts) or `maxRounds` polls are exhausted.
+ *
+ * Deliberately does NOT key off `.game__toolbar`'s presence — since the "always-on toolbar"
+ * UI overhaul (see Game.tsx's footer, and its own comment on `showDiceRoller`), that element
+ * is unconditionally mounted for the *entire* live game, setup included, so checking for it
+ * here would return on the very first poll without ever placing anything. `.dice-roller`
+ * only mounts once `room.phase` is 'roll'/'main' (past setup for every seat, not just this
+ * one — setup is snake-ordered), which is the real signal this helper is after.
  */
 export async function playThroughSetupForSelf(page: Page, maxRounds = 60): Promise<void> {
   for (let i = 0; i < maxRounds; i++) {
-    const toolbarVisible = await page.locator('.game__toolbar').count();
-    if (toolbarVisible > 0) return; // past setup, into a normal turn
+    const diceRollerVisible = await page.locator('.dice-roller').count();
+    if (diceRollerVisible > 0) return; // past setup, into a normal turn
 
     const banner = await page.locator('.game__phase-banner').textContent().catch(() => null);
-    if (banner?.includes('Place your first settlement') || banner?.includes('Place a road')) {
+    // Matches both setup rounds' banner text ("Place your first settlement." / "Place your
+    // second settlement." — see Game.tsx's phaseBanner) rather than hardcoding "first", which
+    // used to silently skip every round-2 settlement placement.
+    const needsSettlement = !!banner?.includes('Place your') && banner.includes('settlement');
+    if (needsSettlement || banner?.includes('Place a road')) {
       const vertexHotspot = page.locator('.catan-board__hotspot--vertex').first();
       const edgeHotspot = page.locator('.catan-board__hotspot--edge').first();
       // force: true — these are SVG hit-targets inside a <g onClick>, and a sibling
@@ -62,7 +84,7 @@ export async function playThroughSetupForSelf(page: Page, maxRounds = 60): Promi
       // spin on that for the test's full timeout; on failure here we just loop and
       // re-locate against the fresh DOM instead.
       try {
-        if (banner.includes('settlement') && (await vertexHotspot.count()) > 0) {
+        if (needsSettlement && (await vertexHotspot.count()) > 0) {
           await vertexHotspot.click({ force: true, timeout: 5000 });
         } else if ((await edgeHotspot.count()) > 0) {
           await edgeHotspot.click({ force: true, timeout: 5000 });

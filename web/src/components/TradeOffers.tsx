@@ -103,6 +103,8 @@ function ResponderDots({
             className={`trade-offers__responder trade-offers__responder--${status}`}
             style={style}
             title={`${p?.displayName ?? 'Player'} — ${statusLabel}`}
+            data-testid={`responder-${trade.id}-${responderUid}`}
+            data-responder-status={status}
           >
             <span className="trade-offers__responder-initial">{initial}</span>
             {status === 'accepted' && (
@@ -224,6 +226,8 @@ export default function TradeOffers({
             <div
               key={t.id}
               className={`trade-offers__trade${isDismissing ? ' trade-offers__trade--all-rejected' : ''}`}
+              data-testid={`trade-${t.id}`}
+              data-trade-status={t.status}
             >
               <div className="trade-offers__desc">
                 <div className="trade-offers__desc-who">

@@ -128,6 +128,9 @@ export default function ResourceHand({
               <div
                 key={`${r}-${i}`}
                 className={`resource-card resource-card--${r}${isSelected ? ' resource-card--selected' : ''}${interactive ? ' resource-card--interactive' : ''}`}
+                data-testid="hand-card"
+                data-resource={r}
+                data-resource-count={count}
                 onClick={interactive ? () => toggleCardFace(r, i) : undefined}
                 role={interactive ? 'button' : undefined}
                 tabIndex={interactive ? 0 : undefined}

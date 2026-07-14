@@ -12,7 +12,8 @@
     "pretest:e2e": "npm run build --prefix ../packages/engine && npm run build --prefix ../functions && npm run build:e2e-bridge --prefix ../functions",
     "test:e2e": "firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh\"",
     "test:e2e:ui": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --ui\"",
-    "test:e2e:screenshots": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --project=desktop-1080p\""
+    "test:e2e:screenshots": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --project=desktop-1080p\"",
+    "test:e2e:latency": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh e2e/latency-fuzz.spec.ts --project=desktop-1080p\""
   },
   "dependencies": {
     "@catan/engine": "*",
@@ -28,6 +29,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "firebase-admin": "^13.10.0",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",

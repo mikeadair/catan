@@ -71,6 +71,18 @@ export default function Game(): JSX.Element {
   const [yopSelection, setYopSelection] = useState<Partial<ResourceCount>>({});
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
   const [robberVictimStep, setRobberVictimStep] = useState<RobberVictimStep | null>(null);
+  // Guards against the hex-picker (and its "choose a hex" banner) re-opening the instant a
+  // plain (no-dev-card) robber move's dispatch resolves but the client's own local `room`
+  // snapshot hasn't yet caught up past 'robber' phase — same shape of gap as the invisible-
+  // road bug fixed in Board.tsx, just manifesting as a *re-arm* here instead of a vanish.
+  // Without this, robberHexStep re-derives `true` from the still-stale room.phase the moment
+  // finishRobberMove clears robberVictimStep on success, inviting a second (server-rejected)
+  // moveRobber submission. Cleared reactively once room.phase actually leaves 'robber' —
+  // mirroring the fixed pattern of deriving from confirmed room state rather than the
+  // dispatch promise. (Playing a Knight card never needs this: DevCardPanel only allows it
+  // during 'roll'/'main', never while already in 'robber' phase, so knightPending's own
+  // clearing can't suffer the same staleness.)
+  const [robberMoveSubmitted, setRobberMoveSubmitted] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   // Trade composer state, lifted up here (rather than owned inside TradeBar) because the
   // "give" side is staged by tapping cards in the hand — a sibling rendered separately below
@@ -124,9 +136,33 @@ export default function Game(): JSX.Element {
   // it, or the turn simply moved on). Trade composer selections are deliberately excluded —
   // they should only clear when the player explicitly closes the composer (toggleTradeComposer
   // -> resetTradeComposer), not because a turn ended or anything else happened underneath them.
+  //
+  // Also cleared once the local player's own confirmed roadsBuilt/settlementsBuilt/
+  // citiesBuilt count changes — this is what actually closes buildMode after a successful
+  // build now (see onEdgeClick/onVertexClick below, which used to clear it eagerly via
+  // `.then((ok) => ok && setBuildMode(null))` the instant the dispatch *promise* resolved).
+  // That eager clear flipped Board's interactionMode away from 'placeRoad'/'placeSettlement'/
+  // 'placeCity' before the client's own room/players listener had caught up to the build
+  // actually landing, which collapsed Board's candidateEdges/candidateVertices to empty and
+  // triggered *its own* defensive "un-arm if the candidate falls out of the legal set" effect
+  // — reopening the exact same invisible-piece gap the original armed-preview bug had, just
+  // via a different path. Deriving the clear from confirmed players[] data instead (same
+  // philosophy as that original fix) closes the gap: the armed preview now stays visible,
+  // uninterrupted, right up until the real piece renders from room.edges/room.vertices.
+  const selfBuiltCounts = players[uid ?? ''];
+  const selfRoadsBuilt = selfBuiltCounts?.roadsBuilt;
+  const selfSettlementsBuilt = selfBuiltCounts?.settlementsBuilt;
+  const selfCitiesBuilt = selfBuiltCounts?.citiesBuilt;
   useEffect(() => {
     setBuildMode(null);
-  }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
+  }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber, selfRoadsBuilt, selfSettlementsBuilt, selfCitiesBuilt]);
+
+  // See robberMoveSubmitted's declaration above — reset the guard once the room's own phase
+  // confirms the move actually landed (or, for a rejected/failed submission that never
+  // changes phase, the next real robber phase starts it fresh anyway).
+  useEffect(() => {
+    if (room?.phase !== 'robber') setRobberMoveSubmitted(false);
+  }, [room?.phase]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
   // robber steals, discards, dev cards, and the win announcement).
@@ -351,12 +387,15 @@ export default function Game(): JSX.Element {
 
   async function finishRobberMove(hexId: string, stealFromUid: string | null, viaCardId?: string) {
     const cardId = viaCardId ?? robberVictimStep?.viaCardId ?? knightPending ?? undefined;
+    if (!cardId) setRobberMoveSubmitted(true); // plain robber-phase move — see the flag's declaration
     const ok = cardId
       ? await runAction({ type: 'playKnight', uid: uid!, devCardId: cardId, robberHexId: hexId, stealFromUid })
       : await runAction({ type: 'moveRobber', uid: uid!, robberHexId: hexId, stealFromUid });
     if (ok) {
       setKnightPending(null);
       setRobberVictimStep(null);
+    } else if (!cardId) {
+      setRobberMoveSubmitted(false); // failed — allow the player to try again
     }
   }
 
@@ -424,7 +463,7 @@ export default function Game(): JSX.Element {
   const setupNeedsSettlement = setupActive && players[uid] && players[uid].settlementsBuilt === players[uid].roadsBuilt;
   const setupNeedsRoad = setupActive && !setupNeedsSettlement;
 
-  const robberHexStep = (room.phase === 'robber' && isCurrentPlayer) || !!knightPending;
+  const robberHexStep = !robberMoveSubmitted && ((room.phase === 'robber' && isCurrentPlayer) || !!knightPending);
 
   // --- Resolve the Board's interaction mode + click handlers, in priority order.
   let interactionMode: BoardInteractionMode = 'none';
@@ -461,18 +500,20 @@ export default function Game(): JSX.Element {
     };
   } else if (buildMode === 'road') {
     interactionMode = 'placeRoad';
+    // Deliberately doesn't clear buildMode here on success — see the useEffect above keyed on
+    // players[uid]'s built-piece counts, which now owns that instead.
     onEdgeClick = (edgeId) => {
-      void runAction({ type: 'buildRoad', uid, edgeId }).then((ok) => ok && setBuildMode(null));
+      void runAction({ type: 'buildRoad', uid, edgeId });
     };
   } else if (buildMode === 'settlement') {
     interactionMode = 'placeSettlement';
     onVertexClick = (vertexId) => {
-      void runAction({ type: 'buildSettlement', uid, vertexId }).then((ok) => ok && setBuildMode(null));
+      void runAction({ type: 'buildSettlement', uid, vertexId });
     };
   } else if (buildMode === 'city') {
     interactionMode = 'placeCity';
     onVertexClick = (vertexId) => {
-      void runAction({ type: 'buildCity', uid, vertexId }).then((ok) => ok && setBuildMode(null));
+      void runAction({ type: 'buildCity', uid, vertexId });
     };
   }
 
