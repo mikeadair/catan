@@ -18,12 +18,13 @@ import { createRng, shuffle } from './rng';
 
 // ---------------------------------------------------------------------------
 // Regular "hexagon of hexes" of a given radius, top to bottom, left to right.
-// radius=2 (19 tiles, rows of 3,4,5,4,3) is the standard board; radius=3 (37
-// tiles, rows of 4,5,6,7,6,5,4) is the fog-of-war board — big enough for two
-// full hidden rings (see initialFogRevealHexIds below) inside a visible outer
-// ring, unlike the 5-6 player extension board which is an asymmetric 30-hex
-// shape rather than a true hexagon (see extendedHexCoords) and so wouldn't
-// produce clean, even rings.
+// radius=2 (19 tiles, rows of 3,4,5,4,3) is the standard board; radius=4 (61
+// tiles, rows of 5,6,7,8,9,8,7,6,5) is the fog-of-war board — big enough for
+// two revealed outer rings (more room for opening settlements than a single
+// ring gives) plus two full hidden rings in between the revealed edge and the
+// gold center (see initialFogRevealHexIds below), unlike the 5-6 player
+// extension board, which is an asymmetric 30-hex shape rather than a true
+// hexagon (see extendedHexCoords) and so wouldn't produce clean, even rings.
 // ---------------------------------------------------------------------------
 
 function hexagonCoords(radius: number): AxialCoord[] {
@@ -43,7 +44,7 @@ export function standardHexCoords(): AxialCoord[] {
 }
 
 export function fogHexCoords(): AxialCoord[] {
-  return hexagonCoords(3);
+  return hexagonCoords(4);
 }
 
 // 5-6 player extension: 30 hexes in 7 rows of 3,4,5,6,5,4,3 — an elongated hexagon rather
@@ -132,27 +133,36 @@ const EXTENDED_NUMBER_POOL = [
   2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
 ];
 
-// fog-of-war pool: the board is the 37-hex true radius-3 hexagon (fogHexCoords), scaled
-// further from the 30-hex extended distribution — 6 hills, 7 forest, 6 mountains, 7 fields,
-// 8 pasture, 3 desert = 37. One pasture becomes the gold hex (same swap-to-center trick as
-// before), still needs a number token like any other non-desert hex.
+// fog-of-war pool: the board is the 61-hex true radius-4 hexagon (fogHexCoords) — 10 hills,
+// 13 forest, 10 mountains, 13 fields, 12 pasture, 3 desert = 61. One pasture becomes the gold
+// hex (same swap-to-center trick as before), still needs a number token like any other
+// non-desert hex.
 const FOG_TERRAIN_POOL: Terrain[] = (() => {
   const pool: Terrain[] = [
-    'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
-    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
-    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
-    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
-    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
+    'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
+    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
     'desert', 'desert', 'desert',
   ];
   pool[pool.lastIndexOf('pasture')] = 'gold';
   return pool;
 })();
-// 34 number tokens for the 34 non-desert hexes in FOG_TERRAIN_POOL (37 - 3 desert). Follows
-// the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL — the (2,12) and (3,11) pairs (the
-// rarest, lowest-pip numbers) stay scarcer than the rest of the middle values.
+// 58 number tokens for the 58 non-desert hexes in FOG_TERRAIN_POOL (61 - 3 desert). Follows
+// the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL — the (2,12) pair (the rarest, lowest-pip
+// numbers) stays scarcer than the rest of the middle values.
 const FOG_NUMBER_POOL = [
-  2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12,
+  2, 2, 2, 2, 2,
+  3, 3, 3, 3, 3, 3,
+  4, 4, 4, 4, 4, 4,
+  5, 5, 5, 5, 5, 5,
+  6, 6, 6, 6, 6, 6,
+  8, 8, 8, 8, 8, 8,
+  9, 9, 9, 9, 9, 9,
+  10, 10, 10, 10, 10, 10,
+  11, 11, 11, 11, 11, 11,
+  12, 12, 12, 12, 12,
 ];
 
 // Fixed official-beginner layout (row order matches standardHexCoords()).
@@ -393,19 +403,25 @@ function hexCubeRadius(c: AxialCoord): number {
   return Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
 }
 
-/** Hex ids revealed from the start of a fog-of-war game: the entire outer ring (the board's
- * perimeter, where initial settlements go — same as a normal game) plus the single hex dead
- * center (always the gold hex; see generateBoard). Everything in between starts hidden until
- * a road reaches it (see 'buildRoad' in rules.ts) — on the 37-hex fogHexCoords() board (radius
- * 3) that's genuinely two full hidden rings (radius 2, then radius 1) around the gold center,
- * not just one; this function doesn't hardcode a radius, it just reveals whatever the board's
- * own outer ring and center happen to be, so it falls out automatically from the board being
- * bigger. Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring
- * around the outside, fog in the middle, a special tile at the very center) rather than
- * isolated corner tiles. */
+/** Hex ids revealed from the start of a fog-of-war game: the outer *two* rings (the board's
+ * perimeter plus the ring just inside it — more room for opening settlements than a single
+ * ring gives every player) plus the single hex dead center (always the gold hex; see
+ * generateBoard). Everything in between starts hidden until a road reaches it (see 'buildRoad'
+ * in rules.ts) — on the 61-hex fogHexCoords() board (radius 4) that's two full hidden rings
+ * (radius 2, then radius 1) sandwiched between the revealed edge and the gold center. This
+ * function doesn't hardcode a radius, it just reveals the board's own outermost two ring
+ * distances and center, so it falls out automatically from however big the board actually is.
+ * Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring around
+ * the outside, fog in the middle, a special tile at the very center) rather than isolated
+ * corner tiles. */
 export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
   const maxRadius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
-  return hexes.filter((h) => hexCubeRadius(h.coord) === maxRadius || hexCubeRadius(h.coord) === 0).map((h) => h.id);
+  return hexes
+    .filter((h) => {
+      const r = hexCubeRadius(h.coord);
+      return r === maxRadius || r === maxRadius - 1 || r === 0;
+    })
+    .map((h) => h.id);
 }
 
 /** Whether vertexId is legal for a *setup-phase* (free) settlement once fog-of-war's extra

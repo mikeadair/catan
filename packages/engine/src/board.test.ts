@@ -134,19 +134,20 @@ describe('generateBoard: extended-5-6p', () => {
 
 describe('generateBoard: fog-of-war', () => {
   const EXPECTED_FOG_NUMBERS = [
-    2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12,
+    2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 9, 9, 9,
+    9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12,
   ].sort((a, b) => a - b);
 
-  it('has 37 hexes with correct terrain/port counts, one pasture swapped to gold', () => {
+  it('has 61 hexes with correct terrain/port counts, one pasture swapped to gold', () => {
     const board = generateBoard('fog-of-war', 'seed-fog');
-    expect(board.hexes).toHaveLength(37);
+    expect(board.hexes).toHaveLength(61);
 
     const counts = terrainCounts(board);
-    expect(counts.hills).toBe(6);
-    expect(counts.forest).toBe(7);
-    expect(counts.mountains).toBe(6);
-    expect(counts.fields).toBe(7);
-    expect(counts.pasture).toBe(7); // 8 in the pool, minus the one swapped to gold
+    expect(counts.hills).toBe(10);
+    expect(counts.forest).toBe(13);
+    expect(counts.mountains).toBe(10);
+    expect(counts.fields).toBe(13);
+    expect(counts.pasture).toBe(11); // 12 in the pool, minus the one swapped to gold
     expect(counts.desert).toBe(3);
     expect(board.hexes.filter((h) => h.terrain === 'gold')).toHaveLength(1);
 
@@ -155,13 +156,14 @@ describe('generateBoard: fog-of-war', () => {
     for (const d of desertHexes) expect(d.number).toBeNull();
     expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
 
-    // Row widths 4,5,6,7,6,5,4 (7 rows) — a true radius-3 hexagon, unlike extended-5-6p's
-    // asymmetric shape. Verified directly (not just the 37 count) since that's what makes
-    // "two full rings of fog" well-defined in the first place (see initialFogRevealHexIds).
+    // Row widths 5,6,7,8,9,8,7,6,5 (9 rows) — a true radius-4 hexagon, unlike extended-5-6p's
+    // asymmetric shape. Verified directly (not just the 61 count) since that's what makes
+    // "two revealed outer rings + two hidden rings" well-defined in the first place (see
+    // initialFogRevealHexIds).
     const rowWidths = new Map<number, number>();
     for (const h of board.hexes) rowWidths.set(h.coord.r, (rowWidths.get(h.coord.r) ?? 0) + 1);
     expect([...rowWidths.entries()].sort(([a], [b]) => a - b)).toEqual([
-      [-3, 4], [-2, 5], [-1, 6], [0, 7], [1, 6], [2, 5], [3, 4],
+      [-4, 5], [-3, 6], [-2, 7], [-1, 8], [0, 9], [1, 8], [2, 7], [3, 6], [4, 5],
     ]);
 
     expect(board.ports).toHaveLength(9);
