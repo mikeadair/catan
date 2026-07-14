@@ -241,6 +241,12 @@ export interface RoomState {
   // player who goes AFK/offline while deciding where to place the robber doesn't stall the
   // game indefinitely — mirrors discardPhaseStartedAt above.
   robberPhaseStartedAt: number | null;
+  // Date.now() when the *current* player's setup turn began — reset on every advance (a new
+  // current player, or the settlement->road hand-off within one player's own setup turn), null
+  // once setup phase ends. Drives the fixed SETUP_TIMEOUT_SECONDS countdown (see
+  // 'timeoutSetupPlacement' in rules.ts) — mirrors discardPhaseStartedAt/robberPhaseStartedAt
+  // above, just per-player-turn instead of shared/single-phase-wide.
+  setupTurnStartedAt: number | null;
   botActionClaim: { turnNumber: number; ts: number } | null;
   log: LogEntry[];
   createdAt: number;
@@ -307,6 +313,9 @@ export const DISCARD_TIMEOUT_SECONDS = 30;
 // Same idea, for the current player deciding where to place the robber after a 7 (or a
 // knight). See 'timeoutRobber' in rules.ts.
 export const ROBBER_TIMEOUT_SECONDS = 30;
+// Same idea, for the current player's setup-phase settlement/road placement. See
+// 'timeoutSetupPlacement' in rules.ts.
+export const SETUP_TIMEOUT_SECONDS = 30;
 
 // --- Game actions: the single vocabulary of legal moves, applied via game/rules.ts ---
 export type GameAction =
@@ -330,6 +339,11 @@ export type GameAction =
   // room.robberPhaseStartedAt — moves the robber to a random legal hex on the current
   // player's behalf (no steal) so an AFK/stuck current player doesn't stall the game.
   | { type: 'timeoutRobber'; uid: string }
+  // Any room member may submit this once SETUP_TIMEOUT_SECONDS has actually elapsed since
+  // room.setupTurnStartedAt — auto-places a random legal settlement or road (whichever the
+  // current player still owes for this setup turn) on their behalf, same "don't stall the
+  // game" rationale as timeoutRobber/timeoutDiscard.
+  | { type: 'timeoutSetupPlacement'; uid: string }
   // fog-of-war only: pays out a pending gold-hex pick (see pendingGoldPicks/'goldPick' phase).
   // resources.length must exactly match the owed amount; entries need not be distinct.
   | { type: 'pickGoldResources'; uid: string; resources: Resource[] }

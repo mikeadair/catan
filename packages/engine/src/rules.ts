@@ -36,13 +36,14 @@ import {
   PLAYER_COLORS,
   RESOURCES,
   ROBBER_TIMEOUT_SECONDS,
+  SETUP_TIMEOUT_SECONDS,
   STARTING_BANK,
   TERRAIN_RESOURCE,
   TRADE_EXPIRY_MS,
   TRADE_TURN_EXTENSION_MS,
   TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
 } from './types';
-import { generateBoard, initialFogRevealHexIds } from './board';
+import { generateBoard, initialFogRevealHexIds, vertexLegalForFogSetup } from './board';
 import { createRng, shuffle } from './rng';
 
 export interface GameStateBundle {
@@ -571,6 +572,7 @@ export function createGame(
     pendingDiscardUids: [],
     discardPhaseStartedAt: null,
     robberPhaseStartedAt: null,
+    setupTurnStartedAt: Date.now(), // room always starts in 'setup1' — the clock starts immediately
     botActionClaim: null,
     log: [],
     createdAt: Date.now(),
@@ -862,6 +864,68 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       break;
     }
 
+    case 'timeoutSetupPlacement': {
+      requirePhase(room, ['setup1', 'setup2']);
+      if (room.setupTurnStartedAt === null) throw new Error('No setup timer is running');
+      const elapsedMs = Date.now() - room.setupTurnStartedAt;
+      if (elapsedMs < SETUP_TIMEOUT_SECONDS * 1000) {
+        throw new Error('Setup timer has not expired yet');
+      }
+      if (!board) throw new Error('No board');
+      const timedOutUid = room.turnOrder[room.currentPlayerIndex];
+      const player = requirePlayer(players, timedOutUid);
+
+      if (player.settlementsBuilt === player.roadsBuilt) {
+        // Needs a settlement — random pick among legal spots, same "keep it simple, no
+        // heuristics" philosophy as timeoutRobber, but reusing vertexLegalForFogSetup so it
+        // still respects the gold/hidden-hex restriction like every other placement path.
+        const candidates = Object.keys(board.vertices).filter((vId) => {
+          if (room.vertices[vId]) return false;
+          const v = board.vertices[vId];
+          if (v.adjacentVertexIds.some((n) => room.vertices[n])) return false;
+          return vertexLegalForFogSetup(board, room.discoveredHexIds, vId);
+        });
+        if (candidates.length === 0) throw new Error('No legal setup settlement spot available to time out into');
+        const vertexId = candidates[Math.floor(Math.random() * candidates.length)];
+        room.vertices[vertexId] = { type: 'settlement', uid: timedOutUid };
+        player.settlementsBuilt += 1;
+        room.lastSetupSettlementVertexId = vertexId;
+        room.setupTurnStartedAt = Date.now(); // fresh window for the free road still owed
+        addLog(room, `${player.displayName} ran out of time — a settlement was placed at random.`);
+
+        if (room.phase === 'setup2') {
+          for (const hexId of board.vertices[vertexId].adjacentHexIds) {
+            const hex = board.hexes.find((h) => h.id === hexId);
+            if (!hex) continue;
+            const resource = hexResource(hex.terrain);
+            if (!resource) continue;
+            if (room.bank[resource] > 0) {
+              room.bank[resource] -= 1;
+              hands[timedOutUid].resources[resource] += 1;
+            }
+          }
+          player.resourceCount = handSize(hands[timedOutUid]);
+        }
+      } else {
+        // Needs the free road connected to the settlement just placed.
+        const anchor = room.lastSetupSettlementVertexId;
+        if (!anchor) throw new Error('Missing setup anchor for timed-out road');
+        const v = board.vertices[anchor];
+        const options = v.adjacentEdgeIds.filter((eId) => !room.edges[eId]);
+        if (options.length === 0) throw new Error('No legal setup road available to time out into');
+        const edgeId = options[Math.floor(Math.random() * options.length)];
+        room.edges[edgeId] = timedOutUid;
+        player.roadsBuilt += 1;
+        room.lastSetupSettlementVertexId = null;
+        addLog(room, `${player.displayName} ran out of time — a road was placed at random.`);
+        discoverHexesAtEdge(next, edgeId, timedOutUid);
+        advanceSetupTurn(room); // also resets/clears setupTurnStartedAt for whatever's next
+      }
+      recalcLongestRoad(room, players);
+      recomputeVisibleVP(room, players);
+      break;
+    }
+
     case 'buildRoad': {
       requireCurrentPlayer(room, action.uid);
       const player = requirePlayer(players, action.uid);
@@ -919,26 +983,21 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         if (player.settlementsBuilt !== player.roadsBuilt) {
           throw new Error('Already placed this turn\'s free settlement');
         }
-        if (board2.vertices[action.vertexId].adjacentHexIds.some((h) => board2.hexes.find((hex) => hex.id === h)?.terrain === 'gold')) {
-          throw new Error('Cannot place a starting settlement next to the gold hex');
-        }
-        // fog-of-war only: settlements during setup are restricted to the board's *initial*
-        // reveal set (the outer ring, same as any other game) — recomputed fresh here rather
-        // than checked against the live room.discoveredHexIds, which grows over the course of
-        // setup as earlier players' free setup roads reveal hidden hexes (see
-        // discoverHexesAtEdge, called from the 'buildRoad' case below). Without this, a hex
-        // revealed mid-setup by one player's road would become settleable by a later player
-        // (or by the same player in setup2) purely because it happened to get uncovered before
-        // their turn — gaming the fog reveal instead of it being genuine post-setup expansion.
-        if (room.discoveredHexIds !== null) {
-          const initialReveal = new Set(initialFogRevealHexIds(board2.hexes));
-          if (board2.vertices[action.vertexId].adjacentHexIds.some((h) => !initialReveal.has(h))) {
-            throw new Error('Cannot place a starting settlement next to a hidden hex');
-          }
+        // Fog-of-war's extra setup restrictions (can't border the gold hex or any hex outside
+        // the board's *initial* reveal set — see vertexLegalForFogSetup's own doc comment for
+        // why that's checked fresh rather than against the live, mid-setup-growing
+        // room.discoveredHexIds) — shared with bots.ts's setup AI and Board.tsx's client
+        // candidate highlighting so all three agree on what's legal.
+        if (!vertexLegalForFogSetup(board2, room.discoveredHexIds, action.vertexId)) {
+          throw new Error('Cannot place a starting settlement next to the gold hex or a hidden hex');
         }
         room.vertices[action.vertexId] = { type: 'settlement', uid: action.uid };
         player.settlementsBuilt += 1;
         room.lastSetupSettlementVertexId = action.vertexId;
+        // Fresh SETUP_TIMEOUT_SECONDS window for the free road this same player still owes —
+        // same player, same conceptual "turn", but a distinct decision worth its own clock
+        // rather than inheriting whatever was left over from the settlement pick.
+        room.setupTurnStartedAt = Date.now();
         addLog(room, `${player.displayName} placed a settlement.`);
 
         if (room.phase === 'setup2') {
@@ -1394,6 +1453,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         room.turnStartedAt += pausedDurationMs;
         if (room.discardPhaseStartedAt !== null) room.discardPhaseStartedAt += pausedDurationMs;
         if (room.robberPhaseStartedAt !== null) room.robberPhaseStartedAt += pausedDurationMs;
+        if (room.setupTurnStartedAt !== null) room.setupTurnStartedAt += pausedDurationMs;
         room.paused = false;
         room.pausedAt = null;
         room.pauseVotes = [];
@@ -1465,9 +1525,11 @@ function advanceSetupTurn(room: RoomState): void {
   if (room.phase === 'setup1') {
     if (room.currentPlayerIndex < n - 1) {
       room.currentPlayerIndex += 1;
+      room.setupTurnStartedAt = Date.now();
     } else {
       room.phase = 'setup2';
       room.setupRound = 2;
+      room.setupTurnStartedAt = Date.now();
     }
   } else if (room.phase === 'setup2') {
     if (room.currentPlayerIndex === 0) {
@@ -1477,9 +1539,11 @@ function advanceSetupTurn(room: RoomState): void {
       room.turnStartedAt = Date.now();
       room.turnTimerExtensionMs = 0;
       room.devCardPlayedThisTurn = false;
+      room.setupTurnStartedAt = null;
       addLog(room, 'Setup complete.');
     } else {
       room.currentPlayerIndex -= 1;
+      room.setupTurnStartedAt = Date.now();
     }
   }
 }
@@ -1543,6 +1607,12 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     if (isCurrent) {
       if (player.settlementsBuilt === player.roadsBuilt) types.push('buildSettlement');
       else types.push('buildRoad');
+    }
+    if (
+      room.setupTurnStartedAt !== null &&
+      Date.now() - room.setupTurnStartedAt >= SETUP_TIMEOUT_SECONDS * 1000
+    ) {
+      types.push('timeoutSetupPlacement');
     }
     return types;
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, type GameStateBundle } from './rules';
+import { applyAction, createGame, type GameStateBundle } from './rules';
 import { decideBotAction } from './bots';
 import { MAX_CITIES, MAX_ROADS, RESOURCES, type BotDifficulty, type Resource, type TradeOffer } from './types';
 
@@ -367,6 +367,68 @@ describe('decideBotAction: robber targeting differs by difficulty', () => {
     if (normalAction?.type === 'moveRobber') {
       expect(normalAction.robberHexId).toBe(hexB.id);
       expect(normalAction.stealFromUid).toBe('p2');
+    }
+  });
+});
+
+describe('decideBotAction: fog-of-war setup', () => {
+  // Regression test: decideSetupAction's candidate-vertex list didn't exclude spots bordering
+  // the gold hex or a hidden hex, so on the fog-of-war board a bot could repeatedly propose
+  // (and have the server reject) the exact same illegal vertex every beat, since nothing
+  // about the rejected proposal changes what vertexScore/candidateSettlementVertices consider
+  // — the bot never placed anything ("bots don't pick a tile"). See vertexLegalForFogSetup.
+
+  it('always proposes a settlement vertex that avoids the gold hex and every hidden hex', () => {
+    // Across several seeds, not just one, since the bug only bites when the bot's own
+    // highest-scoring vertex happens to be illegal — with only one hidden-safe outer ring to
+    // choose from, a single seed could pass by luck even with the bug present.
+    for (let i = 0; i < 8; i++) {
+      const bundle = createGame(
+        { id: `r-fog-${i}`, code: 'ABCDE', hostUid: 'p0', mapPreset: 'fog-of-war', seed: `bots-fog-setup-test-${i}` },
+        [
+          { uid: 'p0', displayName: 'Bot A', isBot: true, botDifficulty: 'normal' },
+          { uid: 'p1', displayName: 'Human', isBot: false },
+        ],
+      );
+      const board = bundle.room.board!;
+      const revealed = new Set(bundle.room.discoveredHexIds);
+      const botUid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+
+      const action = decideBotAction(bundle, botUid);
+      expect(action?.type).toBe('buildSettlement');
+      if (action?.type !== 'buildSettlement') continue;
+      const v = board.vertices[action.vertexId];
+      for (const hexId of v.adjacentHexIds) {
+        const hex = board.hexes.find((h) => h.id === hexId)!;
+        expect(hex.terrain, `seed ${i}: vertex ${action.vertexId} borders the gold hex`).not.toBe('gold');
+        expect(revealed.has(hexId), `seed ${i}: vertex ${action.vertexId} borders hidden hex ${hexId}`).toBe(true);
+      }
+    }
+  });
+
+  it('two bots complete a full setup1+setup2 snake draft without an illegal placement', () => {
+    // Two bots so every turn — including the "opponent's" — can be driven through the real
+    // applyAction reducer, which throws on an illegal vertex just like the server would; this
+    // is the strongest possible check that
+    // decideSetupAction and rules.ts's own validation actually agree.
+    let bundle = createGame(
+      { id: 'r2', code: 'ABCDE', hostUid: 'p0', mapPreset: 'fog-of-war', seed: 'bots-fog-setup-draft-test' },
+      [
+        { uid: 'p0', displayName: 'Bot A', isBot: true, botDifficulty: 'normal' },
+        { uid: 'p1', displayName: 'Bot B', isBot: true, botDifficulty: 'hard' },
+      ],
+    );
+    for (let i = 0; i < 8; i++) {
+      // 2 players x 2 rounds x (settlement + road) = 8 actions to reach phase 'roll'.
+      const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+      const action = decideBotAction(bundle, uid);
+      expect(action, `action ${i}: bot ${uid} failed to decide (would previously null out on a permanently-rejected illegal spot)`).not.toBeNull();
+      bundle = applyAction(bundle, action!);
+    }
+    expect(bundle.room.phase).toBe('roll');
+    for (const uid of bundle.room.turnOrder) {
+      expect(bundle.players[uid].settlementsBuilt).toBe(2);
+      expect(bundle.players[uid].roadsBuilt).toBe(2);
     }
   });
 });

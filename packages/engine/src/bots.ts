@@ -22,7 +22,7 @@ import type {
   VertexId,
 } from './types';
 import { BUILD_COSTS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, TERRAIN_RESOURCE } from './types';
-import { pipCount } from './board';
+import { pipCount, vertexLegalForFogSetup } from './board';
 import type { GameStateBundle } from './rules';
 
 export function decideBotAction(bundle: GameStateBundle, botUid: string): GameAction | null {
@@ -152,7 +152,14 @@ function decideSetupAction(bundle: GameStateBundle, botUid: string, difficulty: 
   const player = players[botUid];
 
   if (player.settlementsBuilt === player.roadsBuilt) {
-    const candidates = candidateSettlementVertices(bundle);
+    // fog-of-war: exclude spots the server would reject anyway (bordering the gold hex or a
+    // hidden hex) — same check rules.ts's 'buildSettlement' handler enforces, shared via
+    // vertexLegalForFogSetup so this can't silently drift out of sync with the real rule.
+    // Without this, a bot could repeatedly propose (and have rejected) the same illegal spot
+    // every beat, since nothing about game state changes to make it reconsider.
+    const candidates = candidateSettlementVertices(bundle).filter((vId) =>
+      vertexLegalForFogSetup(room.board!, room.discoveredHexIds, vId),
+    );
     if (candidates.length === 0) throw new Error('bot: no legal setup settlement spot');
     candidates.sort((a, b) => vertexScore(bundle, b, difficulty) - vertexScore(bundle, a, difficulty));
     return { type: 'buildSettlement', uid: botUid, vertexId: candidates[0], free: true };

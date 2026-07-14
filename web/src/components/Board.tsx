@@ -10,7 +10,7 @@ import {
 } from 'react';
 import type { Board, EdgeId, PublicPlayer, RoomState, Terrain, VertexId } from '@catan/engine';
 import { TERRAIN_RESOURCE } from '@catan/engine';
-import { edgeMidpoint, hexPixel, pipCount, vertexPixel } from '@catan/engine';
+import { edgeMidpoint, hexPixel, pipCount, vertexLegalForFogSetup, vertexPixel } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { RESOURCE_ICON } from './resourceIcons';
 import desertIcon from '../assets/terrain/desert.png';
@@ -404,7 +404,7 @@ export default function BoardView({
       return new Set(
         ids.filter((id) => {
           if (!settlementDistanceOk(board, room, id)) return false;
-          if (freeSetup) return true;
+          if (freeSetup) return vertexLegalForFogSetup(board, room.discoveredHexIds, id);
           return vertexTouchesOwnRoad(board, room, id, uid);
         }),
       );

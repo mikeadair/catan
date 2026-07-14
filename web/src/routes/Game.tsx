@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
 import { computeRollGains, legalActionTypes, type GameStateBundle } from '@catan/engine';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '@catan/engine';
-import { DISCARD_TIMEOUT_SECONDS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, ROBBER_TIMEOUT_SECONDS } from '@catan/engine';
+import { DISCARD_TIMEOUT_SECONDS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, ROBBER_TIMEOUT_SECONDS, SETUP_TIMEOUT_SECONDS } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
@@ -341,6 +341,20 @@ export default function Game(): JSX.Element {
     }, remaining);
     return () => clearTimeout(timer);
   }, [room?.paused, room?.phase, room?.robberPhaseStartedAt, uid, dispatchQuiet]);
+
+  // Setup-timer expiry auto-places a random legal settlement/road for the current player's
+  // setup turn (see 'timeoutSetupPlacement' in rules.ts) — same pattern as the discard/robber
+  // timers above, so a current player who's gone AFK/stuck during setup doesn't stall the
+  // game before it's even started for everyone else.
+  useEffect(() => {
+    if (!room || !uid) return;
+    if (room.paused || (room.phase !== 'setup1' && room.phase !== 'setup2') || room.setupTurnStartedAt === null) return;
+    const remaining = Math.max(0, SETUP_TIMEOUT_SECONDS * 1000 - (Date.now() - room.setupTurnStartedAt));
+    const timer = setTimeout(() => {
+      void dispatchQuiet({ type: 'timeoutSetupPlacement', uid });
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [room?.paused, room?.phase, room?.setupTurnStartedAt, uid, dispatchQuiet]);
 
   if (!uid || !room) {
     return <div className="game-loading">Loading game…</div>;

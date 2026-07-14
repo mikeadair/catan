@@ -408,6 +408,33 @@ export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
   return hexes.filter((h) => hexCubeRadius(h.coord) === maxRadius || hexCubeRadius(h.coord) === 0).map((h) => h.id);
 }
 
+/** Whether vertexId is legal for a *setup-phase* (free) settlement once fog-of-war's extra
+ * restrictions are factored in: can't border the gold hex, and (fog-of-war only) can't border
+ * any hex outside the board's initial reveal set — even one revealed mid-setup by an earlier
+ * player's road (see rules.ts's 'buildSettlement' handler for the authoritative check this
+ * mirrors). No-op (always true, modulo the gold check) for non-fog rooms, since
+ * discoveredHexIds is null there. Shared by rules.ts (server validation), bots.ts (setup AI,
+ * so bots don't propose a spot the server then rejects — see decideSetupAction), and
+ * Board.tsx (client candidate highlighting, so the pulsing "legal placement" indicator doesn't
+ * show a spot that isn't actually legal) — deliberately factored out here instead of
+ * duplicated three times so they can't silently drift out of sync with each other. Only
+ * relevant to *setup* placement; main-phase settlement building has no such restriction (see
+ * rules.ts — the checks below only ever applied inside the `action.free` branch). */
+export function vertexLegalForFogSetup(
+  board: Board,
+  discoveredHexIds: string[] | null,
+  vertexId: VertexId,
+): boolean {
+  const v = board.vertices[vertexId];
+  if (!v) return false;
+  if (v.adjacentHexIds.some((h) => board.hexes.find((hex) => hex.id === h)?.terrain === 'gold')) return false;
+  if (discoveredHexIds !== null) {
+    const initialReveal = new Set(initialFogRevealHexIds(board.hexes));
+    if (v.adjacentHexIds.some((h) => !initialReveal.has(h))) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------

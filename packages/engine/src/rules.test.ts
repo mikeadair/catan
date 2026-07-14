@@ -8,6 +8,7 @@ import {
   MIN_OPEN_TRADE_WINDOW_MS,
   RESOURCES,
   ROBBER_TIMEOUT_SECONDS,
+  SETUP_TIMEOUT_SECONDS,
   TRADE_EXPIRY_MS,
   TRADE_TURN_EXTENSION_MS,
   TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
@@ -368,6 +369,65 @@ describe('dice roll and resource distribution', () => {
     expect(bundle.room.robberPhaseStartedAt).toBeNull();
     expect(bundle.room.board!.robberHexId).not.toBe(startHexId);
     expect(bundle.room.log.some((l) => l.message.includes('ran out of time'))).toBe(true);
+  });
+
+  it('rejects timeoutSetupPlacement before the setup timer has actually elapsed', () => {
+    const bundle = makeGame(2);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    expect(bundle.room.phase).toBe('setup1');
+    expect(() => applyAction(bundle, { type: 'timeoutSetupPlacement', uid })).toThrow(/has not expired yet/i);
+    expect(legalActionTypes(bundle, uid)).not.toContain('timeoutSetupPlacement');
+  });
+
+  it('timeoutSetupPlacement auto-places a settlement, then a road, on the same stuck player', () => {
+    let bundle = makeGame(2);
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+
+    bundle.room.setupTurnStartedAt = Date.now() - SETUP_TIMEOUT_SECONDS * 1000 - 1000;
+    expect(legalActionTypes(bundle, uid)).toContain('timeoutSetupPlacement');
+    bundle = applyAction(bundle, { type: 'timeoutSetupPlacement', uid });
+
+    // Settlement placed; still this player's turn (owes the free road next), with a fresh
+    // timer rather than an already-expired one.
+    expect(bundle.players[uid].settlementsBuilt).toBe(1);
+    expect(bundle.players[uid].roadsBuilt).toBe(0);
+    expect(bundle.room.currentPlayerIndex).toBe(bundle.room.turnOrder.indexOf(uid));
+    expect(bundle.room.lastSetupSettlementVertexId).not.toBeNull();
+    expect(bundle.room.setupTurnStartedAt).not.toBeNull();
+    expect(Date.now() - bundle.room.setupTurnStartedAt!).toBeLessThan(1000);
+    expect(legalActionTypes(bundle, uid)).not.toContain('timeoutSetupPlacement');
+
+    // Time out the road too.
+    bundle.room.setupTurnStartedAt = Date.now() - SETUP_TIMEOUT_SECONDS * 1000 - 1000;
+    bundle = applyAction(bundle, { type: 'timeoutSetupPlacement', uid });
+    expect(bundle.players[uid].roadsBuilt).toBe(1);
+    expect(bundle.room.lastSetupSettlementVertexId).toBeNull();
+    // Two-player game: setup1 snake-drafts forward, so it's now the other player's turn.
+    expect(bundle.room.currentPlayerIndex).not.toBe(bundle.room.turnOrder.indexOf(uid));
+    expect(bundle.room.log.filter((l) => l.message.includes('ran out of time'))).toHaveLength(2);
+  });
+
+  it('timeoutSetupPlacement on the fog-of-war board never picks a spot bordering gold or a hidden hex', () => {
+    const bundle = createGame(
+      { id: 'room-fog-timeout', code: 'ABCDE', hostUid: 'p0', mapPreset: 'fog-of-war', seed: 'fog-timeout-seed' },
+      [
+        { uid: 'p0', displayName: 'Player 0', isBot: false },
+        { uid: 'p1', displayName: 'Player 1', isBot: false },
+      ],
+    );
+    const board = bundle.room.board!;
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const revealed = new Set(bundle.room.discoveredHexIds);
+
+    bundle.room.setupTurnStartedAt = Date.now() - SETUP_TIMEOUT_SECONDS * 1000 - 1000;
+    const after = applyAction(bundle, { type: 'timeoutSetupPlacement', uid });
+    const placedVertexId = after.room.lastSetupSettlementVertexId!;
+    const v = board.vertices[placedVertexId];
+    for (const hexId of v.adjacentHexIds) {
+      const hex = board.hexes.find((h) => h.id === hexId)!;
+      expect(hex.terrain).not.toBe('gold');
+      expect(revealed.has(hexId)).toBe(true);
+    }
   });
 
   it('does not distribute a resource the bank cannot fully cover', () => {

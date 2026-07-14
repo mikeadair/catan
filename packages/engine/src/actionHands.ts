@@ -28,5 +28,12 @@ export function neededHandUidsFor(action: GameAction, turnOrder: string[]): Set<
     // same precedent as rollDice above.
     turnOrder.forEach((u) => uids.add(u));
   }
+  if (action.type === 'timeoutSetupPlacement') {
+    // The reporting action.uid (any room member) is usually not the timed-out player whose
+    // hand actually needs crediting on a setup2 second settlement — that's
+    // room.turnOrder[currentPlayerIndex], not visible here, so load everyone's hand, same
+    // precedent as timeoutDiscard/rollDice above.
+    turnOrder.forEach((u) => uids.add(u));
+  }
   return uids;
 }

@@ -40,6 +40,7 @@ export default function TradePreview(): JSX.Element {
       pendingDiscardUids: [],
       discardPhaseStartedAt: null,
       robberPhaseStartedAt: null,
+      setupTurnStartedAt: null,
       botActionClaim: null,
       log: [],
       createdAt: Date.now(),

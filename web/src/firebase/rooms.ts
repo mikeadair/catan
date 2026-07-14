@@ -210,6 +210,7 @@ export async function createRoom(
     pendingDiscardUids: [],
     discardPhaseStartedAt: null,
     robberPhaseStartedAt: null,
+    setupTurnStartedAt: null,
     botActionClaim: null,
     log: [],
     createdAt: now,
