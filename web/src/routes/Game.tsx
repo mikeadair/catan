@@ -431,15 +431,19 @@ export default function Game(): JSX.Element {
     }
   }
 
-  // Deliberately does not reset the composer on success — selections should only clear when
-  // the player explicitly closes the trade composer (see toggleTradeComposer), not as a side
-  // effect of submitting a trade.
+  // Resets the composer's give/receive/target selection once a trade actually goes through —
+  // otherwise the same stale selection (and, for proposeTrade, the same resources you may no
+  // longer even have) sits there after every trade, forcing a manual clear before starting the
+  // next one. Left untouched on failure so a rejected/errored attempt doesn't lose the
+  // player's in-progress selection.
   async function handleProposeTrade(give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) {
-    await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
+    const ok = await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
+    if (ok) resetTradeComposer();
   }
 
   async function handleBankTrade(give: Resource, giveAmount: number, receive: Resource) {
-    await runAction({ type: 'bankTrade', uid: uid!, give, giveAmount, receive });
+    const ok = await runAction({ type: 'bankTrade', uid: uid!, give, giveAmount, receive });
+    if (ok) resetTradeComposer();
   }
 
   function computeEligibleVictims(hexId: string): string[] {

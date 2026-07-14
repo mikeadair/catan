@@ -231,10 +231,20 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     expect(easyAction).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: true });
 
     const normal = makeTradeResponseGame('normal', { brick: 5, lumber: 0 }, trade);
-    expect(decideBotAction(normal.bundle, normal.botUid)).toBeNull();
+    expect(decideBotAction(normal.bundle, normal.botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
 
     const hard = makeTradeResponseGame('hard', { brick: 5, lumber: 0 }, trade);
-    expect(decideBotAction(hard.bundle, hard.botUid)).toBeNull();
+    expect(decideBotAction(hard.bundle, hard.botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
   });
 
   it('hard rejects an even trade that would deplete a scarce resource; normal accepts it', () => {
@@ -242,7 +252,12 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     const trade = { give: { lumber: 1 }, receive: { ore: 1 } };
 
     const hard = makeTradeResponseGame('hard', { ore: 2, lumber: 0 }, trade);
-    expect(decideBotAction(hard.bundle, hard.botUid)).toBeNull();
+    expect(decideBotAction(hard.bundle, hard.botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
 
     const normal = makeTradeResponseGame('normal', { ore: 2, lumber: 0 }, trade);
     expect(decideBotAction(normal.bundle, normal.botUid)).toEqual({
@@ -286,14 +301,21 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     });
   });
 
-  it('leaves an unwanted OPEN trade alone (no action) rather than rejecting it', () => {
-    // Open trades use interestedUids opt-in, not accept/reject — a bot that was never
-    // interested has nothing to withdraw, so decideTradeResponse should stay silent here,
-    // unlike the targeted case above.
+  // Regression coverage: decideTradeResponse used to leave an unwanted OPEN trade alone
+  // entirely (no action), which meant a trade no bot (or human) wanted just sat pending until
+  // it expired 90s later instead of resolving/auto-dismissing once every eligible responder
+  // had explicitly passed. It now always answers open trades too — accept (registering
+  // interest) or explicit reject (rules.ts's rejectedUids), same as targeted trades.
+  it('explicitly rejects an unwanted OPEN trade instead of leaving it alone', () => {
     const trade = { give: { lumber: 1 }, receive: { brick: 2 } };
     const { bundle, botUid } = makeTradeResponseGame('normal', { brick: 5, lumber: 0 }, trade, null);
 
-    expect(decideBotAction(bundle, botUid)).toBeNull();
+    expect(decideBotAction(bundle, botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
+    });
   });
 
   it('still accepts a favorable targeted trade', () => {
@@ -301,6 +323,30 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     const { bundle, botUid } = makeTradeResponseGame('normal', { lumber: 3, ore: 0 }, trade, 'p0');
 
     expect(decideBotAction(bundle, botUid)).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: true });
+  });
+
+  // Regression coverage: decideBotActionInner only ever called decideTradeResponse when the
+  // bot was NOT the current player — a trade targeted at (or open to) the current-turn bot
+  // was never checked at all, so it sat completely unanswered until that bot's entire turn
+  // finished (build actions, robber, etc.) and finally became eligible for the client's
+  // off-turn trade-check driver. The bot must now answer a respondable trade before doing
+  // anything else on its own turn, in both the 'roll' and 'main' phases.
+  it('answers a trade targeted at it even on its own turn, before rolling or acting', () => {
+    const trade = { give: { ore: 2 }, receive: { lumber: 1 } }; // favorable, should accept
+    const { bundle, botUid } = makeTradeResponseGame('normal', { lumber: 3, ore: 0 }, trade, 'p0');
+    bundle.room.currentPlayerIndex = bundle.room.turnOrder.indexOf(botUid); // now the bot's own turn
+    bundle.room.phase = 'roll'; // would otherwise just roll the dice
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: true });
+  });
+
+  it('rejects an open trade during its own main-phase turn instead of building first', () => {
+    const trade = { give: { lumber: 1 }, receive: { brick: 2 } }; // unfavorable, should reject
+    const { bundle, botUid } = makeTradeResponseGame('normal', { brick: 5, lumber: 0 }, trade, null);
+    bundle.room.currentPlayerIndex = bundle.room.turnOrder.indexOf(botUid);
+    bundle.room.phase = 'main';
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'respondTrade', uid: 'p0', tradeId: 't1', accept: false });
   });
 });
 

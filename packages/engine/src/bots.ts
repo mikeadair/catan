@@ -66,6 +66,18 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
     return decideTradeResponse(bundle, botUid, difficulty);
   }
 
+  // Even on the bot's own turn, a trade someone's targeted at it (or an open trade it could
+  // answer) needs a response before anything else — otherwise it sits completely unanswered
+  // until the bot's *entire* turn finishes (build actions, robber, etc.) and the client's
+  // off-turn trade-check driver (which explicitly skips the current player — see
+  // triggerOffTurnBotTradeChecks in store.ts) finally picks it up. decideTradeResponse itself
+  // already no-ops (returns null) when there's nothing respondable, so this is a cheap check
+  // on every turn.
+  if (room.phase === 'roll' || room.phase === 'main') {
+    const tradeResponse = decideTradeResponse(bundle, botUid, difficulty);
+    if (tradeResponse) return tradeResponse;
+  }
+
   if (room.phase === 'roll') {
     return { type: 'rollDice', uid: botUid };
   }
@@ -497,17 +509,18 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
 // ---------------------------------------------------------------------------
 
 /**
- * Called once per "beat" a bot is off-turn with an eligible trade — the delay before this
- * actually gets invoked (so the bot doesn't respond instantly) is the caller's
+ * Called once per "beat" a bot has an eligible trade to react to (whether it's off-turn, or
+ * on its own turn with a trade targeted at it or open — see decideBotActionInner) — the delay
+ * before this actually gets invoked (so the bot doesn't respond instantly) is the caller's
  * responsibility (see BOT_TRADE_RESPONSE_DELAY_*_MS in web/src/state/store.ts), since this
  * function is stateless and has no notion of elapsed time.
  *
- * A trade *targeted* at this bot always gets a definitive answer — accept or explicit
- * reject via respondTrade — so it never sits pending waiting on a bot that was never going
- * to take it. An *open* trade (targetUid null) the bot doesn't want is left alone (returns
- * null) rather than rejected: rejecting there would just clear this bot's own entry from
- * interestedUids, which it never added in the first place, so there's nothing to do besides
- * simply not registering interest.
+ * Every respondable trade — targeted at this bot, or open — always gets a definitive answer:
+ * accept, or an explicit reject via respondTrade. For an open trade, rejecting adds this bot
+ * to trade.rejectedUids (see rules.ts's respondTrade), which both drives the responder-status
+ * UI (TradeOffers.tsx's per-player accept/reject dots) and lets the trade resolve/auto-dismiss
+ * once every eligible responder has explicitly passed, instead of it just sitting there
+ * indefinitely with bots silently never weighing in.
  */
 function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
   const { hands, trades } = bundle;
@@ -516,7 +529,6 @@ function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty
     (t) => t.status === 'pending' && t.proposerUid !== botUid && (t.targetUid === botUid || t.targetUid === null),
   );
   if (!candidate) return null;
-  const isTargeted = candidate.targetUid === botUid;
 
   const canAffordTrade = canAffordLocal(hand.resources, candidate.receive);
   let accept = false;
@@ -545,11 +557,5 @@ function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty
     }
   }
 
-  if (accept) {
-    return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept: true };
-  }
-  if (isTargeted) {
-    return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept: false };
-  }
-  return null;
+  return { type: 'respondTrade', uid: botUid, tradeId: candidate.id, accept };
 }
