@@ -248,9 +248,44 @@
 
 .game__toolbar-main {
   display: flex;
-  align-items: center;
+  /* Not `center` — the hand box has a tall fixed min-height (see .game__toolbar-hand below)
+     that the actions cluster and the timer/end-turn stack don't need to match; pinning
+     everything to the top keeps the actions row and the timer/end-turn stack aligned with
+     the hand's own top edge instead of floating at its vertical middle. */
+  align-items: flex-start;
   gap: 16px;
+}
+
+/* Groups Trade, owned dev cards, and the build buttons into one wrapping cluster — previously
+   these were independent flex children of .game__toolbar-main, which wrapped unpredictably
+   (e.g. the build buttons dropping to their own line under the hand while Trade/dev-cards
+   floated mid-row above them) and read as scattered rather than one "things you can do" group.
+   `flex: 1 1 auto` also absorbs whatever width the hand's fixed box and the timer/end-turn
+   stack don't use, so the right-hand stack lands flush against the toolbar's right edge without
+   needing its own margin-left: auto. */
+.game__toolbar-actions {
+  display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Separates the owned, playable dev cards (DevCardPanel) from the buildable/purchasable
+   things (BuildToolbar) — those are two different kinds of action ("play what you're already
+   holding" vs. "spend resources to build/buy") and sitting directly adjacent with identical
+   button styling made them read as one undifferentiated group. Only rendered when there's a
+   dev-card group to actually separate from (see the conditional in Game.tsx) — an empty hand
+   shouldn't leave an orphaned bar sitting right after Trade with nothing behind it. Height
+   comes from the flex line's own stretch (this container's `align-items` is left at its
+   `stretch` default), so it always matches whatever the button-cards in that row are tall. */
+.game__toolbar-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--color-border);
+  margin: 0 2px;
+  flex-shrink: 0;
 }
 
 .game__toolbar-hand {
@@ -312,11 +347,22 @@
   border-color: var(--color-accent);
 }
 
+/* Timer stacked above End Turn (was side-by-side) — the two are really one "wrap up your turn"
+   control, and stacking reads that way at a glance instead of as two unrelated same-row boxes;
+   it also gives both a shared width to line up against, flush right (flex-shrink: 0 keeps this
+   column its own natural width regardless of how much/little room .game__toolbar-actions ends
+   up using). */
 .game__toolbar-right {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 10px;
-  margin-left: auto;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.game__toolbar-right .turn-timer {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .game__monopoly-choices {

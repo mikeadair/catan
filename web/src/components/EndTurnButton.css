@@ -6,7 +6,6 @@
   border: none;
   border-radius: 10px;
   padding: 14px 28px;
-  height: 100%;
 }
 
 .end-turn-button:disabled {

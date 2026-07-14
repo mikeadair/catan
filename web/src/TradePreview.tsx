@@ -23,6 +23,27 @@ const stateOverrides: Record<string, Partial<RoomState>> = {
   paused: { paused: true, pausedAt: Date.now() - 3_000 },
 };
 
+// Separate from stateOverrides (room-phase variants) — this overrides the local player's own
+// hand instead, for harness variants about hand *contents* rather than game phase. Applied via
+// `?hand=<name>`, independent of `?state=` so either can be combined with the default 'main'
+// phase or with each other.
+const handOverrides: Record<string, Partial<PrivateHand>> = {
+  // Every resource pinned at the bank's own max (19, matching the default bank fixture below)
+  // so all five of ResourceHand's 'cards' groups hit the overlap-fan + overflow-stepper look at
+  // once (the default hand only does this for ore), plus one of every dev card type so
+  // DevCardPanel renders its full 5-card row instead of just the single default Knight.
+  maxed: {
+    resources: { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 },
+    devCards: [
+      { id: 'dc-knight', type: 'knight', boughtTurn: 1 },
+      { id: 'dc-road-building', type: 'roadBuilding', boughtTurn: 1 },
+      { id: 'dc-yop', type: 'yearOfPlenty', boughtTurn: 1 },
+      { id: 'dc-monopoly', type: 'monopoly', boughtTurn: 1 },
+      { id: 'dc-vp', type: 'victoryPoint', boughtTurn: 1 },
+    ],
+  },
+};
+
 export default function TradePreview(): JSX.Element {
   useEffect(() => {
     const board = generateBoard('official-beginner', 'preview-seed');
@@ -175,11 +196,18 @@ export default function TradePreview(): JSX.Element {
       },
     ];
 
-    const stateName = new URLSearchParams(window.location.search).get('state');
+    const params = new URLSearchParams(window.location.search);
+    const stateName = params.get('state');
     if (stateName) {
       const overrides = stateOverrides[stateName];
       if (!overrides) throw new Error(`[TradePreview] unknown ?state=${stateName} — known: ${Object.keys(stateOverrides).join(', ')}`);
       Object.assign(room, overrides);
+    }
+    const handName = params.get('hand');
+    if (handName) {
+      const overrides = handOverrides[handName];
+      if (!overrides) throw new Error(`[TradePreview] unknown ?hand=${handName} — known: ${Object.keys(handOverrides).join(', ')}`);
+      Object.assign(ownHand, overrides);
     }
 
     useGameStore.setState({

@@ -794,33 +794,36 @@ export default function Game(): JSX.Element {
               <ResourceHand resources={resources} variant="cards" />
             )}
           </div>
-          <button
-            type="button"
-            className={`build-toolbar__button${tradeComposerOpen ? ' build-toolbar__button--active' : ''}`}
-            onClick={toggleTradeComposer}
-            aria-pressed={tradeComposerOpen}
-          >
-            <TradeIcon className="build-toolbar__icon" />
-            <span className="build-toolbar__label">Trade</span>
-          </button>
-          <DevCardPanel
-            devCards={ownHand?.devCards ?? []}
-            turnNumber={room.turnNumber}
-            canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
-            blocked={pendingActionType !== null}
-            onPlay={handlePlayDevCard}
-          />
-          <BuildToolbar
-            resources={resources}
-            legalTypes={legalTypes}
-            activeMode={buildMode}
-            devCardsRemaining={room.devCardDeckCount}
-            isCurrentPlayer={isCurrentPlayer}
-            piecesLeft={piecesLeft}
-            pendingActionType={pendingActionType}
-            onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
-            onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
-          />
+          <div className="game__toolbar-actions">
+            <button
+              type="button"
+              className={`build-toolbar__button${tradeComposerOpen ? ' build-toolbar__button--active' : ''}`}
+              onClick={toggleTradeComposer}
+              aria-pressed={tradeComposerOpen}
+            >
+              <TradeIcon className="build-toolbar__icon" />
+              <span className="build-toolbar__label">Trade</span>
+            </button>
+            <DevCardPanel
+              devCards={ownHand?.devCards ?? []}
+              turnNumber={room.turnNumber}
+              canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
+              blocked={pendingActionType !== null}
+              onPlay={handlePlayDevCard}
+            />
+            {(ownHand?.devCards.length ?? 0) > 0 && <div className="game__toolbar-divider" aria-hidden="true" />}
+            <BuildToolbar
+              resources={resources}
+              legalTypes={legalTypes}
+              activeMode={buildMode}
+              devCardsRemaining={room.devCardDeckCount}
+              isCurrentPlayer={isCurrentPlayer}
+              piecesLeft={piecesLeft}
+              pendingActionType={pendingActionType}
+              onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
+              onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
+            />
+          </div>
           <div className="game__toolbar-right">
             <TurnTimer
               turnStartedAt={room.turnStartedAt}

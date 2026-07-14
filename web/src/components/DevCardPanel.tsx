@@ -42,7 +42,12 @@ export interface DevCardPanelProps {
   onPlay: (type: Exclude<DevCardType, 'victoryPoint'>, devCardId: string) => void;
 }
 
-export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked, onPlay }: DevCardPanelProps): JSX.Element {
+/** One button-card per owned dev-card *type* (not per copy) — same compact icon/label shell as
+ * BuildToolbar's buttons, so a hand's worth of playable cards reads as part of the same "things
+ * you can do right now" row instead of a separately-framed panel with its own inline rules text
+ * (previously this could run to ~500px wide for even a single card). The rules text hasn't gone
+ * away, just moved to the card's hover title — see the description/disabledReason `title`s below. */
+export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked, onPlay }: DevCardPanelProps): JSX.Element | null {
   const grouped: Record<DevCardType, DevCard[]> = {
     knight: [],
     roadBuilding: [],
@@ -54,49 +59,41 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked
 
   const order: DevCardType[] = ['knight', 'roadBuilding', 'yearOfPlenty', 'monopoly', 'victoryPoint'];
   const nonEmpty = order.filter((t) => grouped[t].length > 0);
+  if (nonEmpty.length === 0) return null;
 
   return (
     <div className="dev-card-panel">
-      <div className="dev-card-panel__header">Development Cards</div>
-      {nonEmpty.length === 0 && <div className="dev-card-panel__empty">No development cards yet.</div>}
-      <div className="dev-card-panel__list">
-        {nonEmpty.map((type) => {
-          const cards = grouped[type];
-          const isPlayable = PLAYABLE_TYPES.includes(type as Exclude<DevCardType, 'victoryPoint'>);
-          const playableCard = isPlayable ? cards.find((c) => c.boughtTurn !== turnNumber) : undefined;
-          const disabledReason = blocked
-            ? 'Waiting for previous action…'
-            : !canPlayAny
-              ? 'Not your turn or already played a card this turn'
-              : !playableCard
-                ? 'Cannot play a card the same turn it was bought'
-                : null;
-          const Icon = CARD_ICON[type];
-          return (
-            <div key={type} className="dev-card-panel__card">
-              <span className="dev-card-panel__icon">
-                <Icon className="dev-card-panel__icon-svg" />
-              </span>
-              <div className="dev-card-panel__info">
-                <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
-                <span className="dev-card-panel__desc">{CARD_DESCRIPTION[type]}</span>
-              </div>
-              <span className="dev-card-panel__count">×{cards.length}</span>
-              {isPlayable && (
-                <button
-                  type="button"
-                  className="dev-card-panel__play"
-                  disabled={!canPlayAny || !playableCard || blocked}
-                  title={disabledReason ?? undefined}
-                  onClick={() => playableCard && onPlay(type as Exclude<DevCardType, 'victoryPoint'>, playableCard.id)}
-                >
-                  Play
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {nonEmpty.map((type) => {
+        const cards = grouped[type];
+        const isPlayable = PLAYABLE_TYPES.includes(type as Exclude<DevCardType, 'victoryPoint'>);
+        const playableCard = isPlayable ? cards.find((c) => c.boughtTurn !== turnNumber) : undefined;
+        const disabledReason = blocked
+          ? 'Waiting for previous action…'
+          : !canPlayAny
+            ? 'Not your turn or already played a card this turn'
+            : !playableCard
+              ? 'Cannot play a card the same turn it was bought'
+              : null;
+        const Icon = CARD_ICON[type];
+        return (
+          <div key={type} className="dev-card-panel__card" title={CARD_DESCRIPTION[type]}>
+            <Icon className="dev-card-panel__icon-svg" />
+            <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
+            <span className="dev-card-panel__count">×{cards.length}</span>
+            {isPlayable && (
+              <button
+                type="button"
+                className="dev-card-panel__play"
+                disabled={!canPlayAny || !playableCard || blocked}
+                title={disabledReason ?? undefined}
+                onClick={() => playableCard && onPlay(type as Exclude<DevCardType, 'victoryPoint'>, playableCard.id)}
+              >
+                Play
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
