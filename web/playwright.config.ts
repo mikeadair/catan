@@ -17,7 +17,11 @@ export default defineConfig({
   // visual-review material (screenshots saved to the gitignored e2e/state-gallery-screenshots/
   // dir, not the committed baseline images this config's own test:e2e:screenshots produces),
   // so it must never get silently picked up by a default `npx playwright test` invocation.
-  testIgnore: ['**/latency-fuzz.spec.ts', '**/state-gallery.spec.ts'],
+  //
+  // snap.spec.ts (playwright.snap.config.ts, `npm run snap`) gets the same treatment for the
+  // same reason: it's a parameterized single-test tool driven by env vars (SNAP_URL etc.), not
+  // a real spec — running it under this config would just throw on the missing env var.
+  testIgnore: ['**/latency-fuzz.spec.ts', '**/state-gallery.spec.ts', '**/snap.spec.ts'],
   fullyParallel: false, // each test creates Firestore rooms (against the emulator); keep runs simple and sequential
   // Cross-project parallelism (the 3 viewport projects below) would otherwise still run
   // concurrently against the single local Functions/Firestore emulator processes, causing
