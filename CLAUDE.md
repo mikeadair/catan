@@ -15,10 +15,11 @@ Four different mechanisms exist for this, at different cost/coverage tradeoffs �
 
 **Committed baselines — `web/e2e/screenshots/*.png`.** `web/e2e/layout.spec.ts` drives through home → lobby → game setup → mid-game and screenshots each stage. Committed to the repo and regenerated automatically by the `capture-screenshots` job in `.github/workflows/deploy.yml` on every push to `main`, so `home.png`/`lobby-full.png`/`game-setup.png`/`game-mid.png` always reflect what's actually live. Just `Read` them directly — no Playwright invocation needed at all. Good for "what does the app currently look like," bad for anything more specific than that (only 4 fixed states, full-page). (That job is deliberately not a dependency of `deploy` and doesn't gate it — e2e/Firestore timing can be flaky, and a flaky screenshot regen should never block a real deploy.)
 
-**A focused screenshot of one component — `npm run snap` (from `web/`).** By far the cheapest option for "does this one component look right," both in wall-clock time (no Firebase emulator, no bot AI, no game setup — each capture is ~1-2s) and in your own context (an element-cropped PNG is typically 10-50KB vs. several hundred KB for a full 1080p page). Run with no arguments and it screenshots *every* registered component in one pass (~10s total for all of them); pass `SNAP_COMPONENT`/`SNAP_SCENARIO` to narrow to one:
+**A focused screenshot of one component — `npm run snap` (from `web/`).** By far the cheapest option for "does this one component look right," both in wall-clock time (no Firebase emulator, no bot AI, no game setup — each capture is ~1-2s) and in your own context (an element-cropped PNG is typically 10-50KB vs. several hundred KB for a full 1080p page). Run with no arguments and it screenshots *every* registered component *and* every named scenario in one pass (~15-20s total); pass `SNAP_COMPONENT`/`SNAP_SCENARIO` to narrow to one, or `SNAP_COMPONENT=all` for just the plain components without the interaction states:
 
 ```
-npm run snap                              # every component in SNAP_COMPONENTS, one file each
+npm run snap                              # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, one file each
+SNAP_COMPONENT=all npm run snap           # just components, skip scenarios (faster)
 SNAP_COMPONENT=hand npm run snap          # just the hand, saved as hand.png
 SNAP_SCENARIO=hand-card-selected npm run snap   # the hand with a card already tapped/selected
 SNAP_LIST=1 npm run snap                  # print the registry (names + descriptions), capture nothing

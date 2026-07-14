@@ -15,15 +15,17 @@
 //
 // Usage (from web/, dev server auto-started/reused by playwright.snap.config.ts):
 //
-//   npm run snap                                          # every SNAP_COMPONENTS entry, one file each
+//   npm run snap                                          # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, one file each
+//   SNAP_COMPONENT=all npm run snap                        # just components, skip scenarios (faster, no interaction states)
 //   SNAP_COMPONENT=hand npm run snap                       # one named component (registry: snap-components.ts)
-//   SNAP_SCENARIO=hand-card-selected npm run snap          # a named component + interaction sequence
+//   SNAP_SCENARIO=hand-card-selected npm run snap          # one named component + interaction sequence
 //   SNAP_LIST=1 npm run snap                                # print the registry, capture nothing
 //   SNAP_URL='http://localhost:5183/?preview=trade' SNAP_SELECTOR='.trade-bar' npm run snap   # ad hoc, not in the registry
 //
 // Env vars:
-//   SNAP_COMPONENT  name from SNAP_COMPONENTS (snap-components.ts), or 'all' — omit + no other
-//                   mode selected defaults to 'all'. Saved as <name>.png.
+//   SNAP_COMPONENT  name from SNAP_COMPONENTS (snap-components.ts), or 'all' for every component
+//                   but no scenarios. Omit + no other mode selected defaults to *every* component
+//                   and every scenario. Saved as <name>.png.
 //   SNAP_SCENARIO   name from SNAP_SCENARIOS (snap-components.ts) — a component plus a click
 //                   sequence that reaches a specific, worth-repeating interaction state (e.g. a
 //                   card selected for trade). Takes precedence over SNAP_COMPONENT. Saved as <name>.png.
@@ -153,12 +155,27 @@ test('snap', async ({ page }) => {
     return;
   }
 
-  // Default: no SNAP_URL/SNAP_SCENARIO, and SNAP_COMPONENT unset or 'all' — snapshot every
-  // registered component. Each gets its own fresh page load (rather than reusing one page
-  // across captures) so one component's clicks (e.g. trade-bar opening the composer) can never
-  // leak into the next component's capture.
+  // SNAP_COMPONENT=all explicitly: every component, but skip scenarios — a faster sweep of
+  // plain/default states only, for when you don't need the interaction states too.
   for (const [name, comp] of Object.entries(SNAP_COMPONENTS)) {
     await captureComponent(page, name, comp, [], pad);
   }
-  expect(Object.keys(SNAP_COMPONENTS).length).toBeGreaterThan(0);
+  if (componentName === 'all') {
+    expect(Object.keys(SNAP_COMPONENTS).length).toBeGreaterThan(0);
+    return;
+  }
+
+  // True default (nothing set at all): every component *and* every scenario, since a scenario
+  // is just as reviewable as a component's plain state and there's no good reason to make
+  // someone already know its name to ever see it. Components and scenarios share one flat
+  // output directory keyed by name, so a name collision between the two registries would
+  // silently overwrite one file with the other — fail loudly instead.
+  for (const [name, scenario] of Object.entries(SNAP_SCENARIOS)) {
+    if (SNAP_COMPONENTS[name]) {
+      throw new Error(`[snap] SNAP_SCENARIOS["${name}"] collides with a SNAP_COMPONENTS entry of the same name — rename one (they share e2e/snap-screenshots/<name>.png)`);
+    }
+    const comp = SNAP_COMPONENTS[scenario.component];
+    await captureComponent(page, name, comp, scenario.clicks, pad);
+  }
+  expect(Object.keys(SNAP_COMPONENTS).length + Object.keys(SNAP_SCENARIOS).length).toBeGreaterThan(0);
 });
