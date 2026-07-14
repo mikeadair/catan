@@ -11,7 +11,13 @@ export default defineConfig({
   // latency, multiple browser contexts, generous settle windows) and this config's
   // test:e2e:screenshots script already runs on every push to main in
   // .github/workflows/deploy.yml — we don't want that picking it up by accident.
-  testIgnore: '**/latency-fuzz.spec.ts',
+  //
+  // The state-gallery suite (web/e2e/state-gallery.spec.ts) gets the same treatment via its
+  // own playwright.gallery.config.ts + test:e2e:gallery npm script: it's opt-in, one-off
+  // visual-review material (screenshots saved to the gitignored e2e/state-gallery-screenshots/
+  // dir, not the committed baseline images this config's own test:e2e:screenshots produces),
+  // so it must never get silently picked up by a default `npx playwright test` invocation.
+  testIgnore: ['**/latency-fuzz.spec.ts', '**/state-gallery.spec.ts'],
   fullyParallel: false, // each test creates Firestore rooms (against the emulator); keep runs simple and sequential
   // Cross-project parallelism (the 3 viewport projects below) would otherwise still run
   // concurrently against the single local Functions/Firestore emulator processes, causing
