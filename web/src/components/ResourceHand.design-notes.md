@@ -78,6 +78,9 @@ front of its whole group (z-index 1000+) so it stays legible even if it
 started out mid-stack. The overflow stepper slot deliberately does *not*
 join the overlap chain at all — it holds real ±buttons that need to stay
 reliably clickable, not just visible-sliver-clickable like the card faces.
+(Revisited in round 3 below — the overflow slot does join the chain as of
+that round, once a way was found to do it without the ±buttons' clickability
+or the individual faces' visibility paying for it.)
 
 Other options considered and not taken for round 2:
 - **Keep the stepper-only stack design (round 1).** Simpler, and already
@@ -87,6 +90,88 @@ Other options considered and not taken for round 2:
   pre-`1179170` design again; a 26-of-one-resource hand would still make that
   one group extremely wide (or need overlap so extreme it stops reading as
   cards at all) even though it no longer breaks mid-fan across a wrap.
+
+## Round 3: overflow slot joins the fan, counter shows a running total
+
+Feedback on round 2's screenshots: the overflow/counter slot sat outside the
+overlap chain entirely (positive margin, low z-index, off to the side with
+normal spacing) — visually a detached box next to the fan rather than part of
+it, and its number only showed the overflow's own portion (e.g. "2 of 7"
+beyond the 5 visible faces) rather than the resource's total selected count.
+Three changes: (1) the overflow slot joins the same overlap chain the
+individual faces use and renders frontmost in its group; (2) its number is
+now the *total* selected for that resource (individual faces + overflow
+combined), climbing as a running total; (3) its +/- buttons became
+index-agnostic fill/drain controls (`stepGroup` in ResourceHand.tsx) instead
+of touching only the stepper: + selects the lowest-indexed unselected visible
+face first (only climbing pure overflow once every visible face is selected),
+- mirrors that in reverse (drain the stepper first, then deselect the
+highest-indexed selected face) — and both correctly pick up wherever manual
+`toggleFace` taps left off, never resetting or fighting a face the user
+already tapped directly, which those must continue to do exactly as before
+(tapping any specific face still toggles just that one face, independent of
+the counter).
+
+**Geometry conflict found while implementing "frontmost, highest z-index."**
+The literal ask was for the overflow slot to use the *same* -34.5px overlap
+margin as individual faces (the standard 75%-overlap pullback) and sit at a
+z-index higher even than a selected face's own front-of-group bump (1000+).
+Implemented exactly that way first — screenshot:
+`e2e/state-gallery-screenshots/MANUAL-overflow-counter-5-selected-faces-full.png`
+from this round's own verification run — and it visually collapsed the
+entire 5-card fan down to what reads as one card next to one box. The cause
+is arithmetic, not a styling slip: with individual faces spaced only 11.5px
+apart, a -34.5px pullback reaches back across *three* of them (34.5 / 11.5 =
+3), and a z-index above every face's selected-bump (which is itself always
+≥1000, far above any unselected face's 1-5 range) necessarily paints over
+*all* of them wherever the overflow box spatially reaches — there's no
+z-index that beats a selected face's bump without also beating every
+unselected face in reach, so "highest z-index, standard pullback" and
+"individual faces stay independently visible" are mutually exclusive once
+you work out the actual pixel ranges, not just two independent style knobs.
+
+The shipped fix keeps the frontmost/joins-the-chain *intent* but changes the
+overlap depth so the collision only touches the overflow slot's one true
+neighbor (the last individual face, index `individualSlots - 1`) instead of
+reaching three faces back: `.resource-card--overflow` uses its own -11.5px
+margin (the same *reveal* increment every other card already uses, just
+applied relative to its actual neighbor instead of inheriting a pullback
+sized for a same-width predecessor) rather than the shared -34.5px rule.
+Faces 0 through `individualSlots - 2` (typically 0-3) are completely
+unaffected — same visible slivers, same z-indices, same click geometry as
+round 2. The one accepted trade-off: the last individual face does become
+fully visually covered once the overflow slot appears, since *any* amount of
+higher-z overlap into it covers its entire (already-slim, ~11.5px) exposed
+sliver — there's no partial-overlap option once overflow needs to be
+genuinely on top of it at all. That face is still selectable (the counter's
++ reaches it in fill order same as any other index, and `toggleFace` can
+still target its DOM element by exact coordinates — verified in
+`hand-manual-then-counter-faces-full.png` below, where clicking + four times
+does reach it), just no longer independently visually distinguishable from
+the overflow slot's own card front. `pointer-events: none` on the overflow
+shell (with `.resource-card__stepper` opting back in via `pointer-events:
+auto`) keeps that face's tap target reachable via passthrough rather than
+dead-clicking on the overflow's empty background there.
+
+**Verification:** `npm run snap` (see `web/e2e/snap.spec.ts` and the registry
+in `web/e2e/snap-components.ts`, added the same day as this round — no
+Firebase emulator needed, targets `?preview=trade` directly) rather than a
+one-off Playwright script against the full gallery suite. Two new reusable
+`SNAP_SCENARIOS` entries (`hand-overflow-counter-faces-full`,
+`hand-overflow-counter-into-overflow`) demonstrate the counter alone driving
+selection from 0 up past the cap; `TradePreview.tsx`'s seeded hand was bumped
+to include an over-cap ore count (12) specifically so `SNAP_COMPONENT=hand`
+exercises the overflow slot by default going forward. The "manual
+out-of-order taps then counter" scenario (tap face index 2 directly — the
+task's own "3rd face" example — then use the counter, confirming it fills
+0/1/3/4 in index order and skips 2, then correctly drains the stepper before
+un-filling the highest-indexed face on the way back down) needed exact
+sub-pixel clicks on specific card slivers, which the registry's plain
+selector-click model doesn't support, so that one used a throwaway script
+against the same `?preview=trade` harness instead (deleted after capturing —
+see `hand-manual-tap-face-2.png` through
+`hand-manual-then-counter-decrement-then-highest-face.png` in
+`e2e/state-gallery-screenshots/`).
 
 ## Compatibility
 

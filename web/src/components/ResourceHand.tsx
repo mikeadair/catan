@@ -14,6 +14,12 @@ import './ResourceHand.css';
 // holds 6 or 26 of it — see slotLayout() below and ResourceHand.design-notes.md for why.
 const RESOURCE_GROUP_CAP = 6;
 
+// The overflow/counter slot always paints in front of every individual face in its group,
+// including a selected face's own front-of-group bump (1000 + up to RESOURCE_GROUP_CAP - 1) —
+// see the zIndex comment on the overflow slot below. Comfortably above that ceiling regardless
+// of RESOURCE_GROUP_CAP's exact value.
+const OVERFLOW_Z_INDEX = 2000;
+
 /** How many of a resource's `count` render as individually-tappable overlapping card faces vs.
  * get folded into a single trailing +/- stepper slot. Below the cap, every unit gets its own
  * face and there's no stepper at all; at/above it, the last slot is always the stepper (e.g. at
@@ -105,7 +111,7 @@ export default function ResourceHand({
   // changes the picture out from under it: the hand shrinking (clamped above, which can also
   // invalidate face indices past the new individualSlots), or a parent doing a full reset (the
   // trade composer's Clear button, closing it, confirming a discard). A tap-driven change never
-  // trips this — toggleFace/stepOverflow below update faceState and `selected` together in the
+  // trips this — toggleFace/stepGroup below update faceState and `selected` together in the
   // same tick, so on the next render they already agree and this is a no-op, which is what lets
   // a tapped face stay exactly the one highlighted instead of jumping to "the first N faces".
   useEffect(() => {
@@ -156,20 +162,49 @@ export default function ResourceHand({
       onChange({ ...sel, [r]: faces.length + fs.stepper });
     }
 
-    function stepOverflow(r: Resource, delta: number, stepperMax: number) {
+    // Drives the counter slot's +/- buttons. Unlike toggleFace (which always targets one
+    // specific face the user tapped directly), this is index-agnostic: + fills whichever
+    // visible face is the *lowest-indexed currently unselected* one first (so it naturally
+    // resumes left-to-right from wherever manual taps left off, rather than always starting
+    // over at face 0 or fighting a face the user already picked by hand), and only once every
+    // visible face is selected does it start climbing the pure-overflow stepper. - (delta < 0)
+    // mirrors that: drain the stepper first, then deselect the *highest-indexed currently
+    // selected* face. Manual taps via toggleFace are otherwise untouched by this — it just
+    // picks up whatever state faceState is already in.
+    function stepGroup(r: Resource, delta: number, individualSlots: number, stepperMax: number) {
       if (!onChange) return;
       const fs = faceState[r] ?? { faces: [], stepper: 0 };
       if (delta > 0) {
-        if (fs.stepper >= stepperMax) return;
         if (max !== undefined && selectedTotal >= max) return;
+        let lowestUnselected = -1;
+        for (let i = 0; i < individualSlots; i++) {
+          if (!fs.faces.includes(i)) {
+            lowestUnselected = i;
+            break;
+          }
+        }
+        if (lowestUnselected !== -1) {
+          const faces = [...fs.faces, lowestUnselected].sort((a, b) => a - b);
+          setFaceState({ ...faceState, [r]: { ...fs, faces } });
+          onChange({ ...sel, [r]: faces.length + fs.stepper });
+          return;
+        }
+        if (fs.stepper >= stepperMax) return;
         const stepper = fs.stepper + 1;
         setFaceState({ ...faceState, [r]: { ...fs, stepper } });
         onChange({ ...sel, [r]: fs.faces.length + stepper });
       } else {
-        if (fs.stepper <= 0) return;
-        const stepper = fs.stepper - 1;
-        setFaceState({ ...faceState, [r]: { ...fs, stepper } });
-        onChange({ ...sel, [r]: fs.faces.length + stepper });
+        if (fs.stepper > 0) {
+          const stepper = fs.stepper - 1;
+          setFaceState({ ...faceState, [r]: { ...fs, stepper } });
+          onChange({ ...sel, [r]: fs.faces.length + stepper });
+          return;
+        }
+        if (fs.faces.length === 0) return;
+        const highest = Math.max(...fs.faces);
+        const faces = fs.faces.filter((i) => i !== highest);
+        setFaceState({ ...faceState, [r]: { ...fs, faces } });
+        onChange({ ...sel, [r]: faces.length + fs.stepper });
       }
     }
 
@@ -234,11 +269,13 @@ export default function ResourceHand({
                 (interactive ? (
                   <div
                     key="overflow"
-                    className={`resource-card resource-card--${r} resource-card--overflow${stepperVal > 0 ? ' resource-card--selected' : ''}`}
-                    // Deliberately *not* part of the overlap chain (see .resource-card--overflow
-                    // in ResourceHand.css) — it holds real +/- buttons that need to stay fully
-                    // clickable, not just a visible sliver like the card faces before it.
-                    style={{ zIndex: 1 }}
+                    className={`resource-card resource-card--${r} resource-card--overflow${selectedFaces.length + stepperVal > 0 ? ' resource-card--selected' : ''}`}
+                    // Joins the same overlap-margin chain as the individual faces (see
+                    // .resource-card--overflow in ResourceHand.css) and gets the highest
+                    // z-index of anything in the group — it's the group's running-total
+                    // display, so it should read as "the one on top", fully visible, rather
+                    // than a detached box off to the side.
+                    style={{ zIndex: OVERFLOW_Z_INDEX }}
                     data-testid="hand-card-overflow"
                     data-resource={r}
                     data-resource-count={count}
@@ -252,29 +289,32 @@ export default function ResourceHand({
                     >
                       <button
                         type="button"
-                        onClick={() => stepOverflow(r, -1, stepperMax)}
-                        disabled={stepperVal <= 0}
+                        onClick={() => stepGroup(r, -1, individualSlots, stepperMax)}
+                        disabled={selectedFaces.length + stepperVal <= 0}
                         aria-label={`Remove one more ${RESOURCE_LABEL[r]} from trade`}
                       >
                         −
                       </button>
-                      <span className="resource-card__selected">{stepperVal}</span>
+                      {/* Running total across both individually-tapped faces and the pure
+                          overflow stepper — not just the stepper's own portion — so this
+                          climbs visibly as more of the resource gets selected by any means. */}
+                      <span className="resource-card__selected">{selectedFaces.length + stepperVal}</span>
                       <button
                         type="button"
-                        onClick={() => stepOverflow(r, 1, stepperMax)}
-                        disabled={stepperVal >= stepperMax || (max !== undefined && selectedTotal >= max)}
+                        onClick={() => stepGroup(r, 1, individualSlots, stepperMax)}
+                        disabled={selectedFaces.length + stepperVal >= count || (max !== undefined && selectedTotal >= max)}
                         aria-label={`Add one more ${RESOURCE_LABEL[r]} to trade`}
                       >
                         +
                       </button>
                     </div>
-                    <span className="resource-card__overflow-of">of {stepperMax}</span>
+                    <span className="resource-card__overflow-of">of {count}</span>
                   </div>
                 ) : (
                   <div
                     key="overflow"
                     className={`resource-card resource-card--${r} resource-card--overflow`}
-                    style={{ zIndex: 1 }}
+                    style={{ zIndex: OVERFLOW_Z_INDEX }}
                     data-testid="hand-card-overflow"
                     data-resource={r}
                     data-resource-count={count}

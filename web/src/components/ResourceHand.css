@@ -91,10 +91,11 @@
 }
 
 /* Each individual card face overlaps ~75% of the one before it (reveals ~25% = 11.5px of a
-   46px-wide card) — the core of the fanned look. Deliberately does NOT apply to the trailing
-   overflow stepper slot (.resource-card--overflow below) — that one holds real +/- buttons
-   that need to stay fully clickable, not just a visible sliver, so it gets normal spacing
-   instead of joining the overlap chain. */
+   46px-wide card) — the core of the fanned look. Deliberately excludes the trailing overflow/
+   counter slot (.resource-card--overflow below), which uses a *shallower* overlap into just its
+   one true neighbor instead — see that rule's own comment for why reusing this exact -34.5px
+   pullback for a frontmost element would actually cover several individual faces at once, not
+   just the one immediately behind it. */
 .resource-card:not(:first-child):not(.resource-card--overflow) {
   margin-left: -34.5px;
 }
@@ -164,15 +165,34 @@
 }
 
 /* The trailing "everything beyond the cap" slot — same card shell, a bit wider to fit the
-   stepper controls, upright (no fan rotation) since it's a control rather than a card face,
-   and given normal (positive) spacing instead of joining the overlap chain above — its +/-
-   buttons need to stay fully, reliably clickable rather than just visible-sliver-clickable
-   like the individual faces before it. */
+   stepper controls, upright (no fan rotation) since it's a control rather than a card face.
+   Joins the overlap chain (not a detached, separately-spaced box) and always sits frontmost in
+   its group (z-index set inline in ResourceHand.tsx, above even a selected face's own
+   front-of-group bump) — "the one on top of the others".
+   Uses a *shallower* -11.5px pullback rather than the individual faces' shared -34.5px one
+   (see the exclusion in the rule above): reusing the same -34.5px value here, at the highest
+   z-index in the group, was tried first and visually swallowed not just the one face directly
+   behind it but *three* individual faces at once — with only 11.5px between each face's start
+   position, a 34.5px pullback reaches back across three of them, and being frontmost meant it
+   painted over all three, collapsing the fan into what looked like a single card next to one
+   big box (see ResourceHand.design-notes.md's round-3 section for the full geometry and a
+   screenshot of the failed attempt). -11.5px is exactly the same per-card *reveal* increment
+   used throughout the fan, just applied relative to this element's one true neighbor (the last
+   individual face) instead of inheriting a pullback sized for a different-width predecessor —
+   so it still overlaps for real, joining the chain, but only ever covers that one face, not
+   several. That one face does become fully covered (the accepted trade-off: the boundary
+   between "individual card" and "counter" has to blend *somewhere*, and only sacrificing the
+   single face immediately adjacent to the counter — still reachable by tapping the counter's +
+   as normal, see stepGroup in ResourceHand.tsx — reads far better than losing three). The
+   `pointer-events: none` below (with the stepper opting back in) keeps that face's tap target
+   technically reachable even though it's no longer visible, rather than dead-clicking on empty
+   overflow-shell background. */
 .resource-card--overflow {
   width: 62px;
-  margin-left: 6px;
+  margin-left: -11.5px;
   transform: none;
   gap: 1px;
+  pointer-events: none;
 }
 
 .resource-card--overflow:hover,
@@ -192,6 +212,10 @@
   gap: 2px;
   z-index: 1;
   cursor: default;
+  /* Opts back into pointer events despite the overflow shell's own pointer-events: none
+     (see .resource-card--overflow above) — this is the one part of that shell that must stay
+     genuinely, reliably clickable. */
+  pointer-events: auto;
 }
 
 .resource-card__stepper button {

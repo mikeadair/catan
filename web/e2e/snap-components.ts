@@ -114,4 +114,28 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
     clicks: ['[data-testid="hand-card"]'],
     description: 'Trade composer open with one hand card selected, showing the give/want state together',
   },
+  'hand-overflow-counter-faces-full': {
+    component: 'hand',
+    // The hand's own card picker only becomes interactive (onChange wired up) once the trade
+    // composer is open (see Game.tsx's tradeComposerOpen ? ... : ... around .game__toolbar-hand)
+    // — the 'hand' component entry itself has no `clicks` since the read-only display is a valid
+    // state to snap on its own, so scenarios that need the interactive picker open it here first.
+    // TradePreview's hand seeds ore at 12 (over RESOURCE_GROUP_CAP) specifically so this is
+    // reachable — 5 clicks on the overflow slot's + button fills every individual face slot via
+    // stepGroup's "lowest unselected index first" fill order, before it starts climbing pure
+    // overflow.
+    clicks: [
+      '.game__toolbar-main > button.build-toolbar__button',
+      ...Array(5).fill('[data-testid="hand-card-overflow"][data-resource="ore"] button[aria-label="Add one more Ore to trade"]'),
+    ],
+    description: 'Ore over the cap, counter alone clicked 5x — every individual face now selected, stepper still at 0',
+  },
+  'hand-overflow-counter-into-overflow': {
+    component: 'hand',
+    clicks: [
+      '.game__toolbar-main > button.build-toolbar__button',
+      ...Array(7).fill('[data-testid="hand-card-overflow"][data-resource="ore"] button[aria-label="Add one more Ore to trade"]'),
+    ],
+    description: 'Ore over the cap, counter clicked 7x — faces full, stepper now climbing past them (total 7)',
+  },
 };
