@@ -65,6 +65,11 @@ export default function Game(): JSX.Element {
   const leaveRoom = useGameStore((s) => s.leaveRoom);
 
   const [buildMode, setBuildMode] = useState<BuildMode>(null);
+  // The specific edge/vertex a buildMode confirm just targeted — watched against room.edges/
+  // room.vertices directly to close buildMode (see the effects below), rather than any
+  // listener-derived proxy for "did a build happen." Cleared once that effect fires, or by
+  // the phase/turn-change effect below on anything else that invalidates it.
+  const [pendingBuild, setPendingBuild] = useState<{ type: 'road'; edgeId: EdgeId } | { type: 'settlement' | 'city'; vertexId: VertexId } | null>(null);
   const [knightPending, setKnightPending] = useState<string | null>(null);
   const [roadBuildingPending, setRoadBuildingPending] = useState<RoadBuildingPending | null>(null);
   const [yopPending, setYopPending] = useState<string | null>(null);
@@ -136,26 +141,44 @@ export default function Game(): JSX.Element {
   // it, or the turn simply moved on). Trade composer selections are deliberately excluded —
   // they should only clear when the player explicitly closes the composer (toggleTradeComposer
   // -> resetTradeComposer), not because a turn ended or anything else happened underneath them.
-  //
-  // Also cleared once the local player's own confirmed roadsBuilt/settlementsBuilt/
-  // citiesBuilt count changes — this is what actually closes buildMode after a successful
-  // build now (see onEdgeClick/onVertexClick below, which used to clear it eagerly via
-  // `.then((ok) => ok && setBuildMode(null))` the instant the dispatch *promise* resolved).
-  // That eager clear flipped Board's interactionMode away from 'placeRoad'/'placeSettlement'/
-  // 'placeCity' before the client's own room/players listener had caught up to the build
-  // actually landing, which collapsed Board's candidateEdges/candidateVertices to empty and
-  // triggered *its own* defensive "un-arm if the candidate falls out of the legal set" effect
-  // — reopening the exact same invisible-piece gap the original armed-preview bug had, just
-  // via a different path. Deriving the clear from confirmed players[] data instead (same
-  // philosophy as that original fix) closes the gap: the armed preview now stays visible,
-  // uninterrupted, right up until the real piece renders from room.edges/room.vertices.
-  const selfBuiltCounts = players[uid ?? ''];
-  const selfRoadsBuilt = selfBuiltCounts?.roadsBuilt;
-  const selfSettlementsBuilt = selfBuiltCounts?.settlementsBuilt;
-  const selfCitiesBuilt = selfBuiltCounts?.citiesBuilt;
   useEffect(() => {
     setBuildMode(null);
-  }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber, selfRoadsBuilt, selfSettlementsBuilt, selfCitiesBuilt]);
+    setPendingBuild(null);
+  }, [room?.phase, room?.currentPlayerIndex, room?.turnNumber]);
+
+  // Also cleared once the specific piece just confirmed actually lands in room.edges/
+  // room.vertices — this is what actually closes buildMode after a successful build (see
+  // onEdgeClick/onVertexClick below, which record the target here instead of clearing
+  // buildMode themselves). Two things this used to get wrong, both variants of the same
+  // invisible-piece bug the original Board.tsx armed-preview fix addressed:
+  //   1. Clearing eagerly via `.then((ok) => ok && setBuildMode(null))` the instant the
+  //      dispatch *promise* resolved, before the room listener had caught up.
+  //   2. Clearing off players[uid]'s roadsBuilt/settlementsBuilt/citiesBuilt counts instead —
+  //      `players` is a *separate* Firestore listener from `room` (see firebase/rooms.ts:
+  //      onSnapshot(roomRef(...)) vs onSnapshot(collection(..., 'players'))), written
+  //      atomically together server-side but with no ordering guarantee for when each
+  //      listener's snapshot actually arrives on the client. Under latency, the players
+  //      snapshot can land first, closing buildMode (and so Board's interactionMode/
+  //      candidateEdges/candidateVertices) before room.edges/room.vertices has the new piece —
+  //      reopening the exact same gap via a third path. Both had the same shape: something
+  //      other than room.edges/room.vertices itself deciding when to stop showing the armed
+  //      preview. Watching the specific target directly in room here guarantees this effect
+  //      fires in the very same render where Board's own candidate-set effect does, off the
+  //      identical room snapshot — no cross-listener race possible.
+  const pendingBuildEdgeId = pendingBuild?.type === 'road' ? pendingBuild.edgeId : null;
+  const pendingBuildVertexId = pendingBuild && pendingBuild.type !== 'road' ? pendingBuild.vertexId : null;
+  useEffect(() => {
+    if (pendingBuildEdgeId && room?.edges[pendingBuildEdgeId]) {
+      setBuildMode(null);
+      setPendingBuild(null);
+    }
+  }, [room?.edges, pendingBuildEdgeId]);
+  useEffect(() => {
+    if (pendingBuildVertexId && room?.vertices[pendingBuildVertexId]) {
+      setBuildMode(null);
+      setPendingBuild(null);
+    }
+  }, [room?.vertices, pendingBuildVertexId]);
 
   // See robberMoveSubmitted's declaration above — reset the guard once the room's own phase
   // confirms the move actually landed (or, for a rejected/failed submission that never
@@ -500,19 +523,22 @@ export default function Game(): JSX.Element {
     };
   } else if (buildMode === 'road') {
     interactionMode = 'placeRoad';
-    // Deliberately doesn't clear buildMode here on success — see the useEffect above keyed on
-    // players[uid]'s built-piece counts, which now owns that instead.
+    // Deliberately doesn't clear buildMode here on success — see the pendingBuild effects
+    // above, which now own that instead (watching room.edges directly for this exact edge).
     onEdgeClick = (edgeId) => {
+      setPendingBuild({ type: 'road', edgeId });
       void runAction({ type: 'buildRoad', uid, edgeId });
     };
   } else if (buildMode === 'settlement') {
     interactionMode = 'placeSettlement';
     onVertexClick = (vertexId) => {
+      setPendingBuild({ type: 'settlement', vertexId });
       void runAction({ type: 'buildSettlement', uid, vertexId });
     };
   } else if (buildMode === 'city') {
     interactionMode = 'placeCity';
     onVertexClick = (vertexId) => {
+      setPendingBuild({ type: 'city', vertexId });
       void runAction({ type: 'buildCity', uid, vertexId });
     };
   }

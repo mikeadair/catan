@@ -5,6 +5,13 @@ const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
+  // The latency-fuzz suite (web/e2e/latency-fuzz.spec.ts) has its own dedicated config
+  // (playwright.latency.config.ts, run via the test:e2e:latency npm script) and must stay out
+  // of this one: it's deliberately slower and more resource-hungry (real injected network
+  // latency, multiple browser contexts, generous settle windows) and this config's
+  // test:e2e:screenshots script already runs on every push to main in
+  // .github/workflows/deploy.yml — we don't want that picking it up by accident.
+  testIgnore: '**/latency-fuzz.spec.ts',
   fullyParallel: false, // each test creates Firestore rooms (against the emulator); keep runs simple and sequential
   // Cross-project parallelism (the 3 viewport projects below) would otherwise still run
   // concurrently against the single local Functions/Firestore emulator processes, causing

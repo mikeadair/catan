@@ -15,6 +15,7 @@ dist-ssr
 # Playwright
 /test-results/
 /playwright-report/
+/playwright-report-latency/
 /blob-report/
 /playwright/.cache/
 
