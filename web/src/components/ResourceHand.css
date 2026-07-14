@@ -49,37 +49,39 @@
 .resource-chip--grain { border-left-color: var(--resource-grain); }
 .resource-chip--wool { border-left-color: var(--resource-wool); }
 
+/* One stack per resource type actually held (at most 5 — one per resource — regardless of
+   how many of each a player holds), so this row never wraps past a single line no matter how
+   big the hand gets. See ResourceHand.tsx / ResourceHand.design-notes.md for why this replaced
+   the old one-element-per-card-unit layout. */
 .resource-hand--cards {
-  gap: 6px;
+  gap: 8px;
   align-content: flex-start;
 }
 
 .resource-card {
   position: relative;
-  width: 52px;
-  height: 74px;
-  border-radius: 8px;
+  width: 72px;
+  border-radius: 10px;
   border: 1px solid rgba(0, 0, 0, 0.35);
   background: var(--color-panel-light);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 5px 3px;
+  gap: 2px;
+  padding: 6px 4px 5px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-  transition: transform 0.12s ease;
+  transition: transform 0.12s ease, border-color 0.12s ease;
 }
 
 .resource-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
 }
 
 .resource-card::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   opacity: 0.28;
 }
 
@@ -95,6 +97,7 @@
   object-fit: contain;
   image-rendering: pixelated;
   z-index: 1;
+  margin-top: 1px;
 }
 
 .resource-card__label {
@@ -105,17 +108,13 @@
   z-index: 1;
 }
 
-.resource-card__overflow {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--color-accent);
-  color: #1c1c1c;
-  font-size: 10px;
+/* Owned count — how many of this resource are actually in hand, distinct from the
+   selected-count in the stepper below it. */
+.resource-card__count {
+  font-size: 13px;
   font-weight: 700;
-  border-radius: 999px;
-  padding: 1px 5px;
-  z-index: 2;
+  color: var(--color-text);
+  z-index: 1;
 }
 
 .resource-card--interactive {
@@ -123,7 +122,7 @@
 }
 
 .resource-card--interactive:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
   border-color: var(--color-accent);
 }
 
@@ -136,24 +135,48 @@
   border-color: var(--color-accent);
   border-width: 2px;
   box-shadow: 0 0 0 1px var(--color-accent), 0 2px 6px rgba(0, 0, 0, 0.4);
-  transform: translateY(-6px);
 }
 
-.resource-card__check {
-  position: absolute;
-  top: -6px;
-  left: -6px;
-  background: var(--color-accent);
-  color: #1c1c1c;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 50%;
-  width: 16px;
-  height: 16px;
+.resource-card__stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border);
+  z-index: 1;
+  cursor: default;
+}
+
+.resource-card__stepper button {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  padding: 0;
+  line-height: 1;
+}
+
+.resource-card__stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.resource-card__stepper button:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+
+.resource-card__selected {
+  min-width: 15px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--color-accent);
 }
 
 .resource-chip__stepper {

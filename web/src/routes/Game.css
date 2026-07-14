@@ -264,12 +264,14 @@
      right by however many pixels the label row gained. A hard `width` plus `flex-shrink: 0`
      means the box is the same size selected or not; .game__toolbar-label/-label-row below get
      `min-width: 0` so their text can wrap onto a second line inside that fixed width instead
-     of forcing the box wider. min-height reserves room for the label row plus two full rows of
-     resource cards (74px each + 6px gap) up front, so gaining a new resource type or enough of
-     one to wrap onto a second row doesn't jump the rest of the toolbar/page around either. */
+     of forcing the box wider. ResourceHand's 'cards' variant renders one stack per resource
+     *type* held (at most 5, one per resource) rather than one element per card unit, so the
+     hand itself is always a single row regardless of how many cards a player holds —
+     min-height only needs to reserve room for the label row plus that one row of stacks
+     (~100px tall) rather than budgeting for multiple rows of wrapping card faces. */
   width: 420px;
   flex: 0 0 420px;
-  min-height: 178px;
+  min-height: 128px;
 }
 
 .game__toolbar-label-row {

@@ -1,16 +1,11 @@
 // Reusable resource display/picker. Used read-only for the bank strip and the
 // player's own hand, and interactively (via `selected`/`onChange`) for
 // discard, bank-trade, player-trade, and Year of Plenty resource pickers.
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import type { Resource, ResourceCount } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './ResourceHand.css';
-
-// A hand can (rarely) hold well over a dozen of one resource; past this many individual
-// card faces the fanned display stops reading as "a hand of cards" and just becomes visual
-// noise, so further copies collapse into a "+N" tag on the last card instead.
-const MAX_CARD_FACES_PER_RESOURCE = 8;
 
 export interface ResourceHandProps {
   /** Pool of resources to display counts for / to bound selection by. */
@@ -24,12 +19,14 @@ export interface ResourceHandProps {
   /** When true, selection isn't bounded by `resources` (e.g. Year of Plenty draws from the bank). */
   unlimited?: boolean;
   /** 'chip' (default): compact icon+count, used for pickers and the bank strip (where counts
-   * run up to 19 and individual card faces would be unusable). 'cards': one card-styled face
-   * per unit owned. Read-only (no `onChange`) for a player's own hand display; with
-   * `selected`/`onChange` it becomes clickable — tapping a specific face toggles exactly that
-   * face (not just "some face of that type" derived from a count), so the card a player
-   * actually taps stays highlighted regardless of its position, used by the trade bar and
-   * discard modal so players pick straight from their actual hand instead of a stepper. */
+   * run up to 19 and individual card faces would be unusable). 'cards': one card-styled
+   * *stack* per resource type actually held (at most 5 — one per resource — regardless of how
+   * many of each a player holds, so the hand never grows past a single row). Read-only (no
+   * `onChange`) for a player's own hand display shows the owned count; with `selected`/
+   * `onChange` it becomes interactive — tapping a stack adds one of that resource to the
+   * selection (up to what's owned/`max`), and a small ± stepper on the stack gives precise
+   * control including removing — used by the trade bar and discard modal so players pick
+   * straight from their actual hand instead of a bare stepper-only picker. */
   variant?: 'chip' | 'cards';
 }
 
@@ -44,13 +41,6 @@ export default function ResourceHand({
   const interactive = !!onChange;
   const sel = selected ?? {};
   const selectedTotal = RESOURCES.reduce((sum, r) => sum + (sel[r] ?? 0), 0);
-
-  // Which exact card faces are toggled, per resource — tracked by face index rather than
-  // derived from `sel[r]`'s count, so the specific card a player taps is what stays
-  // highlighted (not just however many of the leftmost faces of that type). `selected` is
-  // still the source of truth for parents (they only care about counts); this is purely
-  // "which visual face(s) currently represent that count" bookkeeping.
-  const [faceSelection, setFaceSelection] = useState<Partial<Record<Resource, number[]>>>({});
 
   // `resources` (the actual hand) can shrink out from under an in-progress selection — e.g. a
   // player has cards staged for a trade proposal, then spends those exact cards on a build, or
@@ -74,44 +64,25 @@ export default function ResourceHand({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resources]);
 
-  // Once `selected` counts are clamped above, make sure the per-face bookkeeping (cards variant)
-  // never keeps more faces toggled than the (possibly just-reduced) count actually calls for.
-  useEffect(() => {
-    setFaceSelection((cur) => {
-      let changed = false;
-      const next: Partial<Record<Resource, number[]>> = {};
-      for (const r of RESOURCES) {
-        const faces = cur[r];
-        if (!faces || faces.length === 0) continue;
-        const want = sel[r] ?? 0;
-        if (faces.length > want) {
-          next[r] = faces.slice(0, want);
-          changed = true;
-        } else {
-          next[r] = faces;
-        }
-      }
-      return changed ? next : cur;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [RESOURCES.map((r) => sel[r] ?? 0).join(',')]);
-
   if (variant === 'cards') {
-    function toggleCardFace(r: Resource, faceIndex: number) {
+    // One stack per resource actually held (at most 5 total, one per resource type) rather
+    // than one element per unit — a hand of 20 cards renders exactly as many stacks as
+    // distinct resources it holds, so the hand's footprint never grows past a single row
+    // regardless of count. Tapping the stack body adds one of that resource to the
+    // selection; the small ± stepper gives precise add/remove control (including removing,
+    // which a bare tap can't express once more than one is already selected).
+    function stepSelection(r: Resource, delta: number) {
       if (!onChange) return;
-      const current = faceSelection[r] ?? [];
-      const isCurrentlySelected = current.includes(faceIndex);
-      let nextFaces: number[];
-      if (isCurrentlySelected) {
-        nextFaces = current.filter((i) => i !== faceIndex);
-      } else {
-        const avail = unlimited ? Infinity : resources[r];
-        if (current.length >= avail) return;
+      const cur = sel[r] ?? 0;
+      if (delta > 0) {
+        const avail = unlimited ? Infinity : (resources[r] ?? 0);
+        if (cur >= avail) return;
         if (max !== undefined && selectedTotal >= max) return;
-        nextFaces = [...current, faceIndex];
+        onChange({ ...sel, [r]: cur + 1 });
+      } else {
+        if (cur <= 0) return;
+        onChange({ ...sel, [r]: cur - 1 });
       }
-      setFaceSelection({ ...faceSelection, [r]: nextFaces });
-      onChange({ ...sel, [r]: nextFaces.length });
     }
 
     return (
@@ -119,39 +90,62 @@ export default function ResourceHand({
         {RESOURCES.flatMap((r) => {
           const count = resources[r] ?? 0;
           if (count === 0) return [];
-          const faceCount = Math.min(count, MAX_CARD_FACES_PER_RESOURCE);
-          const overflow = count - faceCount;
-          const selectedFaces = faceSelection[r] ?? [];
-          return Array.from({ length: faceCount }, (_, i) => {
-            const isSelected = interactive && selectedFaces.includes(i);
-            return (
-              <div
-                key={`${r}-${i}`}
-                className={`resource-card resource-card--${r}${isSelected ? ' resource-card--selected' : ''}${interactive ? ' resource-card--interactive' : ''}`}
-                data-testid="hand-card"
-                data-resource={r}
-                data-resource-count={count}
-                onClick={interactive ? () => toggleCardFace(r, i) : undefined}
-                role={interactive ? 'button' : undefined}
-                tabIndex={interactive ? 0 : undefined}
-                onKeyDown={
-                  interactive
-                    ? (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          toggleCardFace(r, i);
-                        }
+          const selCount = sel[r] ?? 0;
+          const isSelected = interactive && selCount > 0;
+          const atCap = (max !== undefined && selectedTotal >= max) || selCount >= (unlimited ? Infinity : count);
+          return (
+            <div
+              key={r}
+              className={`resource-card resource-card--${r}${isSelected ? ' resource-card--selected' : ''}${interactive ? ' resource-card--interactive' : ''}`}
+              data-testid="hand-card"
+              data-resource={r}
+              data-resource-count={count}
+              data-selected-count={selCount}
+              onClick={interactive ? () => stepSelection(r, 1) : undefined}
+              role={interactive ? 'button' : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              onKeyDown={
+                interactive
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        stepSelection(r, 1);
                       }
-                    : undefined
-                }
-              >
-                <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
-                <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
-                {i === faceCount - 1 && overflow > 0 && <span className="resource-card__overflow">+{overflow}</span>}
-                {isSelected && <span className="resource-card__check">✓</span>}
-              </div>
-            );
-          });
+                    }
+                  : undefined
+              }
+            >
+              <img src={RESOURCE_ICON[r]} alt={RESOURCE_LABEL[r]} className="resource-card__icon" />
+              <span className="resource-card__label">{RESOURCE_LABEL[r]}</span>
+              <span className="resource-card__count">{count}</span>
+              {interactive && (
+                <div
+                  className="resource-card__stepper"
+                  // Keep taps on the stepper's own +/- buttons from also bubbling up to the
+                  // card body's onClick (which would double-add on top of whichever button fired).
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => stepSelection(r, -1)}
+                    disabled={selCount <= 0}
+                    aria-label={`Remove one ${RESOURCE_LABEL[r]} from trade`}
+                  >
+                    −
+                  </button>
+                  <span className="resource-card__selected">{selCount}</span>
+                  <button
+                    type="button"
+                    onClick={() => stepSelection(r, 1)}
+                    disabled={atCap}
+                    aria-label={`Add one ${RESOURCE_LABEL[r]} to trade`}
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+            </div>
+          );
         })}
       </div>
     );
