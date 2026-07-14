@@ -922,6 +922,20 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         if (board2.vertices[action.vertexId].adjacentHexIds.some((h) => board2.hexes.find((hex) => hex.id === h)?.terrain === 'gold')) {
           throw new Error('Cannot place a starting settlement next to the gold hex');
         }
+        // fog-of-war only: settlements during setup are restricted to the board's *initial*
+        // reveal set (the outer ring, same as any other game) — recomputed fresh here rather
+        // than checked against the live room.discoveredHexIds, which grows over the course of
+        // setup as earlier players' free setup roads reveal hidden hexes (see
+        // discoverHexesAtEdge, called from the 'buildRoad' case below). Without this, a hex
+        // revealed mid-setup by one player's road would become settleable by a later player
+        // (or by the same player in setup2) purely because it happened to get uncovered before
+        // their turn — gaming the fog reveal instead of it being genuine post-setup expansion.
+        if (room.discoveredHexIds !== null) {
+          const initialReveal = new Set(initialFogRevealHexIds(board2.hexes));
+          if (board2.vertices[action.vertexId].adjacentHexIds.some((h) => !initialReveal.has(h))) {
+            throw new Error('Cannot place a starting settlement next to a hidden hex');
+          }
+        }
         room.vertices[action.vertexId] = { type: 'settlement', uid: action.uid };
         player.settlementsBuilt += 1;
         room.lastSetupSettlementVertexId = action.vertexId;

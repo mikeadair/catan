@@ -40,11 +40,19 @@ function findFreeVertex(bundle: GameStateBundle, excluding: Set<VertexId> = new 
   const board = bundle.room.board!;
   const touchesGold = (v: (typeof board.vertices)[string]) =>
     v.adjacentHexIds.some((h) => board.hexes.find((hex) => hex.id === h)?.terrain === 'gold');
+  // fog-of-war only: setup placements are restricted to the board's initial reveal set — see
+  // rules.ts's 'buildSettlement' handler — so this helper has to respect that too, or it'd
+  // pick a vertex the real validation then rejects (most vertices touch a hidden hex, since
+  // only the outer ring + center start revealed).
+  const initialReveal = bundle.room.discoveredHexIds !== null ? new Set(initialFogRevealHexIds(board.hexes)) : null;
+  const touchesHidden = (v: (typeof board.vertices)[string]) =>
+    initialReveal !== null && v.adjacentHexIds.some((h) => !initialReveal.has(h));
   for (const v of Object.values(board.vertices)) {
     if (excluding.has(v.id)) continue;
     if (bundle.room.vertices[v.id]) continue;
     if (v.adjacentVertexIds.some((n) => bundle.room.vertices[n])) continue;
     if (touchesGold(v)) continue; // setup placements can't border the gold hex — see rules.ts
+    if (touchesHidden(v)) continue;
     return v.id;
   }
   throw new Error('No free vertex available');
@@ -1288,6 +1296,68 @@ describe('fog-of-war and gold hex', () => {
     const vertexId = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(goldHex.id))!.id;
     const uid = bundle.room.turnOrder[0];
     expect(() => applyAction(bundle, { type: 'buildSettlement', uid, vertexId, free: true })).toThrow(/gold/);
+  });
+
+  it('rejects a starting settlement adjacent to a still-hidden hex', () => {
+    const bundle = makeFogGame();
+    const board = bundle.room.board!;
+    const revealed = new Set(bundle.room.discoveredHexIds);
+    const hiddenHex = board.hexes.find((h) => !revealed.has(h.id))!;
+    const vertexId = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(hiddenHex.id))!.id;
+    const uid = bundle.room.turnOrder[0];
+    expect(() => applyAction(bundle, { type: 'buildSettlement', uid, vertexId, free: true })).toThrow(/hidden hex/);
+  });
+
+  it("rejects a setup settlement next to a hex revealed mid-setup by an earlier player's road", () => {
+    let bundle = makeFogGame();
+    const board = bundle.room.board!;
+    const [uidA, uidB] = bundle.room.turnOrder;
+
+    // Find a legal first-settlement vertex for player A whose free setup road can reach a
+    // hidden hex in a single edge — the free road must connect directly to the settlement
+    // just placed (see rules.ts's 'buildRoad' anchor check), so a longer BFS path wouldn't be
+    // buildable as a single free road.
+    let vertexA: VertexId | null = null;
+    let revealEdgeId: string | null = null;
+    const tried = new Set<VertexId>();
+    for (let i = 0; i < 100; i++) {
+      let candidate: VertexId;
+      try {
+        candidate = findFreeVertex(bundle, tried);
+      } catch {
+        break;
+      }
+      tried.add(candidate);
+      const path = findPathToHiddenHex(bundle, candidate, uidA);
+      if (path && path.length === 1) {
+        vertexA = candidate;
+        revealEdgeId = path[0];
+        break;
+      }
+    }
+    expect(vertexA).not.toBeNull();
+
+    bundle = applyAction(bundle, { type: 'buildSettlement', uid: uidA, vertexId: vertexA!, free: true });
+    const discoveredBefore = new Set(bundle.room.discoveredHexIds);
+    bundle = applyAction(bundle, { type: 'buildRoad', uid: uidA, edgeId: revealEdgeId!, free: true });
+    const newlyRevealed = bundle.room.discoveredHexIds!.filter((id) => !discoveredBefore.has(id));
+    expect(newlyRevealed.length).toBeGreaterThan(0);
+
+    // Player B (still in setup) tries to settle on a vertex touching that newly-revealed
+    // hex — must still be rejected, even though the hex is no longer hidden, since setup
+    // placements are restricted to the board's *initial* reveal set, not whatever's been
+    // discovered so far.
+    const revealedHexId = newlyRevealed[0];
+    const candidateVertex = Object.values(board.vertices).find(
+      (v) =>
+        v.adjacentHexIds.includes(revealedHexId) &&
+        !bundle.room.vertices[v.id] &&
+        !v.adjacentVertexIds.some((n) => bundle.room.vertices[n]),
+    );
+    expect(candidateVertex).toBeDefined();
+    expect(() =>
+      applyAction(bundle, { type: 'buildSettlement', uid: uidB, vertexId: candidateVertex!.id, free: true }),
+    ).toThrow(/hidden hex/);
   });
 
   it('resolves pending gold picks one player at a time, returning to main once all are done', () => {
