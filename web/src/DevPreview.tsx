@@ -1,21 +1,24 @@
 // Temporary, local-only preview harness for iterating on Board.tsx visuals without touching
 // Firebase at all. Wired in from main.tsx behind a query param; delete before shipping.
 import type { JSX } from 'react';
-import { generateBoard } from '@catan/engine';
+import { generateBoard, initialFogRevealHexIds } from '@catan/engine';
 import Board from './components/Board';
-import type { RoomState, PublicPlayer } from '@catan/engine';
+import type { RoomState, PublicPlayer, MapPresetId } from '@catan/engine';
 import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from '@catan/engine';
 import './routes/Game.css';
 
 export default function DevPreview(): JSX.Element {
-  const board = generateBoard('official-beginner', 'preview-seed');
+  // ?preview=board&map=fog-of-war (etc.) to preview a specific preset; defaults to
+  // official-beginner. Not meant to cover every param combo, just quick visual iteration.
+  const mapPreset = (new URLSearchParams(window.location.search).get('map') as MapPresetId | null) ?? 'official-beginner';
+  const board = generateBoard(mapPreset, 'preview-seed');
 
   const room: RoomState = {
     id: 'preview',
     code: 'PREVW',
     hostUid: 'p0',
     status: 'playing',
-    mapPreset: 'official-beginner',
+    mapPreset,
     seed: 'preview-seed',
     board,
     vertices: {},
@@ -46,7 +49,7 @@ export default function DevPreview(): JSX.Element {
     paused: false,
     pausedAt: null,
     pauseVotes: [],
-    discoveredHexIds: null,
+    discoveredHexIds: mapPreset === 'fog-of-war' ? initialFogRevealHexIds(board.hexes) : null,
     pendingGoldPicks: [],
   };
 

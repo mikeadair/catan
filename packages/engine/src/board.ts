@@ -17,20 +17,33 @@ import type {
 import { createRng, shuffle } from './rng';
 
 // ---------------------------------------------------------------------------
-// Standard hex layout: a "hexagon of hexes" of radius 2 (19 tiles), laid out
-// in 5 rows of 3,4,5,4,3 hexes, top (r=-2) to bottom (r=2), left to right.
+// Regular "hexagon of hexes" of a given radius, top to bottom, left to right.
+// radius=2 (19 tiles, rows of 3,4,5,4,3) is the standard board; radius=3 (37
+// tiles, rows of 4,5,6,7,6,5,4) is the fog-of-war board — big enough for two
+// full hidden rings (see initialFogRevealHexIds below) inside a visible outer
+// ring, unlike the 5-6 player extension board which is an asymmetric 30-hex
+// shape rather than a true hexagon (see extendedHexCoords) and so wouldn't
+// produce clean, even rings.
 // ---------------------------------------------------------------------------
 
-export function standardHexCoords(): AxialCoord[] {
+function hexagonCoords(radius: number): AxialCoord[] {
   const coords: AxialCoord[] = [];
-  for (let r = -2; r <= 2; r++) {
-    const qMin = Math.max(-2, -r - 2);
-    const qMax = Math.min(2, -r + 2);
+  for (let r = -radius; r <= radius; r++) {
+    const qMin = Math.max(-radius, -r - radius);
+    const qMax = Math.min(radius, -r + radius);
     for (let q = qMin; q <= qMax; q++) {
       coords.push({ q, r });
     }
   }
   return coords;
+}
+
+export function standardHexCoords(): AxialCoord[] {
+  return hexagonCoords(2);
+}
+
+export function fogHexCoords(): AxialCoord[] {
+  return hexagonCoords(3);
 }
 
 // 5-6 player extension: 30 hexes in 7 rows of 3,4,5,6,5,4,3 — an elongated hexagon rather
@@ -119,14 +132,28 @@ const EXTENDED_NUMBER_POOL = [
   2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
 ];
 
-// fog-of-war pool: same 19-hex distribution as the base pool, but one pasture becomes the
-// gold hex (still needs a number token, so NUMBER_POOL's 18 entries still cover exactly the
-// 18 non-desert hexes).
+// fog-of-war pool: the board is the 37-hex true radius-3 hexagon (fogHexCoords), scaled
+// further from the 30-hex extended distribution — 6 hills, 7 forest, 6 mountains, 7 fields,
+// 8 pasture, 3 desert = 37. One pasture becomes the gold hex (same swap-to-center trick as
+// before), still needs a number token like any other non-desert hex.
 const FOG_TERRAIN_POOL: Terrain[] = (() => {
-  const pool = TERRAIN_POOL.slice();
+  const pool: Terrain[] = [
+    'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
+    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
+    'desert', 'desert', 'desert',
+  ];
   pool[pool.lastIndexOf('pasture')] = 'gold';
   return pool;
 })();
+// 34 number tokens for the 34 non-desert hexes in FOG_TERRAIN_POOL (37 - 3 desert). Follows
+// the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL — the (2,12) and (3,11) pairs (the
+// rarest, lowest-pip numbers) stay scarcer than the rest of the middle values.
+const FOG_NUMBER_POOL = [
+  2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12,
+];
 
 // Fixed official-beginner layout (row order matches standardHexCoords()).
 const OFFICIAL_TERRAIN: Terrain[] = [
@@ -169,7 +196,7 @@ function buildTerrainNumberAssignment(
   // extended-5-6p has no authored "official" arrangement (unlike official-beginner) — it's
   // always randomized, same as balanced-random/chaos, just from the bigger pool.
   const terrainPool = presetId === 'extended-5-6p' ? EXTENDED_TERRAIN_POOL : presetId === 'fog-of-war' ? FOG_TERRAIN_POOL : TERRAIN_POOL;
-  const numberPool = presetId === 'extended-5-6p' ? EXTENDED_NUMBER_POOL : NUMBER_POOL;
+  const numberPool = presetId === 'extended-5-6p' ? EXTENDED_NUMBER_POOL : presetId === 'fog-of-war' ? FOG_NUMBER_POOL : NUMBER_POOL;
   const requireFair = presetId === 'balanced-random' || presetId === 'extended-5-6p' || presetId === 'fog-of-war';
   let terrains: Terrain[] = [];
   let numbers: (number | null)[] = [];
@@ -368,10 +395,14 @@ function hexCubeRadius(c: AxialCoord): number {
 
 /** Hex ids revealed from the start of a fog-of-war game: the entire outer ring (the board's
  * perimeter, where initial settlements go — same as a normal game) plus the single hex dead
- * center (always the gold hex; see generateBoard). Everything in between — the inner ring —
- * starts hidden until a road reaches it (see 'buildRoad' in rules.ts). Matches real
- * fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring around the outside,
- * fog in the middle, a special tile at the very center) rather than isolated corner tiles. */
+ * center (always the gold hex; see generateBoard). Everything in between starts hidden until
+ * a road reaches it (see 'buildRoad' in rules.ts) — on the 37-hex fogHexCoords() board (radius
+ * 3) that's genuinely two full hidden rings (radius 2, then radius 1) around the gold center,
+ * not just one; this function doesn't hardcode a radius, it just reveals whatever the board's
+ * own outer ring and center happen to be, so it falls out automatically from the board being
+ * bigger. Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring
+ * around the outside, fog in the middle, a special tile at the very center) rather than
+ * isolated corner tiles. */
 export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
   const maxRadius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
   return hexes.filter((h) => hexCubeRadius(h.coord) === maxRadius || hexCubeRadius(h.coord) === 0).map((h) => h.id);
@@ -383,7 +414,7 @@ export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
 
 export function generateBoard(presetId: MapPresetId, seed: string): Board {
   const rng = createRng(`${seed}:board`);
-  const coords = presetId === 'extended-5-6p' ? extendedHexCoords() : standardHexCoords();
+  const coords = presetId === 'extended-5-6p' ? extendedHexCoords() : presetId === 'fog-of-war' ? fogHexCoords() : standardHexCoords();
   const { terrains, numbers } = buildTerrainNumberAssignment(presetId, coords, rng);
 
   const hexes: HexTile[] = coords.map((coord, i) => ({

@@ -1266,6 +1266,21 @@ describe('fog-of-war and gold hex', () => {
     expect(board.hexes.some((h) => h.terrain === 'gold')).toBe(true);
   });
 
+  it('reveals the outer ring + center but hides two full rings in between (37-hex board)', () => {
+    const bundle = makeFogGame();
+    const board = bundle.room.board!;
+    expect(board.hexes).toHaveLength(37);
+
+    // Radius-3 hexagon ring sizes: outer ring (radius 3) = 18 hexes, middle ring (radius 2)
+    // = 12 hexes, inner ring (radius 1) = 6 hexes, center (radius 0) = 1 hex. 18+12+6+1=37.
+    // Revealed at start: outer ring + center = 19. Hidden: the two full rings in between = 18.
+    const revealed = new Set(bundle.room.discoveredHexIds);
+    expect(revealed.size).toBe(19);
+    const hidden = board.hexes.filter((h) => !revealed.has(h.id));
+    expect(hidden).toHaveLength(18);
+    for (const hex of hidden) expect(hex.number).toBeNull();
+  });
+
   it('rejects a starting settlement adjacent to the gold hex', () => {
     const bundle = makeFogGame();
     const board = bundle.room.board!;

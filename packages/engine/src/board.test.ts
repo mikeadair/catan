@@ -132,6 +132,83 @@ describe('generateBoard: extended-5-6p', () => {
   });
 });
 
+describe('generateBoard: fog-of-war', () => {
+  const EXPECTED_FOG_NUMBERS = [
+    2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 12, 12,
+  ].sort((a, b) => a - b);
+
+  it('has 37 hexes with correct terrain/port counts, one pasture swapped to gold', () => {
+    const board = generateBoard('fog-of-war', 'seed-fog');
+    expect(board.hexes).toHaveLength(37);
+
+    const counts = terrainCounts(board);
+    expect(counts.hills).toBe(6);
+    expect(counts.forest).toBe(7);
+    expect(counts.mountains).toBe(6);
+    expect(counts.fields).toBe(7);
+    expect(counts.pasture).toBe(7); // 8 in the pool, minus the one swapped to gold
+    expect(counts.desert).toBe(3);
+    expect(board.hexes.filter((h) => h.terrain === 'gold')).toHaveLength(1);
+
+    const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
+    expect(desertHexes).toHaveLength(3);
+    for (const d of desertHexes) expect(d.number).toBeNull();
+    expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
+
+    // Row widths 4,5,6,7,6,5,4 (7 rows) — a true radius-3 hexagon, unlike extended-5-6p's
+    // asymmetric shape. Verified directly (not just the 37 count) since that's what makes
+    // "two full rings of fog" well-defined in the first place (see initialFogRevealHexIds).
+    const rowWidths = new Map<number, number>();
+    for (const h of board.hexes) rowWidths.set(h.coord.r, (rowWidths.get(h.coord.r) ?? 0) + 1);
+    expect([...rowWidths.entries()].sort(([a], [b]) => a - b)).toEqual([
+      [-3, 4], [-2, 5], [-1, 6], [0, 7], [1, 6], [2, 5], [3, 4],
+    ]);
+
+    expect(board.ports).toHaveLength(9);
+  });
+
+  it('the gold hex sits dead center and every non-desert hex gets a number from the fog pool', () => {
+    const board = generateBoard('fog-of-war', 'seed-fog-gold');
+    const centerHex = board.hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
+    expect(centerHex.terrain).toBe('gold');
+
+    // Numbers are nulled out for hidden hexes at generation time (assigned on discovery
+    // instead — see rules.ts), so to check the full pool landed correctly we have to look at
+    // it before that nulling happens; reconstruct via a fresh call isn't possible from the
+    // public API, so instead just verify every REVEALED non-desert hex's number came from the
+    // fog pool's value set, and that the hidden count/shape works out (covered in
+    // rules.test.ts's 'fog-of-war and gold hex' describe block, which has room.discoveredHexIds
+    // to work with).
+    const validNumbers = new Set(EXPECTED_FOG_NUMBERS);
+    for (const hex of board.hexes) {
+      if (hex.number !== null) expect(validNumbers.has(hex.number)).toBe(true);
+    }
+  });
+
+  it('is fully connected — every hex reachable from any other via shared edges', () => {
+    const board = generateBoard('fog-of-war', 'fog-connectivity-seed');
+    const key = (c: { q: number; r: number }) => `${c.q},${c.r}`;
+    const byKey = new Map(board.hexes.map((h) => [key(h.coord), h]));
+    const DIRS = [
+      [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1],
+    ];
+    const seen = new Set<string>([key(board.hexes[0].coord)]);
+    const queue = [board.hexes[0]];
+    while (queue.length > 0) {
+      const cur = queue.pop()!;
+      for (const [dq, dr] of DIRS) {
+        const nk = key({ q: cur.coord.q + dq, r: cur.coord.r + dr });
+        const neighbor = byKey.get(nk);
+        if (neighbor && !seen.has(nk)) {
+          seen.add(nk);
+          queue.push(neighbor);
+        }
+      }
+    }
+    expect(seen.size).toBe(board.hexes.length);
+  });
+});
+
 describe('generateBoard: determinism', () => {
   it('same preset+seed produces an identical board', () => {
     const a = generateBoard('chaos', 'my-seed-123');
