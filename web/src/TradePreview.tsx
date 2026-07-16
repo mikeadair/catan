@@ -21,6 +21,19 @@ const stateOverrides: Record<string, Partial<RoomState>> = {
   'gold-pick': { phase: 'goldPick', pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
   'game-over': { phase: 'gameOver', winnerUid: 'p0' },
   paused: { paused: true, pausedAt: Date.now() - 3_000 },
+  // Not-yet-paused but a vote is already in ("Pausing… (X/Y)") / paused with a resume vote
+  // already in ("Paused (X/Y to resume)") — PauseControl's two remaining label variants beyond
+  // the plain 'Pause' / 'Paused — Resume?' defaults.
+  pausing: { paused: false, pauseVotes: ['p0'] },
+  'paused-voted': { paused: true, pausedAt: Date.now() - 3_000, pauseVotes: ['p0'] },
+  // setup1/setup2 free-placement UI never shows up in the default 'main'-phase preview — these
+  // clear the seeded vertices/edges (Object.assign replaces the whole object, not a merge) so
+  // Game.tsx's setupNeedsSettlement/setupNeedsRoad derivation sees an empty board for p0 again.
+  // 'setup1-road' additionally needs `vertices`/`lastSetupSettlementVertexId` populated with a
+  // real board-generated vertex id, which isn't known until generateBoard() runs — see the
+  // stateName === 'setup1-road' special-case below instead of here.
+  'setup1-settlement': { phase: 'setup1', setupRound: 1, vertices: {}, edges: {} },
+  'setup1-road': { phase: 'setup1', setupRound: 1, edges: {} },
 };
 
 // Separate from stateOverrides (room-phase variants) — this overrides the local player's own
@@ -144,6 +157,11 @@ export default function TradePreview(): JSX.Element {
     room.vertices[vertexIds[3]] = { type: 'settlement', uid: 'p0' };
     room.vertices[vertexIds[10]] = { type: 'city', uid: 'p0' };
     room.vertices[vertexIds[15]] = { type: 'settlement', uid: 'p1' };
+    // Also adjacent to hex '-1,-1' alongside p1's settlement (vertexIds[15]) — gives that hex two
+    // eligible robber victims (p1 + p2) so the robber-victim-modal snap component (hex hotspot
+    // click) actually reaches RobberModal's 'victim' step instead of auto-resolving to a single
+    // eligible uid. Fixes p2's settlementsBuilt:1 vs. zero-actual-vertices mismatch below too.
+    room.vertices['-1732051_-2000000'] = { type: 'settlement', uid: 'p2' };
     const edgeIds = Object.keys(board.edges);
     room.edges[edgeIds[5]] = 'p0';
     room.edges[edgeIds[6]] = 'p0';
@@ -202,6 +220,15 @@ export default function TradePreview(): JSX.Element {
       const overrides = stateOverrides[stateName];
       if (!overrides) throw new Error(`[TradePreview] unknown ?state=${stateName} — known: ${Object.keys(stateOverrides).join(', ')}`);
       Object.assign(room, overrides);
+      if (stateName === 'setup1-road') {
+        // p0 has one settlement placed and needs its free setup road — Board.tsx's freeSetup
+        // candidateEdges computation anchors off room.lastSetupSettlementVertexId (empty
+        // candidate set without it), which isn't known until generateBoard() has run above, so
+        // this can't live in the static stateOverrides map.
+        const anchorVertexId = vertexIds[3];
+        room.vertices = { [anchorVertexId]: { type: 'settlement', uid: 'p0' } };
+        room.lastSetupSettlementVertexId = anchorVertexId;
+      }
     }
     const handName = params.get('hand');
     if (handName) {

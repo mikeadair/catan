@@ -145,6 +145,10 @@ async function captureComponent(
   extraSelectors?: string[],
 ): Promise<void> {
   const url = comp.query ? `/?preview=${comp.preview}&${comp.query}` : `/?preview=${comp.preview}`;
+  // Must be installed before navigation — freezes Date.now()/timers at the real "now" so a
+  // component whose interesting state is otherwise scheduled to expire via a real setTimeout/
+  // Date.now() comparison (see SnapComponent.freezeClock's doc comment) stays put indefinitely.
+  if (comp.freezeClock) await page.clock.install();
   await page.goto(url);
   await page.waitForLoadState('networkidle');
   await clickAll(page, [...(comp.clicks ?? []), ...extraClicks]);

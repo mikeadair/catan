@@ -26,6 +26,12 @@ export interface SnapComponent {
    * trade composer only mounts once its toggle button is clicked. Distinct from a *scenario*'s
    * clicks (below), which go further than "make it visible" into a specific interaction state. */
   clicks?: string[];
+  /** Install a frozen Playwright clock before navigating (Date.now()/timers stop advancing on
+   * their own past install time) — for components whose interesting state is otherwise a
+   * transient, timer-driven race against real wall-clock time (e.g. TradeOffers' reject-flash,
+   * which schedules its own dismissal 1800ms after mount via Date.now()). Freezing time keeps the
+   * state on screen indefinitely instead of it depending on how fast the page happens to load. */
+  freezeClock?: boolean;
 }
 
 export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
@@ -156,7 +162,9 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.game__trades-overlay',
     preview: 'trade',
     screen: 'game',
-    description: 'Pending trade offers overlay, top-right of the board (TradePreview seeds 3 fake trades)',
+    description:
+      'Pending trade offers overlay, top-right of the board (TradePreview seeds 3 fake trades, one already fully-rejected — freezeClock pins time at page-load so its red "everyone rejected" flash is reliably still showing at capture time, not a race against ALL_REJECTED_FLASH_MS)',
+    freezeClock: true,
   },
   board: {
     selector: '.catan-board',
@@ -221,6 +229,57 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     screen: 'game',
     description: 'Game-over / victory screen',
     query: 'state=game-over',
+  },
+  'robber-victim-modal': {
+    selector: '.robber-modal',
+    preview: 'trade',
+    screen: 'game',
+    description:
+      "Robber victim-picker sub-modal — RobberModal's 'victim' step, reached only by an actual board-hex click (not just the fixed 'robber-hex' phase, which alone only shows robber-banner's plain 'choose a hex' banner)",
+    query: 'state=robber-hex',
+    clicks: ['[data-testid="hotspot-hex--1,-1"]'], // hex adjacent to both p1's and p2's seeded settlements — 2 eligible victims
+  },
+  'setup1-settlement': {
+    selector: '.catan-board',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Setup-phase board with settlement placement hotspots active (rules.ts "setup1" phase, needs-settlement sub-state)',
+    query: 'state=setup1-settlement',
+  },
+  'setup1-road': {
+    selector: '.catan-board',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Setup-phase board with free-road placement hotspots active, anchored off the just-placed settlement (rules.ts "setup1" phase, needs-road sub-state)',
+    query: 'state=setup1-road',
+  },
+  'pause-control-paused': {
+    selector: '.pause-control',
+    preview: 'trade',
+    screen: 'game',
+    description: 'PauseControl paused, no resume vote from self yet ("Paused — Resume?") — the plain not-voted / not-yet-paused variant is already visible in sidebar.png',
+    query: 'state=paused',
+  },
+  'pause-control-pausing': {
+    selector: '.pause-control',
+    preview: 'trade',
+    screen: 'game',
+    description: 'PauseControl not-yet-paused, own vote already in ("Pausing… (X/Y)")',
+    query: 'state=pausing',
+  },
+  'pause-control-paused-voted': {
+    selector: '.pause-control',
+    preview: 'trade',
+    screen: 'game',
+    description: 'PauseControl paused, own resume-vote already in ("Paused (X/Y to resume)")',
+    query: 'state=paused-voted',
+  },
+  'leave-confirm-dialog': {
+    selector: '.modal-overlay',
+    preview: 'trade',
+    screen: 'game',
+    description: "Leave-game confirmation dialog (Game.tsx's leaveConfirmOpen)",
+    clicks: ['.game__leave-button'], // not visible at all until this click — same pattern as trade-bar above
   },
 };
 
