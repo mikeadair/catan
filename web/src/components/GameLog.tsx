@@ -169,13 +169,28 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
     if (!el) return;
     isAutoScrollingRef.current = true;
     el.scrollTop = el.scrollHeight;
-    requestAnimationFrame(() => {
+    // Fallback in case the scrollTop assignment above turns out to be a no-op (already at the
+    // bottom) and so never fires a native 'scroll' event for handleScroll to consume below —
+    // without this, the flag would stay stuck "true" and swallow the next genuine user scroll.
+    // Cancelled/rescheduled on every re-run so only the latest correction's fallback is live.
+    const raf = requestAnimationFrame(() => {
       isAutoScrollingRef.current = false;
     });
+    return () => cancelAnimationFrame(raf);
   }, [items.length, autoScroll, logSize]);
 
   function handleScroll() {
-    if (isAutoScrollingRef.current) return;
+    if (isAutoScrollingRef.current) {
+      // The next 'scroll' event after we programmatically set scrollTop above is our own
+      // correction, not user input — consume exactly that one event instead of racing a fixed
+      // rAF window against it. A fixed-window race is what let this fall over in practice: a
+      // scroll event arriving a frame late (bursts of new log entries during a bot's turn, or
+      // residual scroll momentum right as the user clicks the toggle) landed after the rAF
+      // fallback above had already cleared the flag, got misread as "the user scrolled away",
+      // and flipped autoScroll back off moments after it was turned on.
+      isAutoScrollingRef.current = false;
+      return;
+    }
     const el = scrollRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;

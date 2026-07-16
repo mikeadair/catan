@@ -525,15 +525,37 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
     if (trade) return trade;
   }
 
-  // 7. Nothing left to usefully do — unless ending the turn would cancel our own still-fresh
-  // open trade offer out from under it (endTurn cancels any pending trade this bot proposed;
-  // see rules.ts). Give other players at least MIN_OPEN_TRADE_WINDOW_MS to notice and respond
-  // before the turn ends, instead of yanking the offer within one bot-driver beat of proposing
-  // it. Returning null just means "nothing to do this beat" — the driver re-evaluates on the
-  // next reactive trigger or fallback poll, so this naturally retries until the window passes.
+  // 7. Resolve our own still-pending trade offer, if there is one, before falling through to
+  // the plain endTurn below (endTurn cancels any pending trade this bot proposed — see
+  // rules.ts — so an offer that's actually resolved here never just gets silently swept away).
   const ownTrade = trades.find((t) => t.proposerUid === botUid && t.status === 'pending');
-  if (ownTrade && Date.now() - ownTrade.createdAt < MIN_OPEN_TRADE_WINDOW_MS) {
-    return null;
+  if (ownTrade) {
+    // An open trade's give/receive amounts are fixed regardless of who it's finalized with —
+    // the resource outcome for this bot is identical either way — so there's no decision to
+    // weigh here beyond "someone's interested, take it," which can happen the moment interest
+    // shows up rather than waiting out the rest of the window below.
+    const interested = ownTrade.interestedUids ?? [];
+    if (interested.length > 0) {
+      return { type: 'finalizeTrade', uid: botUid, tradeId: ownTrade.id, withUid: interested[0] };
+    }
+
+    // No one's interested — if every other player in the room has already explicitly
+    // rejected, there's nothing left to wait for; cancel now instead of sitting on a dead
+    // offer for the rest of MIN_OPEN_TRADE_WINDOW_MS.
+    const rejectedUids = new Set(ownTrade.rejectedUids ?? []);
+    const stillEligible = Object.keys(players).some((uid) => uid !== botUid && !rejectedUids.has(uid));
+    if (!stillEligible) {
+      return { type: 'cancelTrade', uid: botUid, tradeId: ownTrade.id };
+    }
+
+    // Still some responders who haven't weighed in yet — give them at least
+    // MIN_OPEN_TRADE_WINDOW_MS to notice and respond before the turn ends, instead of yanking
+    // the offer within one bot-driver beat of proposing it. Returning null just means "nothing
+    // to do this beat" — the driver re-evaluates on the next reactive trigger or fallback
+    // poll, so this naturally retries until the window passes or everyone's responded.
+    if (Date.now() - ownTrade.createdAt < MIN_OPEN_TRADE_WINDOW_MS) {
+      return null;
+    }
   }
 
   return { type: 'endTurn', uid: botUid };

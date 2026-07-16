@@ -286,6 +286,51 @@ describe('decideBotAction: bank/player trading', () => {
 
     expect(decideBotAction(bundle, botUid)?.type).toBe('endTurn');
   });
+
+  it('finalizes its own open trade with an interested responder immediately, without waiting out the window', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    const pendingTrade: TradeOffer = {
+      id: 't1',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'pending',
+      counterOf: null,
+      createdAt: Date.now(),
+      interestedUids: ['p1'],
+    };
+    bundle.trades.push(pendingTrade);
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'finalizeTrade', uid: botUid, tradeId: 't1', withUid: 'p1' });
+  });
+
+  it('cancels its own open trade as soon as every other player has rejected it, without waiting out the window', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    const pendingTrade: TradeOffer = {
+      id: 't1',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'pending',
+      counterOf: null,
+      createdAt: Date.now(),
+      interestedUids: [],
+      rejectedUids: ['p1'],
+    };
+    bundle.trades.push(pendingTrade);
+
+    expect(decideBotAction(bundle, botUid)).toEqual({ type: 'cancelTrade', uid: botUid, tradeId: 't1' });
+  });
 });
 
 describe('decideBotAction: responding to trades (decideTradeResponse)', () => {

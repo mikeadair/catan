@@ -192,6 +192,29 @@ export default function TradeOffers({
     return () => clearInterval(interval);
   }, [dismissAt]);
 
+  // Guards against re-issuing respondTrade(false) for the same trade every time this effect
+  // re-runs while we wait for the server round-trip to land.
+  const calledAutoRejectRef = useRef<Set<string>>(new Set());
+
+  // A responder who plainly cannot afford a trade's ask (Accept is disabled below for exactly
+  // this reason) shouldn't have to notice that and click Reject themselves — auto-reject on
+  // their behalf the moment it's detected, same as a bot would (see decideTradeResponse in
+  // bots.ts, which always returns an explicit accept/reject and never just leaves a trade
+  // hanging). This also speeds up the "everyone rejected" flash/auto-cancel effect above for
+  // open trades: without it, a human responder who can't afford the trade but never gets
+  // around to clicking Reject keeps that trade from ever reading as fully rejected.
+  useEffect(() => {
+    for (const t of trades) {
+      if (t.status !== 'pending' || t.proposerUid === uid || !isRelevant(t, uid)) continue;
+      if (blocked || calledAutoRejectRef.current.has(t.id)) continue;
+      if (responderStatus(t, uid) !== 'pending') continue;
+      if (canAffordCost(ownResources, t.receive)) continue;
+      calledAutoRejectRef.current.add(t.id);
+      onRespondTrade(t.id, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trades, uid, ownResources, blocked]);
+
   const relevantTrades = trades.filter((t) => {
     const until = dismissAt[t.id];
     if (until !== undefined) {
