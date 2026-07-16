@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { edgeMidpoint, generateBoard, hexPixel, vertexPixel } from './board';
+import { edgeMidpoint, generateBoard, hexPixel, initialFogRevealHexIds, vertexPixel } from './board';
 import { TERRAIN_RESOURCE, type Terrain } from './types';
 
 const ALL_TERRAINS: Terrain[] = ['hills', 'forest', 'mountains', 'fields', 'pasture', 'desert'];
@@ -201,6 +201,20 @@ describe('generateBoard: fog-of-war', () => {
     const validNumbers = new Set(EXPECTED_FOG_NUMBERS);
     for (const hex of board.hexes) {
       if (hex.number !== null) expect(validNumbers.has(hex.number)).toBe(true);
+    }
+  });
+
+  it('never leaves a hidden (not-initially-revealed) hex as desert, across many seeds', () => {
+    // Hidden fog tiles should never "turn out to be" desert once discovered via gameplay —
+    // desert must always be part of the initial reveal set. See initialFogRevealHexIds.
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('fog-of-war', `fog-hidden-desert-seed-${i}`);
+      const revealed = new Set(initialFogRevealHexIds(board.hexes));
+      const hidden = board.hexes.filter((h) => !revealed.has(h.id));
+      expect(hidden.length, `seed ${i}`).toBeGreaterThan(0); // sanity: still hexes left hidden
+      for (const hex of hidden) {
+        expect(hex.terrain, `seed ${i}, hex ${hex.id}`).not.toBe('desert');
+      }
     }
   });
 

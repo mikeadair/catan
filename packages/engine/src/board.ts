@@ -216,19 +216,27 @@ function isHexRingCorner(coord: AxialCoord, radius: number): boolean {
   return atRadius >= 2;
 }
 
+/** Whether `coord` is one of fog-of-war's 6 fixed desert hexes — the corner cells of ring
+ * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why desert is fixed
+ * there rather than shuffled). Shared by buildFogTerrainNumberAssignment, which places desert
+ * at exactly these hexes, and initialFogRevealHexIds, which reveals exactly these hexes from
+ * the start so a hidden hex can never turn out to be desert once discovered — kept as one
+ * function so the two can't silently drift apart. Relies on hexCubeRadius/isHexRingCorner,
+ * both function declarations (hoisted), so definition order in this file doesn't matter. */
+function isFogDesertCorner(coord: AxialCoord): boolean {
+  return hexCubeRadius(coord) === FOG_DESERT_RING_RADIUS && isHexRingCorner(coord, FOG_DESERT_RING_RADIUS);
+}
+
 /** fog-of-war's terrain/number assignment. Unlike every other preset, desert isn't shuffled
  * in at random with everything else — it's fixed at the 6 corner hexes of
- * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why), so revealed
- * tiles are never desert and the fixed positions read as deliberate compass-direction
- * landmarks rather than wherever a shuffle happened to land. Everything else is shuffled from
- * FOG_NON_DESERT_TERRAIN_POOL/FOG_NON_DESERT_NUMBER_POOL across the remaining hexes, with the
- * same no-adjacent-6/8 fairness retry every other randomized preset uses. */
+ * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why), so those tiles
+ * are always revealed from game start (see initialFogRevealHexIds) and the fixed positions
+ * read as deliberate compass-direction landmarks rather than wherever a shuffle happened to
+ * land. Everything else is shuffled from FOG_NON_DESERT_TERRAIN_POOL/FOG_NON_DESERT_NUMBER_POOL
+ * across the remaining hexes, with the same no-adjacent-6/8 fairness retry every other
+ * randomized preset uses. */
 function buildFogTerrainNumberAssignment(coords: AxialCoord[], rng: () => number): { terrains: Terrain[]; numbers: (number | null)[] } {
-  const desertIndices = new Set(
-    coords
-      .map((_, i) => i)
-      .filter((i) => hexCubeRadius(coords[i]) === FOG_DESERT_RING_RADIUS && isHexRingCorner(coords[i], FOG_DESERT_RING_RADIUS)),
-  );
+  const desertIndices = new Set(coords.map((_, i) => i).filter((i) => isFogDesertCorner(coords[i])));
   const otherIndices = coords.map((_, i) => i).filter((i) => !desertIndices.has(i));
 
   let terrains: Terrain[] = [];
@@ -470,20 +478,26 @@ function hexCubeRadius(c: AxialCoord): number {
 /** Hex ids revealed from the start of a fog-of-war game: the outer *two* rings (the board's
  * perimeter plus the ring just inside it — more room for opening settlements than a single
  * ring gives every player) plus the single hex dead center (always the gold hex; see
- * generateBoard). Everything in between starts hidden until a road reaches it (see 'buildRoad'
- * in rules.ts) — on the 61-hex fogHexCoords() board (radius 4) that's two full hidden rings
- * (radius 2, then radius 1) sandwiched between the revealed edge and the gold center. This
- * function doesn't hardcode a radius, it just reveals the board's own outermost two ring
- * distances and center, so it falls out automatically from however big the board actually is.
- * Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring around
- * the outside, fog in the middle, a special tile at the very center) rather than isolated
- * corner tiles. */
+ * generateBoard) plus the 6 fixed desert corner hexes (see isFogDesertCorner) — desert tiles
+ * are always revealed from the start so that a hidden hex can never "turn out to be" desert
+ * once discovered via gameplay (see discoverHexesAtEdge in rules.ts, which reveals whatever
+ * terrain a newly-built road touches; deserts must never be a possible outcome there, both
+ * because it'd be a weird surprise and because desert hexes have no number token to assign).
+ * Everything else starts hidden until a road reaches it (see 'buildRoad' in rules.ts) — on the
+ * 61-hex fogHexCoords() board (radius 4) that's the two full hidden rings (radius 2, then
+ * radius 1) sandwiched between the revealed edge and the gold center, minus the 6 desert
+ * corners sitting on the radius-2 ring. This function doesn't hardcode a radius for the outer
+ * rings, it just reveals the board's own outermost two ring distances, center, and desert
+ * corners, so the outer-ring part falls out automatically from however big the board actually
+ * is. Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring
+ * around the outside, fog in the middle, a special tile at the very center) rather than
+ * isolated corner tiles, with desert visibility layered on top as this game's own rule. */
 export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
   const maxRadius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
   return hexes
     .filter((h) => {
       const r = hexCubeRadius(h.coord);
-      return r === maxRadius || r === maxRadius - 1 || r === 0;
+      return r === maxRadius || r === maxRadius - 1 || r === 0 || isFogDesertCorner(h.coord);
     })
     .map((h) => h.id);
 }

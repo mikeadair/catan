@@ -477,7 +477,12 @@ function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discoverer
     const hex = board.hexes.find((h) => h.id === hexId);
     if (!hex) continue;
     discovered.add(hexId);
-    hex.number = RANDOM_NUMBER_TOKENS[Math.floor(Math.random() * RANDOM_NUMBER_TOKENS.length)];
+    // Desert should never reach this point — board.ts's initialFogRevealHexIds always
+    // includes the 6 fixed desert corner hexes in the initial reveal set, so they're never
+    // "undiscovered" here. Guarded anyway (rather than assigning a random number) as
+    // defense-in-depth, matching every other codepath's convention of number: null for desert.
+    hex.number =
+      hex.terrain === 'desert' ? null : RANDOM_NUMBER_TOKENS[Math.floor(Math.random() * RANDOM_NUMBER_TOKENS.length)];
     addLog(room, `${players[discovererUid].displayName} revealed a ${hex.terrain} tile.`);
     const resource = hexResource(hex.terrain);
     if (resource && room.bank[resource] > 0) {

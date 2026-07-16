@@ -1334,7 +1334,7 @@ describe('fog-of-war and gold hex', () => {
     expect(board.hexes.some((h) => h.terrain === 'gold')).toBe(true);
   });
 
-  it('reveals two outer rings + center but hides two full rings in between (61-hex board)', () => {
+  it('reveals two outer rings + center + the 6 fixed desert corners, hiding the rest of the two inner rings (61-hex board)', () => {
     const bundle = makeFogGame();
     const board = bundle.room.board!;
     expect(board.hexes).toHaveLength(61);
@@ -1342,12 +1342,26 @@ describe('fog-of-war and gold hex', () => {
     // Radius-4 hexagon ring sizes: outermost ring (radius 4) = 24 hexes, second ring
     // (radius 3) = 18 hexes, middle ring (radius 2) = 12 hexes, inner ring (radius 1) = 6
     // hexes, center (radius 0) = 1 hex. 24+18+12+6+1=61. Revealed at start: outer two rings +
-    // center = 24+18+1=43. Hidden: the two full rings in between = 18.
+    // center + the radius-2 ring's 6 fixed desert corners = 24+18+1+6=49 (desert must always
+    // be visible — see initialFogRevealHexIds). Hidden: the rest of the two inner rings —
+    // radius-1's 6 hexes plus radius-2's 6 non-corner (edge) hexes = 12, none of them desert.
     const revealed = new Set(bundle.room.discoveredHexIds);
-    expect(revealed.size).toBe(43);
+    expect(revealed.size).toBe(49);
     const hidden = board.hexes.filter((h) => !revealed.has(h.id));
-    expect(hidden).toHaveLength(18);
-    for (const hex of hidden) expect(hex.number).toBeNull();
+    expect(hidden).toHaveLength(12);
+    for (const hex of hidden) {
+      expect(hex.number).toBeNull();
+      expect(hex.terrain).not.toBe('desert');
+    }
+  });
+
+  it('never leaves a desert hex hidden — all 6 fixed desert corners start revealed', () => {
+    const bundle = makeFogGame();
+    const board = bundle.room.board!;
+    const revealed = new Set(bundle.room.discoveredHexIds);
+    const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
+    expect(desertHexes).toHaveLength(6);
+    for (const hex of desertHexes) expect(revealed.has(hex.id)).toBe(true);
   });
 
   it('rejects a starting settlement adjacent to the gold hex', () => {
