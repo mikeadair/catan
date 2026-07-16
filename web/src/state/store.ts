@@ -26,10 +26,12 @@ const LAST_ROOM_KEY = 'catan.lastRoomId';
 // open to everyone) — see claimAndRunOffTurnBotTrade — but only after a human-like pause,
 // randomized within this window so several bots eligible for the same open trade don't all
 // answer in the same instant. Reuses the same reactive-listener + low-frequency-fallback
-// pattern as the current-turn bot driver above, just with a randomized delay. Capped well
-// under 5s so a player-initiated trade always gets a bot response quickly.
-const BOT_TRADE_RESPONSE_DELAY_MIN_MS = 1000;
-const BOT_TRADE_RESPONSE_DELAY_MAX_MS = 5000;
+// pattern as the current-turn bot driver above, just with a randomized delay. Short enough
+// that a player-initiated trade reliably gets a bot response well under a couple seconds
+// (a longer window here made every trade feel sluggish, on top of the already-real network
+// round trip for the read + submitActionCallable in claimAndRunOffTurnBotTrade).
+const BOT_TRADE_RESPONSE_DELAY_MIN_MS = 300;
+const BOT_TRADE_RESPONSE_DELAY_MAX_MS = 1200;
 // Small buffer added past a trade's exact TTL deadline before we report its expiry, purely
 // so the scheduled check reliably fires after (never right at/just before) the deadline.
 const TRADE_EXPIRY_CHECK_BUFFER_MS = 250;
