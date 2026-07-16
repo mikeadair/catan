@@ -89,12 +89,30 @@ async function clickAll(page: Page, selectors: string[]): Promise<void> {
   }
 }
 
-/** Crops to `selector`'s bounding box, expanded by `pad` px on every side and clamped to the
- * viewport — plain `locator.screenshot()` has no padding option, so this computes an explicit
- * `clip` region instead. */
-async function captureElement(page: Page, selector: string, pad: number, file: string): Promise<void> {
+type Box = { x: number; y: number; width: number; height: number };
+
+async function boundingBoxOrThrow(page: Page, selector: string): Promise<Box> {
   const box = await page.locator(selector).first().boundingBox();
   if (!box) throw new Error(`[snap] selector matched nothing (or is hidden): ${selector}`);
+  return box;
+}
+
+/** Smallest box containing every input box — for scenarios that need two elements captured
+ * together when neither's own bounding box (nor any shared ancestor's) covers both, e.g. a
+ * `position: absolute` panel that floats outside its parent's layout box (see snap-components.ts'
+ * `extraSelectors`). This crops to what's actually rendered on screen, not a synthetic layout. */
+function unionBoxes(boxes: Box[]): Box {
+  const x0 = Math.min(...boxes.map((b) => b.x));
+  const y0 = Math.min(...boxes.map((b) => b.y));
+  const x1 = Math.max(...boxes.map((b) => b.x + b.width));
+  const y1 = Math.max(...boxes.map((b) => b.y + b.height));
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
+/** Crops to `box`, expanded by `pad` px on every side and clamped to the viewport — plain
+ * `locator.screenshot()` has no padding option, so this computes an explicit `clip` region
+ * instead. */
+async function captureClip(page: Page, box: Box, pad: number, file: string): Promise<void> {
   if (pad <= 0) {
     await page.screenshot({ path: file, clip: box });
     return;
@@ -113,7 +131,19 @@ async function captureElement(page: Page, selector: string, pad: number, file: s
   await page.screenshot({ path: file, clip });
 }
 
-async function captureComponent(page: Page, name: string, comp: SnapComponent, extraClicks: string[], pad: number, out?: string): Promise<void> {
+async function captureElement(page: Page, selector: string, pad: number, file: string): Promise<void> {
+  await captureClip(page, await boundingBoxOrThrow(page, selector), pad, file);
+}
+
+async function captureComponent(
+  page: Page,
+  name: string,
+  comp: SnapComponent,
+  extraClicks: string[],
+  pad: number,
+  out?: string,
+  extraSelectors?: string[],
+): Promise<void> {
   const url = comp.query ? `/?preview=${comp.preview}&${comp.query}` : `/?preview=${comp.preview}`;
   await page.goto(url);
   await page.waitForLoadState('networkidle');
@@ -121,7 +151,9 @@ async function captureComponent(page: Page, name: string, comp: SnapComponent, e
   const dir = `${SCREENSHOT_DIR}/${comp.screen}`;
   mkdirSync(dir, { recursive: true });
   const file = `${dir}/${out ?? name}.png`;
-  await captureElement(page, comp.selector, pad, file);
+  const selectors = [comp.selector, ...(extraSelectors ?? [])];
+  const boxes = await Promise.all(selectors.map((s) => boundingBoxOrThrow(page, s)));
+  await captureClip(page, unionBoxes(boxes), pad, file);
   // eslint-disable-next-line no-console
   console.log(`[snap] saved: ${file}`);
 }
@@ -171,7 +203,7 @@ test('snap', async ({ page }) => {
       throw new Error(`[snap] unknown SNAP_SCENARIO "${scenarioName}" — see registry above (or snap-components.ts)`);
     }
     const comp = SNAP_COMPONENTS[scenario.component];
-    await captureComponent(page, scenarioName, comp, scenario.clicks, pad);
+    await captureComponent(page, scenarioName, comp, scenario.clicks, pad, undefined, scenario.extraSelectors);
     return;
   }
 
@@ -206,7 +238,7 @@ test('snap', async ({ page }) => {
       throw new Error(`[snap] SNAP_SCENARIOS["${name}"] collides with a SNAP_COMPONENTS entry of the same name — rename one (they'd share e2e/snap-screenshots/<screen>/<name>.png)`);
     }
     const comp = SNAP_COMPONENTS[scenario.component];
-    await captureComponent(page, name, comp, scenario.clicks, pad);
+    await captureComponent(page, name, comp, scenario.clicks, pad, undefined, scenario.extraSelectors);
   }
   expect(Object.keys(SNAP_COMPONENTS).length + Object.keys(SNAP_SCENARIOS).length).toBeGreaterThan(0);
 });

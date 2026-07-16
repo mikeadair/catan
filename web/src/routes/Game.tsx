@@ -778,8 +778,8 @@ export default function Game(): JSX.Element {
               <span className="game__toolbar-label">
                 {tradeComposerOpen
                   ? tradeGiveTotal > 0
-                    ? 'Your hand — tap to add/remove from trade'
-                    : 'Your hand — tap cards to give in a trade'
+                    ? 'You give — tap to add/remove'
+                    : 'You give — tap cards below to add to the trade'
                   : 'Your hand'}
               </span>
               {tradeComposerOpen && tradeGiveTotal > 0 && (

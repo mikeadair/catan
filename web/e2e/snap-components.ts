@@ -231,6 +231,12 @@ export interface SnapScenario {
    * actually produces the state being demonstrated, not just what makes the component exist. */
   clicks: string[];
   description: string;
+  /** Additional selectors whose bounding boxes get unioned with the component's own selector
+   * before cropping — for scenarios that need to show two elements together that share no common
+   * ancestor box (e.g. a `position: absolute` panel that floats outside its parent's layout box).
+   * Each selector still just needs to resolve to a real, visible element; snap.spec.ts takes the
+   * union of all their bounding boxes rather than any single one. */
+  extraSelectors?: string[];
 }
 
 // Named, reusable interaction states — the point is that the *sequence of clicks* to reach a
@@ -240,13 +246,25 @@ export interface SnapScenario {
 export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
   'hand-card-selected': {
     component: 'hand',
-    clicks: ['[data-testid="hand-card"]'],
+    // The hand's card picker only becomes interactive (onChange wired up) once the trade
+    // composer is open (Game.tsx's tradeComposerOpen ? ... : ... around .game__toolbar-hand) —
+    // without this first click, the hand-card click below lands on a non-interactive card and
+    // silently no-ops, producing a screenshot indistinguishable from the plain 'hand' component.
+    clicks: ['.game__toolbar-actions > button.build-toolbar__button', '[data-testid="hand-card"]'],
     description: 'Trade composer open, one hand card tapped/selected for the trade',
   },
   'trade-bar-with-selection': {
-    component: 'trade-bar',
-    clicks: ['[data-testid="hand-card"]'],
-    description: 'Trade composer open with one hand card selected, showing the give/want state together',
+    // .trade-bar (the "you want" panel) is deliberately taken out of flow — `position: absolute;
+    // bottom: 100%` relative to .game__toolbar (see TradeBar.css/Game.css's `.game__toolbar >
+    // .trade-bar`), floating above-left of the bottom bar so it never resizes the toolbar/board.
+    // No single element's own bounding box covers both it and .game__toolbar-hand (the give
+    // side), so this uses 'hand' as the base component and unions in '.trade-bar' via
+    // extraSelectors — captures exactly the two real, already-rendered regions together (with
+    // whatever's normally visible in the gap between them), not a synthetic layout.
+    component: 'hand',
+    clicks: ['.game__toolbar-actions > button.build-toolbar__button', '[data-testid="hand-card"]'],
+    extraSelectors: ['.trade-bar'],
+    description: 'Trade composer open with one hand card selected — give side (hand, bottom) and want side (trade-bar, floating above) shown together',
   },
   'hand-overflow-counter-faces-full': {
     component: 'hand',

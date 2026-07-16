@@ -185,19 +185,37 @@ export default function TradeBar({
       </div>
 
       <div className="trade-bar__actions">
-        <select value={targetUid} onChange={(e) => onTargetUidChange(e.target.value)} aria-label="Trade target">
-          <option value="">Open to all</option>
-          {otherPlayers.map((p) => (
-            <option key={p.uid} value={p.uid}>
-              {p.displayName}
-            </option>
-          ))}
-        </select>
+        <label className="trade-bar__target">
+          <span className="trade-bar__target-label">Trade with</span>
+          <select value={targetUid} onChange={(e) => onTargetUidChange(e.target.value)} aria-label="Trade target">
+            <option value="">Open to all</option>
+            {otherPlayers.map((p) => (
+              <option key={p.uid} value={p.uid}>
+                {p.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="trade-bar__actions-buttons">
-          <button type="button" onClick={handlePropose} disabled={!canPropose} title={proposeReason}>
+          {/* Distinct accent colors once enabled — these trigger different mechanics (propose to
+              a player vs. an instant bank exchange) and shouldn't read as interchangeable, or as
+              indistinguishable from each other's disabled state. */}
+          <button
+            type="button"
+            className="trade-bar__action trade-bar__action--offer"
+            onClick={handlePropose}
+            disabled={!canPropose}
+            title={proposeReason}
+          >
             Offer Trade
           </button>
-          <button type="button" onClick={handleBankTrade} disabled={!canBankTrade} title={bankTradeReason}>
+          <button
+            type="button"
+            className="trade-bar__action trade-bar__action--bank"
+            onClick={handleBankTrade}
+            disabled={!canBankTrade}
+            title={bankTradeReason}
+          >
             Bank Trade
           </button>
         </div>

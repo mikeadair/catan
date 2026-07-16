@@ -31,28 +31,49 @@
 }
 
 .trade-bar__want-cards {
-  display: flex;
+  /* A 2-column grid rather than flex-wrap: RESOURCES is a fixed 5-element list (see
+     @catan/engine's types.ts), so wrapping would always strand the last card (Wool) alone on
+     its own row with a big empty gap beside it — see :last-child below, which instead spans it
+     across the full width so the odd-one-out reads as a deliberate full-width row, not a gap. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  /* Now that this bar floats free of the board (see .trade-bar above), there's no more reason
-     to force all 5 resource cards into one scrolling row at the larger ~2x size below — wrap
-     onto a second row instead, so every resource stays visible without needing to scroll. */
-  flex-wrap: wrap;
   min-width: 0;
 }
 
 /* ~2x the original footprint (icon/text/stepper all scaled together below) — these are the
    primary controls for composing a trade, so they read better as clearly-tappable cards
-   rather than compact chips now that the bar floats free of the board (see Game.css). */
+   rather than compact chips now that the bar floats free of the board (see Game.css). Grid
+   items stretch to their column's full width by default, and every column in a row shares the
+   same width — so without `justify-content: space-between`, each card's icon+name+stepper just
+   pack left as one cluster, leaving the stepper's start position wherever that particular
+   card's name text happens to end. Since name length varies per resource ("Ore" vs "Grain",
+   "Brick" vs "Lumber"), that left every row's stepper sitting at a different x position with no
+   relationship to the row above/below it — `space-between` instead pins name+icon left and the
+   stepper flush to the card's right inner edge, which (given equal column widths) lines every
+   stepper in a column up at the same x regardless of that row's own name length. */
 .trade-bar__want-card {
   position: relative;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   background: var(--color-panel-light);
   border: 1px solid rgba(0, 0, 0, 0.35);
   border-radius: 14px;
   padding: 6px 10px;
-  flex-shrink: 0;
+}
+
+/* Wool (always the 5th/last of the fixed RESOURCES list) spans both grid columns instead of
+   sitting alone — see .trade-bar__want-cards above. A spanned grid item stretches to fill that
+   whole area by default, which combined with the space-between above just yanked name and
+   stepper to opposite ends of the full double-width row with a big dead gap between them —
+   `justify-self: center` overrides that stretch so the card sizes to its own content (same
+   compact footprint as the other four) and centers in the row, rather than stretching into a
+   loose, disjointed bar. */
+.trade-bar__want-card:last-child {
+  grid-column: 1 / -1;
+  justify-self: center;
 }
 
 .trade-bar__want-card::before {
@@ -100,7 +121,10 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1px solid var(--color-border);
+  /* A visible border by default (not just on hover) — .trade-bar__want-card's own resource
+     tint (especially Ore's blue-gray, Lumber's dark green) sat close enough in value to
+     var(--color-panel) that the button read as barely-there against its own card. */
+  border: 1px solid rgba(255, 255, 255, 0.28);
   background: var(--color-panel);
   color: var(--color-text);
   display: flex;
@@ -109,6 +133,7 @@
   padding: 0;
   line-height: 1;
   font-size: 22px;
+  font-weight: 600;
 }
 
 .trade-bar__want-stepper button:disabled {
@@ -146,29 +171,77 @@
   gap: 8px;
 }
 
-.trade-bar__actions select {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text);
-  padding: 6px 8px;
+/* Who can see/respond to this offer is one of the more consequential choices in the composer,
+   but as a bare <select> it read as the least prominent thing in the panel next to the
+   colorful resource rows above — a "Trade with" label plus a bit more visual weight brings it
+   up closer to their level. */
+.trade-bar__target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.trade-bar__actions button {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 6px 12px;
-  color: var(--color-text);
+.trade-bar__target-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
   font-weight: 600;
   white-space: nowrap;
 }
 
-.trade-bar__actions button:not(:disabled):hover {
+.trade-bar__actions select {
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  padding: 7px 10px;
+  font-weight: 600;
+}
+
+.trade-bar__actions select:hover {
   border-color: var(--color-accent);
 }
 
-.trade-bar__actions button:disabled {
-  opacity: 0.35;
+/* Base shell shared by both action buttons — color comes from the --offer/--bank modifiers
+   below so the two read as distinct actions once there's something to click, not just two
+   identically-styled buttons that happen to say different words. */
+.trade-bar__action {
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.trade-bar__action:disabled {
+  background: var(--color-panel);
+  border-color: var(--color-border);
+  color: var(--color-text-dim);
+  opacity: 0.6;
   cursor: default;
+}
+
+/* Offer Trade: the primary "propose to another player" action — same gold accent used for the
+   app's other primary CTAs (End Turn, playing a dev card), so it reads as the main thing to do
+   here. */
+.trade-bar__action--offer:not(:disabled) {
+  background: var(--color-accent);
+  color: #1c1c1c;
+}
+
+.trade-bar__action--offer:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+/* Bank Trade: an instant, self-contained exchange rather than a proposal someone else has to
+   accept — green reuses the same "completes immediately" meaning TradeOffers' Accept button
+   already carries elsewhere in the app, instead of introducing a third unrelated color. */
+.trade-bar__action--bank:not(:disabled) {
+  background: var(--color-success);
+  color: #0f2115;
+}
+
+.trade-bar__action--bank:not(:disabled):hover {
+  filter: brightness(1.08);
 }

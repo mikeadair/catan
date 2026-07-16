@@ -282,6 +282,11 @@ export default function ResourceHand({
                     // display, so it should read as "the one on top", fully visible, rather
                     // than a detached box off to the side.
                     style={{ zIndex: OVERFLOW_Z_INDEX }}
+                    // The big number here already *is* the combined total (see the comment on
+                    // resource-card__selected below) — this just spells that out on hover, since
+                    // tapping cards above and using +/- here are two different-looking ways of
+                    // feeding the one same number, with nothing else on screen saying so.
+                    title={`${selectedFaces.length + stepperVal} of your ${count} ${RESOURCE_LABEL[r]} selected — tap the cards to the left or use +/- here, both count toward this total`}
                     data-testid="hand-card-overflow"
                     data-resource={r}
                     data-resource-count={count}
@@ -314,7 +319,10 @@ export default function ResourceHand({
                         +
                       </button>
                     </div>
-                    <span className="resource-card__overflow-of">of {count}</span>
+                    {/* "available" rather than "of N" — "of N" read as ambiguous with the
+                        selected total directly above it (easy to misparse "7 of 12" as one
+                        combined fraction rather than two separate numbers: selected, and held). */}
+                    <span className="resource-card__overflow-of">{count} available</span>
                   </div>
                 ) : (
                   <div
@@ -372,7 +380,7 @@ export default function ResourceHand({
                   +
                 </button>
               </div>
-              {!unlimited && <span className="resource-card__overflow-of">of {count}</span>}
+              {!unlimited && <span className="resource-card__overflow-of">{count} available</span>}
             </div>
           );
         })}
