@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, createGame, type GameStateBundle } from './rules';
 import { decideBotAction } from './bots';
-import { MAX_CITIES, MAX_ROADS, RESOURCES, type BotDifficulty, type Resource, type TradeOffer } from './types';
+import { MAX_CITIES, MAX_ROADS, MIN_OPEN_TRADE_WINDOW_MS, RESOURCES, type BotDifficulty, type Resource, type TradeOffer } from './types';
 
 // Regression test for a real production bug: a bot deciding a robber move (after rolling a
 // 7, or playing a knight) scored/picked opponents via their PRIVATE hand
@@ -233,6 +233,58 @@ describe('decideBotAction: bank/player trading', () => {
 
     const action = decideBotAction(bundle, botUid);
     expect(action?.type).not.toBe('proposeTrade');
+  });
+
+  // Regression test for a real production bug: a bot with nothing else to do on its turn
+  // would immediately end its turn right after proposing an open trade, and endTurn cancels
+  // any still-pending trade the ending player proposed (see rules.ts) — so the offer a bot
+  // just made vanished within one bot-driver beat (~250ms), long before a human or an
+  // off-turn bot (whose response is deliberately paced 1-5s, see BOT_TRADE_RESPONSE_DELAY_*_MS
+  // in web/src/state/store.ts) could ever act on it. MIN_OPEN_TRADE_WINDOW_MS (types.ts) was
+  // already documented as the guaranteed minimum lifetime of an open trade, but nothing
+  // actually enforced it against the proposer's own endTurn.
+  it('does not end its turn (and so does not cancel its own fresh open trade) before MIN_OPEN_TRADE_WINDOW_MS has passed', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    const pendingTrade: TradeOffer = {
+      id: 't1',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'pending',
+      counterOf: null,
+      createdAt: Date.now(),
+      interestedUids: [],
+    };
+    bundle.trades.push(pendingTrade);
+
+    expect(decideBotAction(bundle, botUid)).toBeNull();
+  });
+
+  it('ends its turn (cancelling its own open trade) once MIN_OPEN_TRADE_WINDOW_MS has passed', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    const pendingTrade: TradeOffer = {
+      id: 't1',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'pending',
+      counterOf: null,
+      createdAt: Date.now() - MIN_OPEN_TRADE_WINDOW_MS - 1,
+      interestedUids: [],
+    };
+    bundle.trades.push(pendingTrade);
+
+    expect(decideBotAction(bundle, botUid)?.type).toBe('endTurn');
   });
 });
 

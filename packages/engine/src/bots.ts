@@ -22,7 +22,16 @@ import type {
   RoomState,
   VertexId,
 } from './types';
-import { BUILD_COSTS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, STARTING_BANK, TERRAIN_RESOURCE } from './types';
+import {
+  BUILD_COSTS,
+  MAX_CITIES,
+  MAX_ROADS,
+  MAX_SETTLEMENTS,
+  MIN_OPEN_TRADE_WINDOW_MS,
+  RESOURCES,
+  STARTING_BANK,
+  TERRAIN_RESOURCE,
+} from './types';
 import { pipCount, vertexLegalForFogSetup } from './board';
 import type { GameStateBundle } from './rules';
 
@@ -469,8 +478,8 @@ function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: 
 // (and mock Math.random around) the exact threshold.
 const EASY_SKIP_BUILD_CHANCE = 0.15;
 
-function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction {
-  const { room, players, hands } = bundle;
+function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
+  const { room, players, hands, trades } = bundle;
   const player = players[botUid];
   const hand = hands[botUid];
 
@@ -516,7 +525,17 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
     if (trade) return trade;
   }
 
-  // 7. Nothing left to usefully do.
+  // 7. Nothing left to usefully do — unless ending the turn would cancel our own still-fresh
+  // open trade offer out from under it (endTurn cancels any pending trade this bot proposed;
+  // see rules.ts). Give other players at least MIN_OPEN_TRADE_WINDOW_MS to notice and respond
+  // before the turn ends, instead of yanking the offer within one bot-driver beat of proposing
+  // it. Returning null just means "nothing to do this beat" — the driver re-evaluates on the
+  // next reactive trigger or fallback poll, so this naturally retries until the window passes.
+  const ownTrade = trades.find((t) => t.proposerUid === botUid && t.status === 'pending');
+  if (ownTrade && Date.now() - ownTrade.createdAt < MIN_OPEN_TRADE_WINDOW_MS) {
+    return null;
+  }
+
   return { type: 'endTurn', uid: botUid };
 }
 
