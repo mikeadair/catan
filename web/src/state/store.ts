@@ -144,7 +144,9 @@ function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>
 function runBotActionIfDue(roomId: string, get: () => GameStore): void {
   if (botActionInFlight || !tradesReady) return;
   const { roomId: currentRoomId, room, players, trades } = get();
-  if (currentRoomId !== roomId || !room || !isBotTurn(room, players)) return;
+  // Server rejects every action while paused, so don't bother attempting bot moves — the
+  // room listener re-triggers this on unpause.
+  if (currentRoomId !== roomId || !room || room.paused || !isBotTurn(room, players)) return;
   botActionInFlight = true;
   claimAndRunBotAction(roomId, room, players, trades)
     .catch(() => {})
@@ -185,7 +187,7 @@ function findRespondableTrade(trades: TradeOffer[], botUid: string): TradeOffer 
 function runOffTurnBotTradeIfDue(roomId: string, botUid: string, get: () => GameStore): void {
   if (offTurnBotTradeInFlight.has(botUid) || !tradesReady) return;
   const { roomId: currentRoomId, room, players, trades } = get();
-  if (currentRoomId !== roomId || !room) return;
+  if (currentRoomId !== roomId || !room || room.paused) return;
   offTurnBotTradeInFlight.add(botUid);
   claimAndRunOffTurnBotTrade(roomId, room, players, trades, botUid)
     .catch(() => {})
@@ -245,7 +247,7 @@ function triggerOffTurnBotTradeChecks(roomId: string, get: () => GameStore): voi
 
 function runTradeExpiryIfDue(roomId: string, get: () => GameStore): void {
   const { roomId: currentRoomId, room, uid, trades } = get();
-  if (currentRoomId === roomId && room?.status === 'playing' && uid) {
+  if (currentRoomId === roomId && room?.status === 'playing' && !room.paused && uid) {
     const now = Date.now();
     if (trades.some((t) => t.status === 'pending' && now - t.createdAt >= TRADE_EXPIRY_MS)) {
       void fbDispatchAction(roomId, { type: 'expireTrades', uid }).catch(() => {});
@@ -266,7 +268,10 @@ function scheduleTradeExpiryCheck(roomId: string, get: () => GameStore): void {
     tradeExpiryTimer = null;
   }
   const { roomId: currentRoomId, room, trades } = get();
-  if (currentRoomId !== roomId || room?.status !== 'playing') return;
+  // While paused the server rejects expireTrades ("Game is paused"), so arming a timer would
+  // just spin against a deadline that can never resolve — stay dark and let the room
+  // listener re-arm on unpause.
+  if (currentRoomId !== roomId || room?.status !== 'playing' || room.paused) return;
 
   const now = Date.now();
   const deadlines = trades.filter((t) => t.status === 'pending').map((t) => t.createdAt + TRADE_EXPIRY_MS);
@@ -292,7 +297,7 @@ function hasPendingResponders(trade: TradeOffer, players: Record<string, PublicP
 
 function runTradeResponseTimeoutIfDue(roomId: string, get: () => GameStore): void {
   const { roomId: currentRoomId, room, uid, trades, players } = get();
-  if (currentRoomId === roomId && room?.status === 'playing' && uid && room.tradeResponseTimerSeconds !== null) {
+  if (currentRoomId === roomId && room?.status === 'playing' && !room.paused && uid && room.tradeResponseTimerSeconds !== null) {
     const now = Date.now();
     const deadlineMs = room.tradeResponseTimerSeconds * 1000;
     const anyOverdue = trades.some(
@@ -318,7 +323,8 @@ function scheduleTradeResponseTimeoutCheck(roomId: string, get: () => GameStore)
     tradeResponseTimeoutTimer = null;
   }
   const { roomId: currentRoomId, room, trades, players } = get();
-  if (currentRoomId !== roomId || room?.status !== 'playing' || room.tradeResponseTimerSeconds === null) return;
+  // Same paused rationale as scheduleTradeExpiryCheck above.
+  if (currentRoomId !== roomId || room?.status !== 'playing' || room.paused || room.tradeResponseTimerSeconds === null) return;
 
   const now = Date.now();
   const deadlineMs = room.tradeResponseTimerSeconds * 1000;
@@ -356,6 +362,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set({ room });
         triggerBotCheck(roomId, get);
         triggerOffTurnBotTradeChecks(roomId, get);
+        // Pause/unpause only touches the room doc, and the trade timers deliberately stay
+        // unarmed while paused — re-arm here so unpause doesn't wait for the trades
+        // listener or the BOT_FALLBACK_MS safety net.
+        scheduleTradeExpiryCheck(roomId, get);
+        scheduleTradeResponseTimeoutCheck(roomId, get);
       })
     );
     unsubscribers.push(
