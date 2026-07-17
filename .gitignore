@@ -12,6 +12,9 @@ firestore-debug.log
 *.har
 .gstack/
 
+# /graphify output — generated knowledge-graph cache/report, regenerable via the graphify skill.
+graphify-out/
+
 # Ad hoc, per-run screenshots from web/e2e/latency-fuzz.spec.ts — for human review of a given
 # run.
 web/e2e/latency-fuzz-screenshots/
