@@ -16,7 +16,7 @@ import { useGameStore } from '../state/store';
 import { PLAYER_COLORS, type MapPresetId, type PlayerColor } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from '../components/playerColors';
 import MapPickerGrid from '../components/MapPickerGrid';
-import shipIcon from '../assets/decor/ship.png';
+import SailingShip from '../components/SailingShip';
 import './Home.css';
 
 const DISPLAY_NAME_KEY = 'catan.displayName';
@@ -86,19 +86,6 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
   const [needsEmailForLink, setNeedsEmailForLink] = useState(false);
 
   const profileFetchedForUid = useRef<string | null>(null);
-
-  // Randomize the decorative sailing ship's path once per page load so it
-  // doesn't look identical on every visit. Purely cosmetic — no game state.
-  const [shipConfig] = useState(() => {
-    const duration = 32 + Math.random() * 22; // seconds for a full crossing
-    return {
-      top: 6 + Math.random() * 14, // % from the top, within the intro band
-      duration,
-      // Negative delay starts the animation partway through its cycle so
-      // the ship doesn't always begin at the edge on load.
-      delay: -(Math.random() * duration),
-    };
-  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -283,21 +270,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
 
   return (
     <div className="home">
-      <div className="home__ship-layer" aria-hidden="true">
-        <img
-          src={shipIcon}
-          className="home__ship"
-          alt=""
-          style={{
-            top: `${shipConfig.top}%`,
-            // Comma-separated: first value targets the "sail" (travel)
-            // keyframes, second targets the constant "bob" (wobble) ones —
-            // matches the animation-name order declared in Home.css.
-            animationDuration: `${shipConfig.duration}s, 3.6s`,
-            animationDelay: `${shipConfig.delay}s, 0s`,
-          }}
-        />
-      </div>
+      <SailingShip layerClassName="home__ship-layer" topRange={[6, 20]} />
 
       <div className="home__intro">
         <h1 className="home__title">Settlers of Catan</h1>

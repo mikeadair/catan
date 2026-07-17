@@ -58,6 +58,47 @@
   overflow: hidden;
 }
 
+/* Decorative ship (same asset as the home screen's SailingShip) reused in the board's own
+   ocean — by far the largest expanse of open water on screen, visible for the entire match,
+   unlike the home screen's which most players see for only a few seconds. Anchored rather
+   than sailing full-width like Home's: unlike Home's wide, short intro band, this container is
+   short-and-wide with the hex cluster reaching close to the top/bottom of the SVG's own
+   viewBox — a horizontal sail path would cross straight over tiles. The board is always
+   centered, though, so its bounding box's corners stay clear regardless of map preset; bottom-
+   left is picked arbitrarily (any corner works equally well). position: absolute (a positioned
+   element) paints above Board's plain <svg> (position: static) regardless of DOM order; z-index
+   1 keeps it above the board but below the real UI chrome layered on top of it (phase banner,
+   dice roller, trades overlay, all z-index >= 40). */
+.game__anchored-ship {
+  position: absolute;
+  left: 1%;
+  bottom: 3%;
+  width: 42px;
+  height: auto;
+  opacity: 0.34;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+  pointer-events: none;
+  z-index: 1;
+  animation: game-anchored-ship-bob 4.2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes game-anchored-ship-bob {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+  50% {
+    transform: rotate(3deg) translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game__anchored-ship {
+    animation: none;
+  }
+}
+
 .game__phase-banner {
   position: absolute;
   top: 12px;

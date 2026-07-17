@@ -23,6 +23,7 @@ import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import GameOverStandings from '../components/GameOverStandings';
 import ConfettiBurst from '../components/ConfettiBurst';
+import shipIcon from '../assets/decor/ship.png';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
 
@@ -673,6 +674,7 @@ export default function Game(): JSX.Element {
       className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}${isFogMap ? ' game--fog' : ''}`}
     >
       <div className="game__board-area">
+        <img src={shipIcon} className="game__anchored-ship" alt="" aria-hidden="true" />
         {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
         {resourceGrantMessage && (
           <div key={resourceGrantMessage} className="game__resource-grant">

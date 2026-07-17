@@ -1,0 +1,44 @@
+.sailing-ship {
+  position: absolute;
+  left: -14%;
+  width: 46px;
+  height: auto;
+  opacity: 0.32;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+  /* Two independent animations: "sail" drives left-to-right travel using percentages of the
+     containing block (the caller's own positioned layer — see SailingShipProps.layerClassName),
+     "bob" adds a subtle sail-in-the-wind wobble. Order matters — inline styles set per-instance
+     override duration/delay per-animation by position. */
+  animation-name: sailing-ship-sail, sailing-ship-bob;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: infinite, infinite;
+  animation-duration: 36s, 3.6s;
+  animation-delay: 0s, 0s;
+  will-change: left, transform;
+}
+
+@keyframes sailing-ship-sail {
+  0% {
+    left: -14%;
+  }
+  100% {
+    left: 114%;
+  }
+}
+
+@keyframes sailing-ship-bob {
+  0%,
+  100% {
+    transform: rotate(-92deg);
+  }
+  50% {
+    transform: rotate(-88deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sailing-ship {
+    animation: none;
+    display: none;
+  }
+}
