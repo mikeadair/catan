@@ -5,16 +5,27 @@
 //
 // Three difficulty tiers (PublicPlayer.botDifficulty, default 'normal' when absent):
 //  - 'easy': weaker placement/robber evaluation, no strategic trading (bank or
-//    player), and occasionally skips a beneficial build entirely.
+//    player), no Monopoly/Road Building, and occasionally skips a beneficial
+//    build entirely.
 //  - 'normal': the original heuristics — solid placement scoring, bank trading
 //    toward whatever build it's closest to, no player-to-player trade proposals.
 //  - 'hard': sharper placement scoring (weights 6/8 and ports higher), targets
 //    the strongest opponent (with a bias toward humans over bots) with the
 //    robber, and will additionally propose player trades to close a 2-resource
 //    gap (normal only closes a 1-resource gap).
+//
+// All three tiers will voluntarily *play* development cards, not just buy them (see
+// decideKnightPlay/decideRoadBuildingPlay/decideYearOfPlentyPlay/decideMonopolyPlay below) —
+// Knight to contest Largest Army or clear the robber off a hex the bot owns, Year of Plenty to
+// close a build gap for free, Road Building when it has two good roads queued up, and Monopoly
+// (skipped by 'easy') for a large enough haul. Without this, dev cards were purely a "buy and
+// hoard" line item: Largest Army/Monopoly effectively could only ever be won by a human who
+// bothered to play their cards.
 
 import type {
   BotDifficulty,
+  DevCard,
+  DevCardType,
   EdgeId,
   GameAction,
   Resource,
@@ -24,6 +35,8 @@ import type {
 } from './types';
 import {
   BUILD_COSTS,
+  LARGEST_ARMY_MIN,
+  LONGEST_ROAD_MIN,
   MAX_CITIES,
   MAX_ROADS,
   MAX_SETTLEMENTS,
@@ -325,8 +338,49 @@ function bestConnectedSettlementVertex(bundle: GameStateBundle, botUid: string, 
   return candidates[0];
 }
 
-function bestExpansionRoad(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): EdgeId | null {
+// How much one extra edge of longest-chain length is worth relative to vertexScore's roughly
+// 0-8ish range — small enough that a genuinely strong settlement spot still wins, large enough
+// to swing close calls once Longest Road is actually plausible (see roadNetworkChainLength).
+const LONGEST_ROAD_CHAIN_WEIGHT = 0.4;
+
+/** Longest simple path (by edge count) through this player's own road network, optionally
+ * including one hypothetical extra edge — a plain DFS is fine here since it's bounded by a
+ * single player's own road count (MAX_ROADS = 15), not the whole board. */
+function roadNetworkChainLength(bundle: GameStateBundle, botUid: string, extraEdgeId?: EdgeId): number {
   const { room } = bundle;
+  const board = room.board!;
+  const edgeIds = Object.entries(room.edges)
+    .filter(([, owner]) => owner === botUid)
+    .map(([eId]) => eId);
+  if (extraEdgeId) edgeIds.push(extraEdgeId);
+  const edgeSet = new Set(edgeIds);
+
+  const dfs = (vertexId: VertexId, visited: Set<EdgeId>): number => {
+    let best = 0;
+    for (const eId of edgeSet) {
+      if (visited.has(eId)) continue;
+      const edge = board.edges[eId];
+      if (!edge.vertexIds.includes(vertexId)) continue;
+      const nextVertex = edge.vertexIds.find((v) => v !== vertexId)!;
+      visited.add(eId);
+      const len = 1 + dfs(nextVertex, visited);
+      visited.delete(eId);
+      if (len > best) best = len;
+    }
+    return best;
+  };
+
+  let longest = 0;
+  for (const eId of edgeSet) {
+    for (const v of board.edges[eId].vertexIds) {
+      longest = Math.max(longest, dfs(v, new Set()));
+    }
+  }
+  return longest;
+}
+
+function bestExpansionRoad(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): EdgeId | null {
+  const { room, players } = bundle;
   const board = room.board!;
   const ownVertices = new Set<VertexId>();
   for (const [eId, owner] of Object.entries(room.edges)) {
@@ -337,6 +391,14 @@ function bestExpansionRoad(bundle: GameStateBundle, botUid: string, difficulty: 
     if (b.uid === botUid) ownVertices.add(vId);
   }
 
+  // Bots otherwise never factor road *length* into where they build — every candidate edge is
+  // scored purely on its far vertex's settlement potential, so Longest Road sits uncontested
+  // for whichever human bothers to chase it. Once a bot has built enough roads to plausibly be
+  // in range, nudge candidate scoring toward whichever edge extends its longest chain further,
+  // without abandoning settlement value entirely (see LONGEST_ROAD_CHAIN_WEIGHT).
+  const player = players[botUid];
+  const contestingLongestRoad = room.longestRoadUid !== botUid && player.roadsBuilt >= LONGEST_ROAD_MIN - 2;
+
   let best: EdgeId | null = null;
   let bestScore = -Infinity;
   for (const [eId, e] of Object.entries(board.edges)) {
@@ -344,7 +406,10 @@ function bestExpansionRoad(bundle: GameStateBundle, botUid: string, difficulty: 
     const touches = e.vertexIds.some((v) => ownVertices.has(v));
     if (!touches) continue;
     const farVertex = e.vertexIds.find((v) => !ownVertices.has(v)) ?? e.vertexIds[0];
-    const score = vertexScore(bundle, farVertex, difficulty);
+    let score = vertexScore(bundle, farVertex, difficulty);
+    if (contestingLongestRoad) {
+      score += roadNetworkChainLength(bundle, botUid, eId) * LONGEST_ROAD_CHAIN_WEIGHT;
+    }
     if (score > bestScore) {
       bestScore = score;
       best = eId;
@@ -468,9 +533,196 @@ function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: 
 
     const receive: Partial<ResourceCount> = {};
     for (const r of missingTypes) receive[r] = deficits[r]!;
+    if (alreadyTriedThisTurn(bundle, botUid, give, receive)) continue;
     return { type: 'proposeTrade', uid: botUid, give, receive, targetUid: null };
   }
   return null;
+}
+
+/** Same give/receive shape, resource-for-resource (ignores id/timestamps) — used to recognize
+ * "this is the exact trade we already tried," not just "some trade or other is pending." */
+function sameTradeShape(a: Partial<ResourceCount>, b: Partial<ResourceCount>): boolean {
+  return RESOURCES.every((r) => (a[r] ?? 0) === (b[r] ?? 0));
+}
+
+/** Whether this bot already proposed this exact give/receive shape earlier in the *current*
+ * turn and it's since been resolved (rejected or cancelled) one way or another. Without this,
+ * a rejected open trade whose underlying resource gap hasn't changed gets re-proposed verbatim
+ * the moment decideMainAction next runs — and since the proposer's own bot driver now reacts
+ * to trade updates promptly (see triggerBotCheck in store.ts) rather than waiting out the old
+ * 15s fallback poll, that re-proposal could otherwise fire almost immediately, reading as the
+ * bot spamming the same just-declined ask instead of moving on with its turn. */
+function alreadyTriedThisTurn(
+  bundle: GameStateBundle,
+  botUid: string,
+  give: Partial<ResourceCount>,
+  receive: Partial<ResourceCount>,
+): boolean {
+  const { room, trades } = bundle;
+  return trades.some(
+    (t) =>
+      t.proposerUid === botUid &&
+      t.status !== 'pending' &&
+      t.createdAt >= room.turnStartedAt &&
+      sameTradeShape(t.give, give) &&
+      sameTradeShape(t.receive, receive),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Voluntary development-card plays
+// ---------------------------------------------------------------------------
+
+/** A dev card of the given type the bot could legally play right now — i.e. not bought this
+ * same turn (the "can't play a card the turn you bought it" rule rules.ts enforces server-
+ * side for every play* action). Returns the whole card (its id is what the action needs). */
+function findPlayableDevCard(bundle: GameStateBundle, botUid: string, type: DevCardType): DevCard | null {
+  const hand = bundle.hands[botUid];
+  return hand.devCards.find((c) => c.type === type && c.boughtTurn !== bundle.room.turnNumber) ?? null;
+}
+
+/** Plays a Knight when it's effectively free value: either it would grab/extend a Largest
+ * Army lead the bot doesn't already hold, or the robber currently sits on a hex the bot itself
+ * owns (worth relocating for future rolls even though it can't help the roll that already
+ * happened this turn). Reuses decideRobberMove for the actual hex/victim choice — identical
+ * heuristic to a forced post-7 move, just voluntarily triggered. */
+function decideKnightPlay(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
+  const { room, players } = bundle;
+  if (room.devCardPlayedThisTurn) return null;
+  const card = findPlayableDevCard(bundle, botUid, 'knight');
+  if (!card) return null;
+
+  const player = players[botUid];
+  const newKnightCount = player.knightsPlayed + 1;
+  const contestsLargestArmy =
+    newKnightCount >= LARGEST_ARMY_MIN &&
+    room.largestArmyUid !== botUid &&
+    (room.largestArmyUid === null || newKnightCount > players[room.largestArmyUid].knightsPlayed);
+
+  const board = room.board!;
+  const ownsRobberedHex = Object.values(board.vertices).some(
+    (v) => room.vertices[v.id]?.uid === botUid && v.adjacentHexIds.includes(board.robberHexId),
+  );
+
+  if (!contestsLargestArmy && !ownsRobberedHex) return null;
+  return decideRobberMove(bundle, botUid, card.id, difficulty);
+}
+
+/** Plays Road Building when the bot has two legal, worthwhile expansion edges queued up (the
+ * second scored as if the first were already built, mirroring the real chained placement the
+ * card allows) — skipped by 'easy' as one of its "no strategic trading"-adjacent plays, and
+ * whenever fewer than two legal edges are actually available (a single free road isn't worth
+ * spending the card on; decideMainAction's ordinary paid road-build step covers that case). */
+function decideRoadBuildingPlay(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
+  if (difficulty === 'easy') return null;
+  const { room, players } = bundle;
+  if (room.devCardPlayedThisTurn) return null;
+  const player = players[botUid];
+  if (player.roadsBuilt + 2 > MAX_ROADS) return null;
+  const card = findPlayableDevCard(bundle, botUid, 'roadBuilding');
+  if (!card) return null;
+
+  const board = room.board!;
+  const ownVertices = new Set<VertexId>();
+  for (const [eId, owner] of Object.entries(room.edges)) {
+    if (owner !== botUid) continue;
+    for (const v of board.edges[eId].vertexIds) ownVertices.add(v);
+  }
+  for (const [vId, b] of Object.entries(room.vertices)) {
+    if (b.uid === botUid) ownVertices.add(vId);
+  }
+
+  const bestUnbuiltEdge = (exclude: EdgeId | null): EdgeId | null => {
+    let best: EdgeId | null = null;
+    let bestScore = -Infinity;
+    for (const [eId, e] of Object.entries(board.edges)) {
+      if (eId === exclude || room.edges[eId]) continue;
+      if (!e.vertexIds.some((v) => ownVertices.has(v))) continue;
+      const farVertex = e.vertexIds.find((v) => !ownVertices.has(v)) ?? e.vertexIds[0];
+      const score = vertexScore(bundle, farVertex, difficulty);
+      if (score > bestScore) {
+        bestScore = score;
+        best = eId;
+      }
+    }
+    return best;
+  };
+
+  const edge1 = bestUnbuiltEdge(null);
+  if (!edge1) return null;
+  for (const v of board.edges[edge1].vertexIds) ownVertices.add(v);
+  const edge2 = bestUnbuiltEdge(edge1);
+  if (!edge2) return null;
+
+  return { type: 'playRoadBuilding', uid: botUid, devCardId: card.id, edgeIds: [edge1, edge2] };
+}
+
+/** Plays Year of Plenty to close a build gap outright, for free, instead of waiting on a bank
+ * or player trade for the same resources — checked in the same build-priority order as
+ * pickBankTradeTarget/decidePlayerTrade. Only fires when the gap is small (<=2 cards total,
+ * matching what the card actually grants) and the bank genuinely has the cards to give. */
+function decideYearOfPlentyPlay(bundle: GameStateBundle, botUid: string): GameAction | null {
+  const { room, hands } = bundle;
+  if (room.devCardPlayedThisTurn) return null;
+  const card = findPlayableDevCard(bundle, botUid, 'yearOfPlenty');
+  if (!card) return null;
+  const hand = hands[botUid].resources;
+
+  for (const cost of buildPriorityCosts(bundle, botUid)) {
+    const deficits = resourceDeficits(hand, cost);
+    const totalDeficit = RESOURCES.reduce((s, r) => s + (deficits[r] ?? 0), 0);
+    if (totalDeficit === 0 || totalDeficit > 2) continue;
+
+    const resources: Resource[] = [];
+    for (const r of RESOURCES) {
+      for (let i = 0; i < (deficits[r] ?? 0); i++) resources.push(r);
+    }
+    // The card always grants exactly two resources — pad a one-card gap with whatever the bot
+    // is shortest on overall, same fallback pickBankTradeTarget uses.
+    if (resources.length < 2) resources.push(pickNeededResource(hand));
+
+    const need: Partial<ResourceCount> = {};
+    for (const r of resources) need[r] = (need[r] ?? 0) + 1;
+    if (!canAffordLocal(room.bank, need)) continue;
+
+    return { type: 'playYearOfPlenty', uid: botUid, devCardId: card.id, resources: [resources[0], resources[1]] };
+  }
+  return null;
+}
+
+// Minimum total cards a Monopoly must haul (via resource-conservation math, same as
+// othersMayHave — STARTING_BANK[r] - room.bank[r] - ownHand[r] is *exactly* how much every
+// other player combined holds of r) before it's worth revealing the aggression and spending
+// the card on. 'hard' is pickier about targets elsewhere but more willing to pull this
+// trigger; 'easy' never plays Monopoly at all (see decideMonopolyPlay).
+const MONOPOLY_MIN_HAUL_HARD = 2;
+const MONOPOLY_MIN_HAUL_NORMAL = 3;
+
+/** Plays Monopoly on whichever resource would haul in the most cards from other players,
+ * computed purely from public information (see the resource-conservation comment on
+ * othersMayHave) — no need to see anyone's private hand to know this is an exact count, not an
+ * estimate. Skipped by 'easy' (this is the single most aggressive/political card in the deck,
+ * consistent with 'easy' doing no strategic trading either). */
+function decideMonopolyPlay(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
+  if (difficulty === 'easy') return null;
+  const { room, hands } = bundle;
+  if (room.devCardPlayedThisTurn) return null;
+  const card = findPlayableDevCard(bundle, botUid, 'monopoly');
+  if (!card) return null;
+  const hand = hands[botUid].resources;
+
+  let best: Resource | null = null;
+  let bestHaul = 0;
+  for (const r of RESOURCES) {
+    const haul = STARTING_BANK[r] - room.bank[r] - hand[r];
+    if (haul > bestHaul) {
+      bestHaul = haul;
+      best = r;
+    }
+  }
+  const threshold = difficulty === 'hard' ? MONOPOLY_MIN_HAUL_HARD : MONOPOLY_MIN_HAUL_NORMAL;
+  if (!best || bestHaul < threshold) return null;
+  return { type: 'playMonopoly', uid: botUid, devCardId: card.id, resource: best };
 }
 
 // 'easy' bots occasionally just end their turn instead of making an otherwise-available
@@ -487,7 +739,12 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
     return { type: 'endTurn', uid: botUid };
   }
 
-  // 1. Upgrade to city.
+  // 1. Play a Knight when it's free value (Largest Army, or clearing the robber off our own
+  // hex) — costs nothing, so it's worth doing before any build decision.
+  const knightPlay = decideKnightPlay(bundle, botUid, difficulty);
+  if (knightPlay) return knightPlay;
+
+  // 2. Upgrade to city.
   if (player.citiesBuilt < MAX_CITIES && canAffordLocal(hand.resources, BUILD_COSTS.city)) {
     const ownSettlements = Object.entries(room.vertices)
       .filter(([, b]) => b.uid === botUid && b.type === 'settlement')
@@ -498,34 +755,47 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
     }
   }
 
-  // 2. Build settlement on a strong, connected, open spot.
+  // 3. Build settlement on a strong, connected, open spot.
   if (player.settlementsBuilt < MAX_SETTLEMENTS && canAffordLocal(hand.resources, BUILD_COSTS.settlement)) {
     const spot = bestConnectedSettlementVertex(bundle, botUid, difficulty);
     if (spot) return { type: 'buildSettlement', uid: botUid, vertexId: spot };
   }
 
-  // 3. Build a road toward a decent spot.
+  // 4. Play Road Building if two good roads are queued up (free; 'easy' never does this).
+  const roadBuildingPlay = decideRoadBuildingPlay(bundle, botUid, difficulty);
+  if (roadBuildingPlay) return roadBuildingPlay;
+
+  // 5. Build a road toward a decent spot.
   if (player.roadsBuilt < MAX_ROADS && canAffordLocal(hand.resources, BUILD_COSTS.road)) {
     const edge = bestExpansionRoad(bundle, botUid, difficulty);
     if (edge) return { type: 'buildRoad', uid: botUid, edgeId: edge };
   }
 
-  // 4. Buy a development card.
+  // 6. Buy a development card.
   if (room.devCardDeckCount > 0 && canAffordLocal(hand.resources, BUILD_COSTS.devCard)) {
     return { type: 'buyDevCard', uid: botUid };
   }
 
-  // 5. Propose a player trade to close a resource gap ('easy' never does this).
+  // 7. Play Year of Plenty to close a build gap for free, before paying a trade tax for the
+  // same resources.
+  const yearOfPlentyPlay = decideYearOfPlentyPlay(bundle, botUid);
+  if (yearOfPlentyPlay) return yearOfPlentyPlay;
+
+  // 8. Play Monopoly for a large enough haul ('easy' never does this).
+  const monopolyPlay = decideMonopolyPlay(bundle, botUid, difficulty);
+  if (monopolyPlay) return monopolyPlay;
+
+  // 9. Propose a player trade to close a resource gap ('easy' never does this).
   const playerTrade = decidePlayerTrade(bundle, botUid, difficulty);
   if (playerTrade) return playerTrade;
 
-  // 6. Trade with the bank to work toward the next priority ('easy' never does this).
+  // 10. Trade with the bank to work toward the next priority ('easy' never does this).
   if (difficulty !== 'easy') {
     const trade = decideBankTrade(bundle, botUid);
     if (trade) return trade;
   }
 
-  // 7. Resolve our own still-pending trade offer, if there is one, before falling through to
+  // 11. Resolve our own still-pending trade offer, if there is one, before falling through to
   // the plain endTurn below (endTurn cancels any pending trade this bot proposed — see
   // rules.ts — so an offer that's actually resolved here never just gets silently swept away).
   const ownTrade = trades.find((t) => t.proposerUid === botUid && t.status === 'pending');
@@ -590,8 +860,17 @@ function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty
   const canAffordTrade = canAffordLocal(hand.resources, candidate.receive);
   let accept = false;
   if (canAffordTrade) {
-    const giveValue = RESOURCES.reduce((s, r) => s + (candidate.receive[r] ?? 0), 0);
-    const getValue = RESOURCES.reduce((s, r) => s + (candidate.give[r] ?? 0), 0);
+    // Weight by whether a resource actually advances (or drains) the bot's own next build,
+    // not just raw card count — a trade that's "fair" by count alone can still be bad if what
+    // the bot gives up is the one type it's short on, and worth taking even at a slight count
+    // deficit if what it receives directly closes that gap. Reuses the same highest-priority
+    // build gap decidePlayerTrade/pickBankTradeTarget already reason about, so a responding
+    // bot and a proposing bot judge "do I need this" the same way.
+    const nextCost = buildPriorityCosts(bundle, botUid)[0];
+    const deficits = nextCost ? resourceDeficits(hand.resources, nextCost) : {};
+    const weight = (r: Resource) => ((deficits[r] ?? 0) > 0 ? 2 : 1);
+    const giveValue = RESOURCES.reduce((s, r) => s + (candidate.receive[r] ?? 0) * weight(r), 0);
+    const getValue = RESOURCES.reduce((s, r) => s + (candidate.give[r] ?? 0) * weight(r), 0);
 
     if (difficulty === 'easy') {
       // Weaker judgment: also takes trades that are a little unfavorable.

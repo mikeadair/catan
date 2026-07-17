@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, createGame, type GameStateBundle } from './rules';
 import { decideBotAction } from './bots';
-import { MAX_CITIES, MAX_ROADS, MIN_OPEN_TRADE_WINDOW_MS, RESOURCES, type BotDifficulty, type Resource, type TradeOffer } from './types';
+import {
+  MAX_CITIES,
+  MAX_ROADS,
+  MAX_SETTLEMENTS,
+  MIN_OPEN_TRADE_WINDOW_MS,
+  RESOURCES,
+  type BotDifficulty,
+  type Resource,
+  type TradeOffer,
+} from './types';
 
 // Regression test for a real production bug: a bot deciding a robber move (after rolling a
 // 7, or playing a knight) scored/picked opponents via their PRIVATE hand
@@ -393,10 +402,21 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
   });
 
   it('hard rejects an even trade that would deplete a scarce resource; normal accepts it', () => {
-    // Even 1-for-1 swap, but the bot only has 2 ore (giving 1 leaves just 1 — scarce).
+    // Even 1-for-1 swap, but the bot only has 2 ore (giving 1 leaves just 1 — scarce). Every
+    // build maxed out (and the dev deck empty) so decideTradeResponse's build-priority
+    // weighting has nothing to weigh here — this test isolates hard's separate hand-scarcity
+    // check (see decideTradeResponse's own 'givingScarce' branch), not that weighting.
     const trade = { give: { lumber: 1 }, receive: { ore: 1 } };
+    const maxOutBuilds = (bundle: GameStateBundle, botUid: string) => {
+      const player = bundle.players[botUid];
+      player.citiesBuilt = MAX_CITIES;
+      player.settlementsBuilt = MAX_SETTLEMENTS;
+      player.roadsBuilt = MAX_ROADS;
+      bundle.room.devCardDeckCount = 0;
+    };
 
     const hard = makeTradeResponseGame('hard', { ore: 2, lumber: 0 }, trade);
+    maxOutBuilds(hard.bundle, hard.botUid);
     expect(decideBotAction(hard.bundle, hard.botUid)).toEqual({
       type: 'respondTrade',
       uid: 'p0',
@@ -405,11 +425,26 @@ describe('decideBotAction: responding to trades (decideTradeResponse)', () => {
     });
 
     const normal = makeTradeResponseGame('normal', { ore: 2, lumber: 0 }, trade);
+    maxOutBuilds(normal.bundle, normal.botUid);
     expect(decideBotAction(normal.bundle, normal.botUid)).toEqual({
       type: 'respondTrade',
       uid: 'p0',
       tradeId: 't1',
       accept: true,
+    });
+  });
+
+  it('rejects an even trade that would give away a resource the bot needs for its next build, even at normal difficulty', () => {
+    // Same even 1-for-1 swap as above, but this time the bot's next build (a city, unmaxed)
+    // genuinely needs the ore it'd be giving away — normal should now weigh that, not just
+    // hard's separate hand-scarcity check.
+    const trade = { give: { lumber: 1 }, receive: { ore: 1 } };
+    const { bundle, botUid } = makeTradeResponseGame('normal', { ore: 2, lumber: 0 }, trade);
+    expect(decideBotAction(bundle, botUid)).toEqual({
+      type: 'respondTrade',
+      uid: 'p0',
+      tradeId: 't1',
+      accept: false,
     });
   });
 
@@ -621,5 +656,189 @@ describe('decideBotAction: fog-of-war setup', () => {
       expect(bundle.players[uid].settlementsBuilt).toBe(2);
       expect(bundle.players[uid].roadsBuilt).toBe(2);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Voluntary development-card plays
+// ---------------------------------------------------------------------------
+
+describe('decideBotAction: voluntary development card plays', () => {
+  function makeDevCardGame(botDifficulty: BotDifficulty): { bundle: GameStateBundle; botUid: string } {
+    const bundle = createGame(
+      { id: 'r-devcard', code: 'ABCDE', hostUid: 'p0', mapPreset: 'official-beginner', seed: 'bots-devcard-test' },
+      [
+        { uid: 'p0', displayName: 'Bot', isBot: true, botDifficulty },
+        { uid: 'p1', displayName: 'Other', isBot: true, botDifficulty: 'normal' },
+      ],
+    );
+    const botUid = 'p0';
+    bundle.room.phase = 'main';
+    bundle.room.currentPlayerIndex = bundle.room.turnOrder.indexOf(botUid);
+    return { bundle, botUid };
+  }
+
+  it('plays a Knight to grab Largest Army when no one currently holds it', () => {
+    const { bundle, botUid } = makeDevCardGame('normal');
+    bundle.players[botUid].knightsPlayed = 2; // playing this one reaches 3 = LARGEST_ARMY_MIN
+    bundle.hands[botUid].devCards.push({ id: 'k1', type: 'knight', boughtTurn: -1 });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('playKnight');
+    if (action?.type === 'playKnight') {
+      expect(action.devCardId).toBe('k1');
+    }
+  });
+
+  it('does not play a Knight that would neither contest Largest Army nor clear the robber off its own hex', () => {
+    const { bundle, botUid } = makeDevCardGame('normal');
+    // Only 1 knight played so far — playing this one only reaches 2, short of LARGEST_ARMY_MIN
+    // (3) — and the robber isn't on any hex the bot owns, so there's no free value here.
+    bundle.players[botUid].knightsPlayed = 1;
+    bundle.hands[botUid].devCards.push({ id: 'k1', type: 'knight', boughtTurn: -1 });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('playKnight');
+  });
+
+  it('plays a Knight to clear the robber off a hex it owns, even without a Largest Army play', () => {
+    const { bundle, botUid } = makeDevCardGame('normal');
+    bundle.hands[botUid].devCards.push({ id: 'k1', type: 'knight', boughtTurn: -1 });
+    const board = bundle.room.board!;
+    const hex = board.hexes.find((h) => h.terrain !== 'desert')!;
+    const vertex = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(hex.id))!;
+    bundle.room.vertices[vertex.id] = { type: 'settlement', uid: botUid };
+    board.robberHexId = hex.id;
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('playKnight');
+  });
+
+  it('never plays a dev card the same turn it was bought', () => {
+    const { bundle, botUid } = makeDevCardGame('normal');
+    bundle.players[botUid].knightsPlayed = 2;
+    bundle.hands[botUid].devCards.push({ id: 'k1', type: 'knight', boughtTurn: bundle.room.turnNumber });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('playKnight');
+  });
+
+  it('plays Year of Plenty to close a one-resource build gap for free', () => {
+    const { bundle, botUid } = makeDevCardGame('normal');
+    bundle.players[botUid].citiesBuilt = MAX_CITIES;
+    bundle.players[botUid].roadsBuilt = MAX_ROADS;
+    bundle.room.devCardDeckCount = 0;
+    // One settlement short only on wool.
+    bundle.hands[botUid].resources = { brick: 1, lumber: 1, ore: 2, grain: 1, wool: 0 };
+    bundle.hands[botUid].devCards.push({ id: 'y1', type: 'yearOfPlenty', boughtTurn: -1 });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('playYearOfPlenty');
+    if (action?.type === 'playYearOfPlenty') {
+      expect(action.devCardId).toBe('y1');
+      expect(action.resources).toContain('wool');
+    }
+  });
+
+  it('plays Road Building when two good expansion edges are available (skipped by easy)', () => {
+    const normal = makeDevCardGame('normal');
+    const board = normal.bundle.room.board!;
+    const settlementVertexId = Object.keys(board.vertices).find((id) => board.vertices[id].adjacentEdgeIds.length >= 2)!;
+    normal.bundle.room.vertices[settlementVertexId] = { type: 'settlement', uid: normal.botUid };
+    normal.bundle.hands[normal.botUid].devCards.push({ id: 'r1', type: 'roadBuilding', boughtTurn: -1 });
+
+    const action = decideBotAction(normal.bundle, normal.botUid);
+    expect(action?.type).toBe('playRoadBuilding');
+    if (action?.type === 'playRoadBuilding') {
+      expect(action.devCardId).toBe('r1');
+      expect(action.edgeIds[0]).not.toBe(action.edgeIds[1]);
+    }
+
+    const easy = makeDevCardGame('easy');
+    easy.bundle.room.vertices[settlementVertexId] = { type: 'settlement', uid: easy.botUid };
+    easy.bundle.hands[easy.botUid].devCards.push({ id: 'r1', type: 'roadBuilding', boughtTurn: -1 });
+    const easyAction = decideBotAction(easy.bundle, easy.botUid);
+    expect(easyAction?.type).not.toBe('playRoadBuilding');
+  });
+
+  it('plays Monopoly on the resource with the largest haul once it clears the difficulty threshold', () => {
+    const { bundle, botUid } = makeDevCardGame('hard');
+    bundle.hands[botUid].devCards.push({ id: 'm1', type: 'monopoly', boughtTurn: -1 });
+    // Move ore out of the bank and into the other player's hand so the bot's haul (computed via
+    // resource conservation, same as othersMayHave) is large enough to clear hard's threshold (2).
+    bundle.hands['p1'].resources.ore = 3;
+    bundle.room.bank.ore -= 3;
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('playMonopoly');
+    if (action?.type === 'playMonopoly') {
+      expect(action.resource).toBe('ore');
+    }
+  });
+
+  it('easy never plays Monopoly, even with a large haul available', () => {
+    const { bundle, botUid } = makeDevCardGame('easy');
+    bundle.hands[botUid].devCards.push({ id: 'm1', type: 'monopoly', boughtTurn: -1 });
+    bundle.hands['p1'].resources.ore = 5;
+    bundle.room.bank.ore -= 5;
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('playMonopoly');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trade-repetition guard
+// ---------------------------------------------------------------------------
+
+describe('decideBotAction: does not spam an already-rejected trade within the same turn', () => {
+  it('does not re-propose an identical open trade already rejected earlier this turn', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    // Exactly the trade decidePlayerTrade would otherwise propose here (see the "normal bot
+    // proposes a fair open trade" test above) — already tried and rejected earlier this turn.
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'rejected',
+      counterOf: null,
+      createdAt: Date.now(),
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('proposeTrade');
+  });
+
+  it('proposes the same trade again once a new turn has started', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'rejected',
+      counterOf: null,
+      createdAt: bundle.room.turnStartedAt - 1000, // resolved on a previous turn
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('proposeTrade');
   });
 });
