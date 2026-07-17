@@ -26,10 +26,6 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
 * {
   box-sizing: border-box;
 }

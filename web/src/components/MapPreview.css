@@ -11,4 +11,11 @@
   height: 88px;
   border-radius: 6px;
   pointer-events: none;
+  /* At full board size, fog-of-war's dark "undiscovered hex" fill (Board.tsx's FOG_COLOR)
+     reads as intentional mystery — but shrunk to a picker-card thumbnail, a board that's
+     mostly FOG_COLOR loses enough contrast against its own dark hexes to look like a broken
+     image rather than a deliberately foggy map. A small brightness/saturation lift only at
+     thumbnail scale keeps the other four presets' thumbnails visually unchanged while giving
+     the fog preset's dark tiles enough presence to read as "hexes," not "empty." */
+  filter: brightness(1.15) saturate(1.1);
 }

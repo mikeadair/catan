@@ -40,3 +40,9 @@
     opacity: 0.55;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .turn-timer--low {
+    animation: none;
+  }
+}

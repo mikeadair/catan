@@ -71,3 +71,12 @@
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 10px rgba(242, 177, 52, 0);
   }
 }
+
+/* The tumble and ready-pulse are decorative reinforcement — the caption text already says
+   "Rolling…"/"Roll" — so both can just stop under reduced-motion without losing information. */
+@media (prefers-reduced-motion: reduce) {
+  .dice-roller--rolling .dice-roller__die,
+  .dice-roller--ready {
+    animation: none;
+  }
+}

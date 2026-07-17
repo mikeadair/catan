@@ -218,6 +218,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
             type="button"
             className="game-log__icon-btn"
             aria-pressed={autoScroll}
+            aria-label={autoScroll ? 'Auto-scroll is on — click to pause' : 'Auto-scroll is off — click to resume'}
             title={autoScroll ? 'Auto-scroll is on — click to pause' : 'Auto-scroll is off — click to resume'}
             onClick={() => setAutoScroll((prev) => !prev)}
           >
@@ -226,6 +227,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
           <button
             type="button"
             className="game-log__icon-btn game-log__icon-btn--size"
+            aria-label={`Text size: ${logSize} — click to cycle`}
             title={`Text size: ${logSize} — click to cycle`}
             onClick={cycleLogSize}
           >

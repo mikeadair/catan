@@ -118,8 +118,8 @@
 }
 
 .trade-bar__want-stepper button {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 8px;
   /* A visible border by default (not just on hover) — .trade-bar__want-card's own resource
      tint (especially Ore's blue-gray, Lumber's dark green) sat close enough in value to
