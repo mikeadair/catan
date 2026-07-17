@@ -102,8 +102,28 @@
 }
 
 .lobby__seat--open {
-  opacity: 0.6;
   border-style: dashed;
+  /* A slow breathing pulse instead of a flat, static opacity — reads as "open and waiting for
+     someone," not a disabled row (see Board.css's catan-pulse-fade for the same idea applied
+     to the board's own placement candidates). */
+  animation: lobby-seat-open-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes lobby-seat-open-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby__seat--open {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 
 .lobby__swatch {
