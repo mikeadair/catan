@@ -25,3 +25,8 @@ web/e2e/state-gallery-screenshots/
 
 # web/e2e/snap.spec.ts (`npm run snap`) output — one-shot, throwaway focused screenshots.
 web/e2e/snap-screenshots/
+
+# Skill-manager artifacts (caveman plugin / skills-lock) — machine-local, regenerable.
+.agents/
+.forge/
+skills-lock.json
