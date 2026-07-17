@@ -29,7 +29,7 @@ export default function GoldPickModal({ visible, amount, bank, onPick }: GoldPic
 
   return (
     <div className="modal-overlay">
-      <div className="modal discard-modal">
+      <div className="modal discard-modal modal--gold">
         <h3>Struck gold!</h3>
         <p>
           Pick {amount} resource{amount === 1 ? '' : 's'} from the bank ({selectedTotal}/{amount} selected).

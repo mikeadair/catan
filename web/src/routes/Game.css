@@ -400,6 +400,7 @@
 }
 
 .game-over__card {
+  position: relative;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 12px;
@@ -407,6 +408,43 @@
   text-align: center;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   width: min(420px, 90vw);
+  /* Deliberately NOT overflow: hidden — ConfettiBurst's pieces fall well past the card's own
+     bounds (see its `height: 140%`), and clipping them here would cut the animation off right
+     as it starts. Spilling a little past the rounded corners reads as "confetti," not a bug. */
+}
+
+/* The local player's own win — the single highest-attention moment in a whole game session —
+   gets a warm accent glow and border instead of sharing the exact same neutral card every
+   other confirm/info dialog uses; a loss or a plain "Game over" (no winner) stays on the
+   default neutral treatment below, deliberately calmer. */
+.game-over__card--win {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(242, 177, 52, 0.35),
+    0 0 48px rgba(242, 177, 52, 0.25);
+}
+
+.game-over__title {
+  margin: 0;
+  animation: game-over-title-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes game-over-title-in {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-over__title {
+    animation: none;
+  }
 }
 
 .game-over__card .game-over-standings {

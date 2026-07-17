@@ -142,6 +142,21 @@
   color: var(--color-text-dim);
 }
 
+/* Accept/Reject are a binary approve/deny decision — give them the same semantic colors
+   already used elsewhere (the "Trade with X" confirm button below is --color-success, the
+   all-rejected flash is --color-danger) instead of both defaulting to the generic accent
+   gold, which is otherwise reserved for the turn-owner's own primary actions (End Turn, Play
+   card, Cancel/Withdraw here). */
+.trade-offers__actions button.trade-offers__action--accept:not(:disabled) {
+  background: var(--color-success);
+  color: #0c1c12;
+}
+
+.trade-offers__actions button.trade-offers__action--reject:not(:disabled) {
+  background: var(--color-danger);
+  color: #2c0c0c;
+}
+
 .trade-offers__interested {
   display: flex;
   flex-direction: column;

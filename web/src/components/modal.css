@@ -56,3 +56,47 @@
   color: #1c1c1c !important;
   border: none !important;
 }
+
+/* Contextual accent so a modal's chrome carries some of the tension/reward the rules already
+   create, instead of every event (a punitive discard, an adversarial steal, a rare reward)
+   defaulting to the exact same neutral gray box — see DiscardModal/RobberModal (--danger) and
+   GoldPickModal (--gold). Plain confirm dialogs (leave-game, etc.) intentionally keep the
+   unmodified .modal above; tinting a routine "are you sure?" would just be noise. */
+.modal--danger {
+  border-color: var(--color-danger);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(197, 48, 48, 0.35),
+    0 0 32px rgba(197, 48, 48, 0.18);
+}
+
+.modal--gold {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(242, 177, 52, 0.4),
+    0 0 40px rgba(242, 177, 52, 0.22);
+  animation: modal-gold-shimmer 2.2s ease-in-out infinite;
+}
+
+@keyframes modal-gold-shimmer {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(242, 177, 52, 0.4),
+      0 0 40px rgba(242, 177, 52, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(242, 177, 52, 0.6),
+      0 0 56px rgba(242, 177, 52, 0.32);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal--gold {
+    animation: none;
+  }
+}

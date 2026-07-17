@@ -20,7 +20,7 @@ export default function RobberModal({ step, players, eligibleUids, onSelectVicti
   if (step === 'victim') {
     return (
       <div className="modal-overlay">
-        <div className="modal robber-modal">
+        <div className="modal robber-modal modal--danger">
           <h3>Steal a card</h3>
           <p>Choose a player to steal a random resource card from.</p>
           <div className="robber-modal__list">

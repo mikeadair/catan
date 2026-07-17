@@ -22,6 +22,7 @@ import { PauseIcon, TradeIcon } from '../components/gameIcons';
 import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import GameOverStandings from '../components/GameOverStandings';
+import ConfettiBurst from '../components/ConfettiBurst';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
 
@@ -395,10 +396,14 @@ export default function Game(): JSX.Element {
 
   if (room.phase === 'gameOver') {
     const winner = room.winnerUid ? players[room.winnerUid] : null;
+    const localWin = winner !== null && room.winnerUid === uid;
     return (
       <div className="game-over">
-        <div className="game-over__card">
-          <h1>{winner ? (room.winnerUid === uid ? 'You win!' : `${winner.displayName} wins!`) : 'Game over'}</h1>
+        <div className={`game-over__card${localWin ? ' game-over__card--win' : ''}`}>
+          {localWin && <ConfettiBurst />}
+          <h1 className="game-over__title">
+            {winner ? (localWin ? 'You win!' : `${winner.displayName} wins!`) : 'Game over'}
+          </h1>
           <p>Victory points reached {room.victoryPointsToWin}.</p>
           <GameOverStandings
             players={players}
@@ -869,7 +874,7 @@ export default function Game(): JSX.Element {
 
       {yopPending && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal modal--gold">
             <h3>Year of Plenty</h3>
             <p>Pick two resources to take from the bank.</p>
             <ResourceHand resources={room.bank} selected={yopSelection} onChange={setYopSelection} max={2} />
@@ -898,7 +903,7 @@ export default function Game(): JSX.Element {
 
       {monopolyPending && (
         <div className="modal-overlay">
-          <div className="modal">
+          <div className="modal modal--danger">
             <h3>Monopoly</h3>
             <p>Pick a resource — every opponent hands over all of theirs.</p>
             <div className="game__monopoly-choices">

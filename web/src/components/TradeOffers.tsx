@@ -314,6 +314,7 @@ export default function TradeOffers({
                   <>
                     <button
                       type="button"
+                      className="trade-offers__action--accept"
                       onClick={() => onRespondTrade(t.id, true)}
                       disabled={actionsDisabled || !canAffordCost(ownResources, t.receive)}
                       title={
@@ -328,6 +329,7 @@ export default function TradeOffers({
                     </button>
                     <button
                       type="button"
+                      className="trade-offers__action--reject"
                       onClick={() => onRespondTrade(t.id, false)}
                       disabled={actionsDisabled}
                       title={actionsDisabledTitle}

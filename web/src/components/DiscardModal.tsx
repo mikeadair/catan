@@ -39,7 +39,7 @@ export default function DiscardModal({
 
   return (
     <div className="modal-overlay">
-      <div className="modal discard-modal">
+      <div className="modal discard-modal modal--danger">
         <div className="discard-modal__header">
           <h3>Rolled a 7 — discard cards</h3>
           {discardPhaseStartedAt !== null && (

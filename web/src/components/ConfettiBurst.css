@@ -1,0 +1,46 @@
+/* Absolutely positioned over the game-over card (see Game.css's .game-over__card--win, which
+   gives the card position: relative so this anchors to it, not the viewport). Pieces start
+   just above the card and fall/drift/spin through it once, then fade — a one-shot celebration,
+   not a loop. */
+.confetti-burst {
+  position: absolute;
+  inset: -24px 0 auto 0;
+  height: 140%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.confetti-burst__piece {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 14px;
+  background: var(--confetti-color);
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fall var(--confetti-duration) ease-in var(--confetti-delay) 1 forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translate(0, -10px) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--confetti-drift), 260px) rotate(var(--confetti-rotate));
+    opacity: 0;
+  }
+}
+
+/* Purely decorative — hide the whole layer rather than freezing pieces mid-fall, since a
+   static scatter of dots conveys nothing on its own (unlike the board's placement pulses,
+   which stay visible-but-static under reduced motion because they carry real information). */
+@media (prefers-reduced-motion: reduce) {
+  .confetti-burst {
+    display: none;
+  }
+}
