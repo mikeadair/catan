@@ -16,8 +16,14 @@ import {
 } from '../firebase/rooms';
 
 // Bot turns are driven reactively off the room/players listeners we already pay for,
-// rather than an unconditional poll — see runBotActionIfDue/triggerBotCheck below.
-const BOT_TRIGGER_JITTER_MS = 250;
+// rather than an unconditional poll — see runBotActionIfDue/triggerBotCheck below. This is
+// NOT a "human-like pause" (that's BOT_TRADE_RESPONSE_DELAY_*_MS's job, for off-turn trade
+// responses specifically) — it exists purely so two clients with the same room open don't
+// both open a write transaction in the very same instant, and every ms of it is dead air
+// stacked onto the real network round trip of every single bot action in a turn (build road,
+// build settlement, buy dev card, ...), which adds up fast across a multi-action turn. Kept
+// tiny rather than zero so the anti-collision purpose still does something.
+const BOT_TRIGGER_JITTER_MS = 40;
 const BOT_FALLBACK_MS = 15000;
 const HEARTBEAT_MS = 15000;
 const LAST_ROOM_KEY = 'catan.lastRoomId';
