@@ -71,6 +71,19 @@ let botFallbackTimer: ReturnType<typeof setInterval> | null = null;
 let botActionInFlight = false;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+// `trades: []` in the store is genuinely ambiguous: it means either "this room really has no
+// trades" or "subscribeTrades hasn't delivered its first snapshot yet" (enterRoom resets it to
+// `[]` immediately, before any listener has fired). Bot-driving logic that reasons about trade
+// history (avoiding a repeat of an already-rejected proposal, not re-answering something
+// already resolved, ...) needs to tell those apart — reacting on the empty-because-not-loaded
+// case caused a real bug: right after a client (re)connects/refreshes, if the room/players
+// listeners deliver their first snapshot before trades does, the bot would run with a
+// still-empty trades list, "forget" every trade that had actually already been proposed and
+// rejected, and re-propose it — visibly as a burst of duplicate trades right after a refresh.
+// Set true the first time subscribeTrades' callback fires for the current room, reset false on
+// enterRoom/teardown.
+let tradesReady = false;
+
 // Off-turn bot trade responses: per-bot-uid scheduled "consider this trade" timer, so a bot
 // waits out its randomized reaction delay exactly once per candidate trade rather than
 // re-rolling the delay on every listener re-fire. Keyed by botUid (a bot only ever has one
@@ -101,6 +114,7 @@ function teardown() {
     botFallbackTimer = null;
   }
   botActionInFlight = false;
+  tradesReady = false;
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
@@ -128,7 +142,7 @@ function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>
 }
 
 function runBotActionIfDue(roomId: string, get: () => GameStore): void {
-  if (botActionInFlight) return;
+  if (botActionInFlight || !tradesReady) return;
   const { roomId: currentRoomId, room, players, trades } = get();
   if (currentRoomId !== roomId || !room || !isBotTurn(room, players)) return;
   botActionInFlight = true;
@@ -169,7 +183,7 @@ function findRespondableTrade(trades: TradeOffer[], botUid: string): TradeOffer 
 }
 
 function runOffTurnBotTradeIfDue(roomId: string, botUid: string, get: () => GameStore): void {
-  if (offTurnBotTradeInFlight.has(botUid)) return;
+  if (offTurnBotTradeInFlight.has(botUid) || !tradesReady) return;
   const { roomId: currentRoomId, room, players, trades } = get();
   if (currentRoomId !== roomId || !room) return;
   offTurnBotTradeInFlight.add(botUid);
@@ -354,6 +368,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     unsubscribers.push(
       subscribeTrades(roomId, (trades) => {
         set({ trades });
+        tradesReady = true;
         // A trade being proposed/accepted/rejected/cancelled only ever touches the trades
         // subcollection, never the room or players docs — so without this, the CURRENT
         // player's own bot driver (triggerBotCheck, wired to subscribeRoom/subscribePlayers
