@@ -133,87 +133,121 @@ describe('generateBoard: extended-5-6p', () => {
 });
 
 describe('generateBoard: fog-of-war', () => {
-  const EXPECTED_FOG_NUMBERS = [
-    2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9,
-    9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 12, 12, 12,
-  ].sort((a, b) => a - b);
+  const EXPECTED_OASIS_NUMBERS = [2, 3, 4, 5, 6, 6, 8, 8, 9, 10, 11, 12].sort((a, b) => a - b);
+  const DIRS = [
+    [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1],
+  ] as const;
+  const cubeRadius = (c: { q: number; r: number }): number => {
+    const x = c.q;
+    const z = c.r;
+    const y = -x - z;
+    return Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
+  };
+  const isAdjacent = (a: { q: number; r: number }, b: { q: number; r: number }): boolean =>
+    DIRS.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
 
-  it('has 61 hexes with correct terrain/port counts, one pasture swapped to gold', () => {
+  it('has 37 hexes with correct terrain/port counts (12 oasis + 18 hidden + 6 desert + 1 gold)', () => {
     const board = generateBoard('fog-of-war', 'seed-fog');
-    expect(board.hexes).toHaveLength(61);
+    expect(board.hexes).toHaveLength(37);
 
     const counts = terrainCounts(board);
-    expect(counts.hills).toBe(9);
-    expect(counts.forest).toBe(12);
-    expect(counts.mountains).toBe(9);
-    expect(counts.fields).toBe(12);
-    expect(counts.pasture).toBe(12); // 13 in the pool, minus the one swapped to gold
+    expect(counts.hills).toBe(5); // 2 oasis + 3 hidden
+    expect(counts.forest).toBe(7); // 3 oasis + 4 hidden
+    expect(counts.mountains).toBe(5); // 2 oasis + 3 hidden
+    expect(counts.fields).toBe(6); // 2 oasis + 4 hidden
+    expect(counts.pasture).toBe(7); // 3 oasis + 4 hidden
     expect(counts.desert).toBe(6);
     expect(board.hexes.filter((h) => h.terrain === 'gold')).toHaveLength(1);
 
     const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
-    expect(desertHexes).toHaveLength(6);
     for (const d of desertHexes) expect(d.number).toBeNull();
     expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
 
-    // Desert is fixed at the 6 corner hexes of the radius-2 ring (the hidden ring bordering
-    // the revealed area), not shuffled — the 6 compass-direction axial corners at that radius
-    // are exactly (2,0),(2,-2),(0,-2),(-2,0),(-2,2),(0,2). Verified by exact coordinate set,
-    // not just the count, since a bug could still produce 6 deserts in the wrong spots.
-    const desertCoords = new Set(desertHexes.map((d) => `${d.coord.q},${d.coord.r}`));
-    expect(desertCoords).toEqual(new Set(['2,0', '2,-2', '0,-2', '-2,0', '-2,2', '0,2']));
-
-    // Row widths 5,6,7,8,9,8,7,6,5 (9 rows) — a true radius-4 hexagon, unlike extended-5-6p's
-    // asymmetric shape. Verified directly (not just the 61 count) since that's what makes
-    // "two revealed outer rings + two hidden rings" well-defined in the first place (see
+    // Row widths 4,5,6,7,6,5,4 (7 rows) — a true radius-3 hexagon, unlike extended-5-6p's
+    // asymmetric shape. Verified directly (not just the 37 count) since that's what makes
+    // "one revealed outer ring + two hidden rings" well-defined in the first place (see
     // initialFogRevealHexIds).
     const rowWidths = new Map<number, number>();
     for (const h of board.hexes) rowWidths.set(h.coord.r, (rowWidths.get(h.coord.r) ?? 0) + 1);
     expect([...rowWidths.entries()].sort(([a], [b]) => a - b)).toEqual([
-      [-4, 5], [-3, 6], [-2, 7], [-1, 8], [0, 9], [1, 8], [2, 7], [3, 6], [4, 5],
+      [-3, 4], [-2, 5], [-1, 6], [0, 7], [1, 6], [2, 5], [3, 4],
     ]);
 
     expect(board.ports).toHaveLength(9);
   });
 
-  it('never places desert anywhere but the 6 fixed corner hexes, across many seeds', () => {
+  it('the center hex is always gold with a number of 6 or 8, across many seeds', () => {
     for (let i = 0; i < 15; i++) {
-      const board = generateBoard('fog-of-war', `fog-desert-seed-${i}`);
-      const desertCoords = new Set(
-        board.hexes.filter((h) => h.terrain === 'desert').map((d) => `${d.coord.q},${d.coord.r}`),
-      );
-      expect(desertCoords, `seed ${i}`).toEqual(new Set(['2,0', '2,-2', '0,-2', '-2,0', '-2,2', '0,2']));
+      const board = generateBoard('fog-of-war', `fog-center-seed-${i}`);
+      const centerHex = board.hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
+      expect(centerHex.terrain, `seed ${i}`).toBe('gold');
+      expect([6, 8], `seed ${i}`).toContain(centerHex.number);
     }
   });
 
-  it('the gold hex sits dead center and every non-desert hex gets a number from the fog pool', () => {
+  it('places exactly 6 desert hexes, all on ring 3 (the always-revealed outer ring), across many seeds', () => {
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('fog-of-war', `fog-desert-seed-${i}`);
+      const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
+      expect(desertHexes, `seed ${i}`).toHaveLength(6);
+      for (const d of desertHexes) {
+        expect(cubeRadius(d.coord), `seed ${i}, hex ${d.id}`).toBe(3);
+        expect(d.number, `seed ${i}, hex ${d.id}`).toBeNull();
+      }
+    }
+  });
+
+  it('each desert hex is a lone singleton between two oasis clusters (no desert-desert adjacency, no oasis/desert overlap)', () => {
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('fog-of-war', `fog-oasis-seed-${i}`);
+      const ring3 = board.hexes.filter((h) => cubeRadius(h.coord) === 3);
+      expect(ring3, `seed ${i}`).toHaveLength(18);
+      const desertHexes = ring3.filter((h) => h.terrain === 'desert');
+      const oasisHexes = ring3.filter((h) => h.terrain !== 'desert');
+      expect(desertHexes, `seed ${i}`).toHaveLength(6);
+      expect(oasisHexes, `seed ${i}`).toHaveLength(12);
+
+      // Every desert hex's ring-3 neighbors must all be oasis hexes — confirms the pairing
+      // logic never accidentally leaves two desert hexes adjacent to each other.
+      for (const d of desertHexes) {
+        const neighbors = ring3.filter((h) => h.id !== d.id && isAdjacent(h.coord, d.coord));
+        expect(neighbors.length, `seed ${i}, hex ${d.id}`).toBeGreaterThan(0);
+        for (const n of neighbors) {
+          expect(n.terrain, `seed ${i}, hex ${d.id} neighbor ${n.id}`).not.toBe('desert');
+        }
+      }
+
+      // Every oasis hex has at least one ring-3 neighbor that's also an oasis hex (its
+      // cluster partner) — no oasis hex is an isolated singleton.
+      for (const o of oasisHexes) {
+        const neighbors = ring3.filter((h) => h.id !== o.id && isAdjacent(h.coord, o.coord));
+        expect(neighbors.some((n) => n.terrain !== 'desert'), `seed ${i}, hex ${o.id}`).toBe(true);
+      }
+    }
+  });
+
+  it('every revealed non-desert, non-gold hex gets a number from the oasis pool', () => {
     const board = generateBoard('fog-of-war', 'seed-fog-gold');
     const centerHex = board.hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
     expect(centerHex.terrain).toBe('gold');
 
-    // Numbers are nulled out for hidden hexes at generation time (assigned on discovery
-    // instead — see rules.ts), so to check the full pool landed correctly we have to look at
-    // it before that nulling happens; reconstruct via a fresh call isn't possible from the
-    // public API, so instead just verify every REVEALED non-desert hex's number came from the
-    // fog pool's value set, and that the hidden count/shape works out (covered in
-    // rules.test.ts's 'fog-of-war and gold hex' describe block, which has room.discoveredHexIds
-    // to work with).
-    const validNumbers = new Set(EXPECTED_FOG_NUMBERS);
+    const validNumbers = new Set(EXPECTED_OASIS_NUMBERS);
     for (const hex of board.hexes) {
+      if (hex.terrain === 'gold' || hex.terrain === 'desert') continue;
       if (hex.number !== null) expect(validNumbers.has(hex.number)).toBe(true);
     }
   });
 
-  it('never leaves a hidden (not-initially-revealed) hex as desert, across many seeds', () => {
-    // Hidden fog tiles should never "turn out to be" desert once discovered via gameplay —
-    // desert must always be part of the initial reveal set. See initialFogRevealHexIds.
+  it('never leaves a ring-1/2 (hidden) hex as desert or gold, and starts it with number: null, across many seeds', () => {
     for (let i = 0; i < 15; i++) {
-      const board = generateBoard('fog-of-war', `fog-hidden-desert-seed-${i}`);
+      const board = generateBoard('fog-of-war', `fog-hidden-seed-${i}`);
       const revealed = new Set(initialFogRevealHexIds(board.hexes));
       const hidden = board.hexes.filter((h) => !revealed.has(h.id));
-      expect(hidden.length, `seed ${i}`).toBeGreaterThan(0); // sanity: still hexes left hidden
+      expect(hidden.length, `seed ${i}`).toBe(18); // ring 1 (6) + ring 2 (12)
       for (const hex of hidden) {
         expect(hex.terrain, `seed ${i}, hex ${hex.id}`).not.toBe('desert');
+        expect(hex.terrain, `seed ${i}, hex ${hex.id}`).not.toBe('gold');
+        expect(hex.number, `seed ${i}, hex ${hex.id}`).toBeNull();
       }
     }
   });
@@ -222,9 +256,6 @@ describe('generateBoard: fog-of-war', () => {
     const board = generateBoard('fog-of-war', 'fog-connectivity-seed');
     const key = (c: { q: number; r: number }) => `${c.q},${c.r}`;
     const byKey = new Map(board.hexes.map((h) => [key(h.coord), h]));
-    const DIRS = [
-      [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1],
-    ];
     const seen = new Set<string>([key(board.hexes[0].coord)]);
     const queue = [board.hexes[0]];
     while (queue.length > 0) {

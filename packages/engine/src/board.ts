@@ -18,13 +18,15 @@ import { createRng, shuffle } from './rng';
 
 // ---------------------------------------------------------------------------
 // Regular "hexagon of hexes" of a given radius, top to bottom, left to right.
-// radius=2 (19 tiles, rows of 3,4,5,4,3) is the standard board; radius=4 (61
-// tiles, rows of 5,6,7,8,9,8,7,6,5) is the fog-of-war board — big enough for
-// two revealed outer rings (more room for opening settlements than a single
-// ring gives) plus two full hidden rings in between the revealed edge and the
-// gold center (see initialFogRevealHexIds below), unlike the 5-6 player
-// extension board, which is an asymmetric 30-hex shape rather than a true
-// hexagon (see extendedHexCoords) and so wouldn't produce clean, even rings.
+// radius=2 (19 tiles, rows of 3,4,5,4,3) is the standard board; radius=3 (37
+// tiles, rows of 4,5,6,7,6,5,4 — i.e. 1 + 6 + 12 + 18) is the fog-of-war
+// board. Its outermost ring (ring 3, 18 hexes) is always revealed and is
+// where the board's 6 desert hexes live (in 6 "oasis" clusters' negative
+// space — see FOG_OASIS_TERRAIN_POOL); the two inner rings (12 hexes total)
+// stay hidden until a road reaches them (see initialFogRevealHexIds below).
+// Unlike the 5-6 player extension board, which is an asymmetric 30-hex shape
+// rather than a true hexagon (see extendedHexCoords), a true hexagon
+// produces clean, even rings, which the fog reveal mechanism depends on.
 // ---------------------------------------------------------------------------
 
 function hexagonCoords(radius: number): AxialCoord[] {
@@ -44,7 +46,7 @@ export function standardHexCoords(): AxialCoord[] {
 }
 
 export function fogHexCoords(): AxialCoord[] {
-  return hexagonCoords(4);
+  return hexagonCoords(3);
 }
 
 // 5-6 player extension: 30 hexes in 7 rows of 3,4,5,6,5,4,3 — an elongated hexagon rather
@@ -133,46 +135,35 @@ const EXTENDED_NUMBER_POOL = [
   2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12,
 ];
 
-// fog-of-war pool: the board is the 61-hex true radius-4 hexagon (fogHexCoords). Unlike every
-// other preset, desert isn't randomly shuffled in — it's fixed at the 6 "corner" hexes of the
-// hidden ring bordering the revealed area (radius 2; see FOG_DESERT_RING_RADIUS /
-// isHexRingCorner and buildFogTerrainNumberAssignment below), so revealed tiles are never
-// desert and the desert positions read as deliberate landmarks along the board's 6 compass
-// directions rather than wherever a shuffle happened to land them. The remaining 55 hexes (61
-// - 6 fixed desert) are randomized from this pool: 9 hills, 12 forest, 9 mountains, 12 fields,
-// 13 pasture = 55. One pasture becomes the gold hex (same swap-to-center trick as every other
-// fog-of-war generation), still needs a number token like any other non-desert hex.
-const FOG_NON_DESERT_TERRAIN_POOL: Terrain[] = (() => {
-  const pool: Terrain[] = [
-    'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
-    'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
-    'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
-    'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
-    'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
-  ];
-  pool[pool.lastIndexOf('pasture')] = 'gold';
-  return pool;
-})();
-// 55 number tokens for the 55 non-desert, non-fixed hexes above (every one of them needs a
-// number, since none are desert). Follows the same shape as NUMBER_POOL/EXTENDED_NUMBER_POOL —
-// the (2,12) pair (the rarest, lowest-pip numbers) stays scarcer than the rest of the middle
-// values; 55 doesn't divide evenly across 5 symmetric pairs, so 6 gets one extra copy over its
-// pip-partner 8 rather than forcing an uneven extremes/middle split.
-const FOG_NON_DESERT_NUMBER_POOL = [
-  2, 2, 2,
-  3, 3, 3, 3, 3, 3,
-  4, 4, 4, 4, 4, 4,
-  5, 5, 5, 5, 5, 5,
-  6, 6, 6, 6, 6, 6, 6,
-  8, 8, 8, 8, 8, 8,
-  9, 9, 9, 9, 9, 9,
-  10, 10, 10, 10, 10, 10,
-  11, 11, 11, 11, 11, 11,
-  12, 12, 12,
+// fog-of-war pools: the board is the 37-hex true radius-3 hexagon (fogHexCoords — 1 + 6 + 12 +
+// 18 hexes across the center + 3 rings). The outermost ring (ring 3, 18 hexes: 6 "corner" +
+// 12 "edge" hexes per isHexRingCorner) is always revealed and holds 6 two-hex "oasis" clusters
+// (a corner + one ring-adjacent edge hex each, 12 hexes total — see fogRing3Layout) of real
+// resource terrain, plus 6 lone desert edge hexes, one sandwiched between each pair of oasis
+// clusters. That makes desert the single most common *individual* terrain on the ring (6 hexes
+// of one type vs. 12 oasis hexes split across 5 resource types) even though oasis hexes
+// collectively outnumber desert ones — the intended "desert-dominant, oasis is the rare fertile
+// spot" read. Rings 1+2 (12 hexes, hidden until a road reveals them) are real resource terrain
+// only, from an 18-hex pool that mirrors the standard board's non-desert distribution. The
+// center hex is always gold, forced to a hot (6 or 8) number token — see
+// buildFogTerrainNumberAssignment.
+//
+// A reasonably balanced split of the 5 resource types across the 12 oasis hexes.
+const FOG_OASIS_TERRAIN_POOL: Terrain[] = [
+  'hills', 'hills',
+  'forest', 'forest', 'forest',
+  'mountains', 'mountains',
+  'fields', 'fields',
+  'pasture', 'pasture', 'pasture',
 ];
-// The hidden ring whose 6 corner hexes are always desert — see FOG_NON_DESERT_TERRAIN_POOL's
-// comment above.
-const FOG_DESERT_RING_RADIUS = 2;
+// 12 number tokens for the 12 oasis hexes, fairness-checked the same way as every other
+// randomized preset (see violatesNoAdjacent68) via the retry loop in
+// buildFogTerrainNumberAssignment below.
+const FOG_OASIS_NUMBER_POOL = [2, 3, 4, 5, 6, 6, 8, 8, 9, 10, 11, 12];
+// 18-hex pool for the hidden rings 1+2 — same ratio as the standard 19-hex board's 18
+// non-desert hexes (a deliberate callback), reusing TERRAIN_POOL rather than hand-writing a
+// parallel array that could drift out of sync with it.
+const FOG_HIDDEN_TERRAIN_POOL: Terrain[] = TERRAIN_POOL.filter((t) => t !== 'desert');
 
 // Fixed official-beginner layout (row order matches standardHexCoords()).
 const OFFICIAL_TERRAIN: Terrain[] = [
@@ -207,7 +198,7 @@ function violatesNoAdjacent68(coords: AxialCoord[], numbers: (number | null)[]):
  * one of that ring's 6 "corner" hexes — laid out along the board's 6 compass directions —
  * rather than one of the 6*(radius-1) "edge" hexes between them. Corners are exactly the
  * cells where at least two of the three cube coordinates hit the ring's own radius (an edge
- * cell only ever has one). Used by fog-of-war's fixed desert placement below. */
+ * cell only ever has one). Used by fog-of-war's oasis/desert layout below. */
 function isHexRingCorner(coord: AxialCoord, radius: number): boolean {
   const x = coord.q;
   const z = coord.r;
@@ -216,28 +207,59 @@ function isHexRingCorner(coord: AxialCoord, radius: number): boolean {
   return atRadius >= 2;
 }
 
-/** Whether `coord` is one of fog-of-war's 6 fixed desert hexes — the corner cells of ring
- * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why desert is fixed
- * there rather than shuffled). Shared by buildFogTerrainNumberAssignment, which places desert
- * at exactly these hexes, and initialFogRevealHexIds, which reveals exactly these hexes from
- * the start so a hidden hex can never turn out to be desert once discovered — kept as one
- * function so the two can't silently drift apart. Relies on hexCubeRadius/isHexRingCorner,
- * both function declarations (hoisted), so definition order in this file doesn't matter. */
-function isFogDesertCorner(coord: AxialCoord): boolean {
-  return hexCubeRadius(coord) === FOG_DESERT_RING_RADIUS && isHexRingCorner(coord, FOG_DESERT_RING_RADIUS);
+/** fog-of-war's ring-3 (outermost, always-revealed) layout: which hex-array indices form each
+ * of the 6 two-hex "oasis" clusters, and which 6 indices are the lone desert hex left over
+ * between each pair of clusters. Walking around ring 3 visits a repeating [corner, edge, edge]
+ * pattern (6 corners + 12 edges = 18 hexes, with (radius-1)=2 edge hexes between each pair of
+ * corners); sorting the ring's hexes by angle around the board center recovers that walk order
+ * (the same technique buildPorts uses for the boundary edges further down this file), so
+ * pairing each corner with the very next hex in angle order as its oasis partner, and leaving
+ * the hex after *that* (i.e. right before the next corner) as the lone desert hex, produces 6
+ * non-overlapping 2-hex oases with exactly one desert hex sandwiched between each consecutive
+ * pair. Which rotational direction that walk goes (clockwise or counter-clockwise, depending on
+ * atan2's sign convention) doesn't matter, only that it's applied consistently — which sorting
+ * once and walking forward guarantees. */
+function fogRing3Layout(coords: AxialCoord[]): { oasisIndices: number[]; desertIndices: number[] } {
+  const ring3 = coords
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => hexCubeRadius(c) === 3)
+    .sort((a, b) => {
+      const pa = hexPixel(a.c, 1);
+      const pb = hexPixel(b.c, 1);
+      return Math.atan2(pa.y, pa.x) - Math.atan2(pb.y, pb.x);
+    });
+
+  const oasisIndices: number[] = [];
+  const desertIndices: number[] = [];
+  for (let k = 0; k < ring3.length; k++) {
+    if (isHexRingCorner(ring3[k].c, 3)) {
+      oasisIndices.push(ring3[k].i, ring3[(k + 1) % ring3.length].i);
+      desertIndices.push(ring3[(k + 2) % ring3.length].i);
+    }
+  }
+  return { oasisIndices, desertIndices };
 }
 
-/** fog-of-war's terrain/number assignment. Unlike every other preset, desert isn't shuffled
- * in at random with everything else — it's fixed at the 6 corner hexes of
- * FOG_DESERT_RING_RADIUS (see FOG_NON_DESERT_TERRAIN_POOL's comment for why), so those tiles
- * are always revealed from game start (see initialFogRevealHexIds) and the fixed positions
- * read as deliberate compass-direction landmarks rather than wherever a shuffle happened to
- * land. Everything else is shuffled from FOG_NON_DESERT_TERRAIN_POOL/FOG_NON_DESERT_NUMBER_POOL
- * across the remaining hexes, with the same no-adjacent-6/8 fairness retry every other
- * randomized preset uses. */
+/** fog-of-war's terrain/number assignment. The center hex (ring 0) is always gold with a
+ * forced hot (6 or 8) number token — gold hexes don't produce a resource on their own roll the
+ * normal way (see pickGoldResources in rules.ts), so forcing a hot number keeps it reliably
+ * relevant. Ring 3 (always revealed) gets its 6 oasis clusters + 6 desert hexes from
+ * fogRing3Layout above, drawing terrain/numbers from FOG_OASIS_TERRAIN_POOL/
+ * FOG_OASIS_NUMBER_POOL. Rings 1+2 (hidden until a road reveals them) get real resource terrain
+ * from FOG_HIDDEN_TERRAIN_POOL with numbers left null — a genuinely random token is assigned at
+ * discovery time instead (see discoverHexesAtEdge in rules.ts). Same no-adjacent-6/8 fairness
+ * retry every other randomized preset uses (only the revealed oasis + center hexes can ever
+ * violate it, since hidden hexes' numbers are null). */
 function buildFogTerrainNumberAssignment(coords: AxialCoord[], rng: () => number): { terrains: Terrain[]; numbers: (number | null)[] } {
-  const desertIndices = new Set(coords.map((_, i) => i).filter((i) => isFogDesertCorner(coords[i])));
-  const otherIndices = coords.map((_, i) => i).filter((i) => !desertIndices.has(i));
+  const { oasisIndices, desertIndices } = fogRing3Layout(coords);
+  const centerIndex = coords.findIndex((c) => c.q === 0 && c.r === 0);
+  const hiddenIndices = coords
+    .map((_, i) => i)
+    .filter((i) => {
+      const r = hexCubeRadius(coords[i]);
+      return r === 1 || r === 2;
+    });
+  const centerNumber = rng() < 0.5 ? 6 : 8;
 
   let terrains: Terrain[] = [];
   let numbers: (number | null)[] = [];
@@ -245,18 +267,29 @@ function buildFogTerrainNumberAssignment(coords: AxialCoord[], rng: () => number
   const MAX_ATTEMPTS = 2000;
 
   do {
-    const shuffledTerrains = shuffle(FOG_NON_DESERT_TERRAIN_POOL, rng);
-    const shuffledNumbers = shuffle(FOG_NON_DESERT_NUMBER_POOL, rng);
+    const shuffledOasisTerrains = shuffle(FOG_OASIS_TERRAIN_POOL, rng);
+    const shuffledOasisNumbers = shuffle(FOG_OASIS_NUMBER_POOL, rng);
+    const shuffledHiddenTerrains = shuffle(FOG_HIDDEN_TERRAIN_POOL, rng);
+
     terrains = new Array<Terrain>(coords.length);
     numbers = new Array<number | null>(coords.length);
-    for (const i of desertIndices) {
+
+    terrains[centerIndex] = 'gold';
+    numbers[centerIndex] = centerNumber;
+
+    desertIndices.forEach((i) => {
       terrains[i] = 'desert';
       numbers[i] = null;
-    }
-    otherIndices.forEach((i, k) => {
-      terrains[i] = shuffledTerrains[k];
-      numbers[i] = shuffledNumbers[k];
     });
+    oasisIndices.forEach((i, k) => {
+      terrains[i] = shuffledOasisTerrains[k];
+      numbers[i] = shuffledOasisNumbers[k];
+    });
+    hiddenIndices.forEach((i, k) => {
+      terrains[i] = shuffledHiddenTerrains[k];
+      numbers[i] = null;
+    });
+
     attempts++;
   } while (attempts < MAX_ATTEMPTS && violatesNoAdjacent68(coords, numbers));
 
@@ -475,29 +508,26 @@ function hexCubeRadius(c: AxialCoord): number {
   return Math.max(Math.abs(x), Math.abs(y), Math.abs(z));
 }
 
-/** Hex ids revealed from the start of a fog-of-war game: the outer *two* rings (the board's
- * perimeter plus the ring just inside it — more room for opening settlements than a single
- * ring gives every player) plus the single hex dead center (always the gold hex; see
- * generateBoard) plus the 6 fixed desert corner hexes (see isFogDesertCorner) — desert tiles
- * are always revealed from the start so that a hidden hex can never "turn out to be" desert
- * once discovered via gameplay (see discoverHexesAtEdge in rules.ts, which reveals whatever
- * terrain a newly-built road touches; deserts must never be a possible outcome there, both
- * because it'd be a weird surprise and because desert hexes have no number token to assign).
+/** Hex ids revealed from the start of a fog-of-war game: the outermost ring (ring `maxRadius`
+ * — the board's perimeter, where all 6 desert hexes and 6 oasis clusters live; see
+ * buildFogTerrainNumberAssignment) plus the single hex dead center (always the gold hex; see
+ * generateBoard). Desert lives entirely on that already-always-revealed outer ring, so unlike
+ * an earlier version of this scheme there's no need to separately pull in a hidden ring's
+ * desert corners — a hidden hex can still never "turn out to be" desert once discovered via
+ * gameplay (see discoverHexesAtEdge in rules.ts, which reveals whatever terrain a newly-built
+ * road touches), it just falls out for free from desert only ever living on the outer ring.
  * Everything else starts hidden until a road reaches it (see 'buildRoad' in rules.ts) — on the
- * 61-hex fogHexCoords() board (radius 4) that's the two full hidden rings (radius 2, then
- * radius 1) sandwiched between the revealed edge and the gold center, minus the 6 desert
- * corners sitting on the radius-2 ring. This function doesn't hardcode a radius for the outer
- * rings, it just reveals the board's own outermost two ring distances, center, and desert
- * corners, so the outer-ring part falls out automatically from however big the board actually
- * is. Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest": colored ring
- * around the outside, fog in the middle, a special tile at the very center) rather than
- * isolated corner tiles, with desert visibility layered on top as this game's own rule. */
+ * 37-hex fogHexCoords() board (radius 3) that's the two full inner rings (radius 2, then radius
+ * 1). This function doesn't hardcode a radius for the outer ring, it just reveals the board's
+ * own outermost ring distance plus center, so it falls out automatically from however big the
+ * board actually is. Matches real fog-of-war Catan variants (e.g. "Volcano"/"Black Forest":
+ * colored ring around the outside, fog in the middle, a special tile at the very center). */
 export function initialFogRevealHexIds(hexes: HexTile[]): string[] {
   const maxRadius = hexes.reduce((m, h) => Math.max(m, hexCubeRadius(h.coord)), 0);
   return hexes
     .filter((h) => {
       const r = hexCubeRadius(h.coord);
-      return r === maxRadius || r === maxRadius - 1 || r === 0 || isFogDesertCorner(h.coord);
+      return r === maxRadius || r === 0;
     })
     .map((h) => h.id);
 }
@@ -545,28 +575,10 @@ export function generateBoard(presetId: MapPresetId, seed: string): Board {
     number: numbers[i],
   }));
 
-  if (presetId === 'fog-of-war') {
-    // The gold hex is always the single tile dead center (radius 0) — matching real
-    // fog-of-war Catan variants' "Volcano"/lake center tile — rather than wherever the
-    // fairness-checked shuffle happened to land it. Swap whichever hex IS gold with
-    // whatever landed at center; this only relocates two tiles' terrain+number pairs; it
-    // doesn't touch the rest of the fair distribution.
-    const centerHex = hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
-    const goldHex = hexes.find((h) => h.terrain === 'gold')!;
-    if (centerHex !== goldHex) {
-      [centerHex.terrain, goldHex.terrain] = [goldHex.terrain, centerHex.terrain];
-      [centerHex.number, goldHex.number] = [goldHex.number, centerHex.number];
-    }
-
-    // Terrain is generated like any other preset, but only revealed hexes' number tokens
-    // are meaningful yet — the rest are nulled out here and assigned a genuinely random
-    // token at discovery time (see 'buildRoad' in rules.ts), matching "the number on it is
-    // completely random" rather than merely hidden-but-predetermined.
-    const revealed = new Set(initialFogRevealHexIds(hexes));
-    for (const h of hexes) {
-      if (!revealed.has(h.id)) h.number = null;
-    }
-  }
+  // Unlike every other preset, fog-of-war doesn't need any post-processing here:
+  // buildFogTerrainNumberAssignment (via buildTerrainNumberAssignment above) already places
+  // gold directly at the center coordinate and nulls out hidden hexes' numbers itself, so
+  // there's no swap-search or reveal-then-null pass left to do.
 
   const { vertices, edges } = buildAdjacency(hexes);
   const ports = buildPorts(presetId, edges, rng);

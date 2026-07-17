@@ -1420,28 +1420,28 @@ describe('fog-of-war and gold hex', () => {
     expect(board.hexes.some((h) => h.terrain === 'gold')).toBe(true);
   });
 
-  it('reveals two outer rings + center + the 6 fixed desert corners, hiding the rest of the two inner rings (61-hex board)', () => {
+  it('reveals ring 3 (outer ring) + center, hiding rings 1+2 (37-hex board)', () => {
     const bundle = makeFogGame();
     const board = bundle.room.board!;
-    expect(board.hexes).toHaveLength(61);
+    expect(board.hexes).toHaveLength(37);
 
-    // Radius-4 hexagon ring sizes: outermost ring (radius 4) = 24 hexes, second ring
-    // (radius 3) = 18 hexes, middle ring (radius 2) = 12 hexes, inner ring (radius 1) = 6
-    // hexes, center (radius 0) = 1 hex. 24+18+12+6+1=61. Revealed at start: outer two rings +
-    // center + the radius-2 ring's 6 fixed desert corners = 24+18+1+6=49 (desert must always
-    // be visible — see initialFogRevealHexIds). Hidden: the rest of the two inner rings —
-    // radius-1's 6 hexes plus radius-2's 6 non-corner (edge) hexes = 12, none of them desert.
+    // Radius-3 hexagon ring sizes: outermost ring (radius 3) = 18 hexes, ring 2 = 12 hexes,
+    // ring 1 = 6 hexes, center (radius 0) = 1 hex. 18+12+6+1=37. Revealed at start: ring 3 +
+    // center = 19 (ring 3 carries all 6 desert hexes and all 6 oasis clusters — see
+    // initialFogRevealHexIds/buildFogTerrainNumberAssignment in board.ts). Hidden: rings 1+2
+    // = 18, none of them desert or gold.
     const revealed = new Set(bundle.room.discoveredHexIds);
-    expect(revealed.size).toBe(49);
+    expect(revealed.size).toBe(19);
     const hidden = board.hexes.filter((h) => !revealed.has(h.id));
-    expect(hidden).toHaveLength(12);
+    expect(hidden).toHaveLength(18);
     for (const hex of hidden) {
       expect(hex.number).toBeNull();
       expect(hex.terrain).not.toBe('desert');
+      expect(hex.terrain).not.toBe('gold');
     }
   });
 
-  it('never leaves a desert hex hidden — all 6 fixed desert corners start revealed', () => {
+  it('never leaves a desert hex hidden — all 6 desert hexes (on ring 3) start revealed', () => {
     const bundle = makeFogGame();
     const board = bundle.room.board!;
     const revealed = new Set(bundle.room.discoveredHexIds);
