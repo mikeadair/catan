@@ -16,6 +16,13 @@
   --resource-grain: #d9a441;
   --resource-wool: #8fbf5f;
 
+  /* A chunky, stamped/carved-looking display face reserved for the handful of headline
+     moments (home title, room code, win/lose heading) — see index.html for the font-face
+     import. Everything else (all functional, information-dense UI) stays on the system-ui
+     stack below; the fallback here matters since Alfa Slab One is a single-weight display
+     face that could plausibly fail to load. */
+  --font-display: 'Alfa Slab One', ui-serif, Georgia, serif;
+
   font: 15px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif;
   color-scheme: dark;
   color: var(--color-text);

@@ -48,6 +48,7 @@
 }
 
 .home__title {
+  font-family: var(--font-display);
   font-size: clamp(28px, 6vw, 40px);
   letter-spacing: 0.5px;
 }

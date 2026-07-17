@@ -76,9 +76,9 @@
 }
 
 .lobby__code {
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: 8px;
+  font-family: var(--font-display);
+  font-size: 36px;
+  letter-spacing: 6px;
   color: var(--color-accent);
 }
 
