@@ -354,6 +354,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     unsubscribers.push(
       subscribeTrades(roomId, (trades) => {
         set({ trades });
+        // A trade being proposed/accepted/rejected/cancelled only ever touches the trades
+        // subcollection, never the room or players docs — so without this, the CURRENT
+        // player's own bot driver (triggerBotCheck, wired to subscribeRoom/subscribePlayers
+        // below) was never reactively woken by, say, everyone rejecting its own open trade.
+        // It would just sit on decideMainAction's "still waiting" branch until the next
+        // BOT_FALLBACK_MS (15s) safety-net tick caught up — a real, repeatable stall between
+        // a bot's trade getting declined and it doing anything else that turn.
+        triggerBotCheck(roomId, get);
         triggerOffTurnBotTradeChecks(roomId, get);
         scheduleTradeExpiryCheck(roomId, get);
         scheduleTradeResponseTimeoutCheck(roomId, get);
