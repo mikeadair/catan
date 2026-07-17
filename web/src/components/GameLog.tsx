@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { Fragment, useEffect, useRef, useState, type JSX } from 'react';
 import type { LogEntry, LogEntryMeta, PublicPlayer, ResourceCount } from '@catan/engine';
 import { RESOURCES } from '@catan/engine';
 import type { ChatMessage } from '../firebase/rooms';
@@ -25,6 +25,10 @@ export interface GameLogProps {
 type TimelineItem =
   | { kind: 'log'; id: string; ts: number; message: string; meta?: LogEntryMeta }
   | { kind: 'chat'; id: string; ts: number; displayName: string; text: string };
+
+const LOG_FILTERS = ['all', 'events', 'chat'] as const;
+type LogFilter = (typeof LOG_FILTERS)[number];
+const LOG_FILTER_LABEL: Record<LogFilter, string> = { all: 'All', events: 'Game', chat: 'Chat' };
 
 const LOG_SIZES = ['small', 'medium', 'large'] as const;
 type LogSize = (typeof LOG_SIZES)[number];
@@ -142,6 +146,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
   const [draft, setDraft] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
   const [logSize, setLogSize] = useState<LogSize>('medium');
+  const [filter, setFilter] = useState<LogFilter>('all');
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Set right before the effect below programmatically corrects scrollTop, cleared on the next
   // frame. Assigning scrollTop fires a native 'scroll' event same as a real user scroll would,
@@ -155,6 +160,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
     ...log.map((l): TimelineItem => ({ kind: 'log', id: l.id, ts: l.ts, message: l.message, meta: l.meta })),
     ...chat.map((c): TimelineItem => ({ kind: 'chat', id: c.id, ts: c.ts, displayName: c.displayName, text: c.text })),
   ].sort((a, b) => a.ts - b.ts);
+  const visibleItems = filter === 'all' ? items : items.filter((i) => (filter === 'chat' ? i.kind === 'chat' : i.kind === 'log'));
 
   // Only force-scroll to the bottom on new entries while auto-scroll is on. Re-running
   // this whenever autoScroll flips back to true also handles "snap to bottom" the moment
@@ -177,7 +183,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
       isAutoScrollingRef.current = false;
     });
     return () => cancelAnimationFrame(raf);
-  }, [items.length, autoScroll, logSize]);
+  }, [visibleItems.length, autoScroll, logSize, filter]);
 
   function handleScroll() {
     if (isAutoScrollingRef.current) {
@@ -199,6 +205,10 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
 
   function cycleLogSize() {
     setLogSize((prev) => LOG_SIZES[(LOG_SIZES.indexOf(prev) + 1) % LOG_SIZES.length]);
+  }
+
+  function cycleFilter() {
+    setFilter((prev) => LOG_FILTERS[(LOG_FILTERS.indexOf(prev) + 1) % LOG_FILTERS.length]);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -226,6 +236,15 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
           </button>
           <button
             type="button"
+            className="game-log__icon-btn game-log__icon-btn--filter"
+            aria-label={`Showing: ${LOG_FILTER_LABEL[filter]} — click to cycle (all / game events / chat)`}
+            title={`Showing: ${LOG_FILTER_LABEL[filter]} — click to cycle (all / game events / chat)`}
+            onClick={cycleFilter}
+          >
+            {LOG_FILTER_LABEL[filter]}
+          </button>
+          <button
+            type="button"
             className="game-log__icon-btn game-log__icon-btn--size"
             aria-label={`Text size: ${logSize} — click to cycle`}
             title={`Text size: ${logSize} — click to cycle`}
@@ -236,21 +255,34 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
         </div>
       </div>
       <div className="game-log__scroll" ref={scrollRef} onScroll={handleScroll}>
-        {items.length === 0 && <div className="game-log__empty">No activity yet.</div>}
-        {items.map((item) =>
-          item.kind === 'log' ? (
-            <div key={item.id} className="game-log__entry game-log__entry--system">
-              <span className="game-log__entry-row">
-                <span className="game-log__entry-text">{item.message}</span>
-                {item.meta && <LogMeta meta={item.meta} players={players} turnOrder={turnOrder} />}
-              </span>
-            </div>
-          ) : (
-            <div key={item.id} className="game-log__entry game-log__entry--chat">
-              <span className="game-log__chat-name">{item.displayName}:</span> {item.text}
-            </div>
-          ),
-        )}
+        {visibleItems.length === 0 && <div className="game-log__empty">No activity yet.</div>}
+        {(() => {
+          // Each turn opens with exactly one dice roll, so a roll entry doubles as a turn
+          // boundary — number the dividers by counting rolls rather than threading a real
+          // turnNumber through every log entry.
+          let rollCount = 0;
+          return visibleItems.map((item) => {
+            const isRoll = item.kind === 'log' && item.meta?.kind === 'diceRoll';
+            if (isRoll) rollCount++;
+            return (
+              <Fragment key={item.id}>
+                {isRoll && <div className="game-log__turn-divider">Turn {rollCount}</div>}
+                {item.kind === 'log' ? (
+                  <div className="game-log__entry game-log__entry--system">
+                    <span className="game-log__entry-row">
+                      <span className="game-log__entry-text">{item.message}</span>
+                      {item.meta && <LogMeta meta={item.meta} players={players} turnOrder={turnOrder} />}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="game-log__entry game-log__entry--chat">
+                    <span className="game-log__chat-name">{item.displayName}:</span> {item.text}
+                  </div>
+                )}
+              </Fragment>
+            );
+          });
+        })()}
       </div>
       <form className="game-log__form" onSubmit={handleSubmit}>
         <input

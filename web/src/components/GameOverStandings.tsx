@@ -1,5 +1,6 @@
 import type { CSSProperties, JSX } from 'react';
-import type { PrivateHand, PublicPlayer } from '@catan/engine';
+import type { LogEntry, PrivateHand, PublicPlayer } from '@catan/engine';
+import { RESOURCES } from '@catan/engine';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import { KnightIcon, LargestArmyIcon, LongestRoadIcon, ResourceCardsIcon, DevCardIcon, RoadIcon, VictoryPointIcon } from './gameIcons';
 import './GameOverStandings.css';
@@ -11,6 +12,35 @@ export interface GameOverStandingsProps {
   longestRoadUid: string | null;
   largestArmyUid: string | null;
   ownHand: PrivateHand | null;
+  log: LogEntry[];
+}
+
+/** Per-player total resources collected over the game plus a couple of table-wide totals,
+ * folded client-side from the log's structured metas — nothing here needs engine support. */
+function summarizeLog(log: LogEntry[]): { gainedBy: Record<string, number>; turns: number; hotSum: number | null } {
+  const gainedBy: Record<string, number> = {};
+  const sumCounts: Record<number, number> = {};
+  let turns = 0;
+  const addGains = (uid: string, resources: Partial<Record<(typeof RESOURCES)[number], number>>) => {
+    gainedBy[uid] = (gainedBy[uid] ?? 0) + RESOURCES.reduce((s, r) => s + (resources[r] ?? 0), 0);
+  };
+  for (const entry of log) {
+    const meta = entry.meta;
+    if (!meta) continue;
+    if (meta.kind === 'diceRoll') {
+      turns++;
+      const sum = meta.roll[0] + meta.roll[1];
+      sumCounts[sum] = (sumCounts[sum] ?? 0) + 1;
+      if (meta.gains) for (const [uid, resources] of Object.entries(meta.gains)) addGains(uid, resources);
+    } else if (meta.kind === 'resourceGain') {
+      addGains(meta.uid, meta.resources);
+    }
+  }
+  let hotSum: number | null = null;
+  for (const [sum, count] of Object.entries(sumCounts)) {
+    if (hotSum === null || count > (sumCounts[hotSum] ?? 0)) hotSum = Number(sum);
+  }
+  return { gainedBy, turns, hotSum };
 }
 
 export default function GameOverStandings({
@@ -20,8 +50,10 @@ export default function GameOverStandings({
   longestRoadUid,
   largestArmyUid,
   ownHand,
+  log,
 }: GameOverStandingsProps): JSX.Element {
   const hiddenVp = ownHand ? ownHand.devCards.filter((c) => c.type === 'victoryPoint').length : 0;
+  const { gainedBy, turns, hotSum } = summarizeLog(log);
 
   const ranked = turnOrder
     .map((uid) => players[uid])
@@ -69,6 +101,10 @@ export default function GameOverStandings({
                     <LargestArmyIcon className="game-over-standings__award-icon" aria-label="Largest Army" />
                   )}
                 </span>
+                <span className="game-over-standings__stat" title="Total resources collected this game">
+                  <ResourceCardsIcon className="game-over-standings__stat-icon game-over-standings__stat-icon--gained" />
+                  +{gainedBy[p.uid] ?? 0}
+                </span>
                 <span className="game-over-standings__stat" title="Roads built">
                   <RoadIcon className="game-over-standings__stat-icon" />
                   {p.roadsBuilt}
@@ -85,6 +121,11 @@ export default function GameOverStandings({
           </li>
         );
       })}
+      {turns > 0 && (
+        <li className="game-over-standings__game-stats" aria-label="Game statistics">
+          {turns} turns played{hotSum !== null ? ` — ${hotSum} was the most-rolled number` : ''}
+        </li>
+      )}
     </ol>
   );
 }

@@ -99,6 +99,28 @@
   font-style: italic;
 }
 
+/* Thin labeled rule between turns — a line with the label knocked out of the middle. */
+.game-log__turn-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+
+.game-log__turn-divider::before,
+.game-log__turn-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
 .game-log__entry {
   font-size: var(--log-font-size);
   line-height: 1.35;

@@ -146,3 +146,16 @@
   height: 14px;
   color: var(--color-accent);
 }
+
+.game-over-standings__stat-icon--gained {
+  color: var(--color-success);
+}
+
+.game-over-standings__game-stats {
+  list-style: none;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-dim);
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}

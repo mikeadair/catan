@@ -98,7 +98,7 @@ the reason for the last-tapped disabled control for ~3s, reusing the existing re
 *(Most important item for mobile ergonomics.)*
 **Touches:** `Game.tsx` (shared hint state), `BuildToolbar.tsx`, `TradeBar.tsx`, `DevCardPanel.tsx`, `TradeOffers.tsx`, CSS.
 
-### B2. Keyboard shortcuts
+### B2. Keyboard shortcuts ✅
 Zero keyboard support today. Add: `R` roll, `E` end turn, `T` toggle trade composer,
 `1/2/3` road/settlement/city build modes, `Esc` cancel build mode / close composer / dismiss
 modals, `Enter` focus chat. Gate on no input being focused. Dramatically speeds up the core
@@ -113,7 +113,14 @@ tooltip (e.g. "End turn (E)"). Without that they're a hidden feature nobody find
 
 ## Phase 4 — Gameplay-feel features (M)
 
-### B4. Counter-offer on incoming trades
+### B4. Counter-offer on incoming trades (DEFERRED — needs engine change)
+**Correction to the review:** this is *not* pure wiring. `proposeTrade` requires the current
+player (`requireCurrentPlayer` in rules.ts), and an incoming trade's responder is by
+definition not the current player — so a counter needs a new engine action (e.g.
+`counterTrade`: responder-initiated, validates affordability, marks the original `countered`
+via the existing status value, creates a new offer targeted at the proposer with `counterOf`
+set). Bots would also need to respond to counters targeted at them mid-turn
+(`decideMainAction` currently ignores trades targeted at the bot).
 `TradeOffers.tsx` supports only Accept/Reject/Withdraw. Add a "Counter" button that opens the
 trade composer pre-seeded with `tradeGive` = their `receive`, `tradeReceive` = their `give`,
 `tradeTargetUid` = proposer, and rejects the original. All composer state is already lifted
@@ -121,7 +128,7 @@ into `Game.tsx`, so this is pure wiring — no engine changes. Haggling is the h
 today a near-miss offer forces a full manual re-compose.
 **Touches:** `TradeOffers.tsx` (new callback prop), `Game.tsx`.
 
-### B3. Dice-roll histogram / game stats panel
+### B3. Dice-roll histogram / game stats panel ✅
 Every serious online Catan shows the roll distribution. All data already exists client-side:
 `room.log` entries carry `meta.kind === 'diceRoll'` with the roll. Add a small toggleable
 histogram (2–12 bars vs. expected curve) as a third sidebar card or a tab on the Log panel.
@@ -141,7 +148,7 @@ Note: the confirm step must still derive completion from `room.edges`/`room.vert
 
 ## Phase 5 — Depth/stats layer (M)
 
-### B7. Game log: turn separators and filters
+### B7. Game log: turn separators and filters ✅
 The log is a single undifferentiated stream; mid/late game it's hundreds of visually identical
 rows. Add subtle "— Turn N: PlayerName —" divider rows (turn boundary detectable from
 `endTurn`/roll entries) and a chat-only/events-only filter chip. Also fills the awkward empty
@@ -149,7 +156,7 @@ panel early game.
 **Touches:** `GameLog.tsx`, `GameLog.css`; ideally `rules.ts` log entries gain a `turnNumber`
 field (engine touch) — otherwise infer client-side.
 
-### B6. Game-over stats summary
+### B6. Game-over stats summary ✅ (first pass)
 Game-over shows only final VP standings. Add per-player fun stats — total resources gained,
 cards played, rolls made, robber steals — derivable by folding over `room.log` metas
 client-side (no engine change for a first pass). Turns the ending into a shareable moment.
@@ -164,6 +171,20 @@ Road" — a real strategic signal.
 `PlayerRoster.tsx`; functions pass-through is automatic (same reducer).
 
 ---
+
+## Implementation notes (Phases 3–5, 2026-07-17)
+
+- **B2:** one window keydown listener in `Game.tsx` dispatching into a per-render rebuilt
+  `shortcutsRef` map; every shortcut is gated on the same `legalTypes`/pending/paused checks
+  as its button. Discoverability: a `?` key + a `?` button in the sidebar top row open a
+  shortcuts modal (`.game__shortcuts-modal`).
+- **B3:** `web/src/components/RollStats.tsx` — collapsed-by-default `<details>` card in the
+  sidebar; bars per sum 2–12 with a tick at the expected count, folded from `room.log`.
+- **B7:** GameLog gained an All/Game/Chat cycle button and "Turn N" divider rows (a turn
+  boundary = a diceRoll meta; numbered by counting rolls).
+- **B6:** GameOverStandings now takes `room.log` and shows per-player total resources
+  collected plus "N turns played — X was the most-rolled number". Steals/cards-played would
+  need richer log metas (engine) — left for a second pass.
 
 ## Review-tooling note
 

@@ -7,6 +7,7 @@ import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
 import Board, { type BoardInteractionMode } from '../components/Board';
 import PlayerRoster from '../components/PlayerRoster';
+import RollStats from '../components/RollStats';
 import BankPanel from '../components/BankPanel';
 import GameLog from '../components/GameLog';
 import DiceRoller from '../components/DiceRoller';
@@ -132,6 +133,30 @@ export default function Game(): JSX.Element {
       return next;
     });
   }
+
+  // --- Keyboard shortcuts ---
+  // The key -> handler map is (re)assigned every render further down, once legalTypes/
+  // runAction/etc. exist (it can't be built here — this sits above the loading early-returns,
+  // where none of that is derived yet). The listener itself is mounted once and reads the map
+  // through the ref at event time, so it always sees the latest render's handlers.
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutsRef = useRef<Record<string, () => void>>({});
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) {
+        return;
+      }
+      const handler = shortcutsRef.current[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+      if (handler) {
+        e.preventDefault();
+        handler();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   // Every dispatched action is a real network round-trip; track which one (if any) is
   // in flight so controls can show pending state instead of just going inert with no
   // feedback until the promise settles.
@@ -413,6 +438,7 @@ export default function Game(): JSX.Element {
             longestRoadUid={room.longestRoadUid}
             largestArmyUid={room.largestArmyUid}
             ownHand={ownHand}
+            log={room.log}
           />
           <button type="button" className="game-over__button" onClick={() => leaveRoom()}>
             Back to home
@@ -444,6 +470,37 @@ export default function Game(): JSX.Element {
     } finally {
       setPendingActionType(null);
     }
+  }
+
+  // See the shortcuts listener effect above — this map is what it dispatches into. Rebuilt
+  // every render so each handler closes over current legalTypes/pendingActionType/etc.
+  // Everything except `?`/Escape is gated the same way the corresponding button is, so a
+  // shortcut can never do something the UI wouldn't allow.
+  {
+    const idle = pendingActionType === null && !room.paused;
+    const toggleBuildMode = (mode: Exclude<BuildMode, null>, actionType: GameAction['type']) => {
+      if (idle && legalTypes.includes(actionType)) setBuildMode((cur) => (cur === mode ? null : mode));
+    };
+    shortcutsRef.current = {
+      '?': () => setShortcutsOpen((v) => !v),
+      Escape: () => {
+        if (shortcutsOpen) setShortcutsOpen(false);
+        else if (buildMode) setBuildMode(null);
+        else if (tradeComposerOpen) toggleTradeComposer();
+      },
+      r: () => {
+        if (idle && legalTypes.includes('rollDice')) void runAction({ type: 'rollDice', uid });
+      },
+      e: () => {
+        if (idle && legalTypes.includes('endTurn')) void runAction({ type: 'endTurn', uid });
+      },
+      t: () => {
+        if (!room.paused) toggleTradeComposer();
+      },
+      '1': () => toggleBuildMode('road', 'buildRoad'),
+      '2': () => toggleBuildMode('settlement', 'buildSettlement'),
+      '3': () => toggleBuildMode('city', 'buildCity'),
+    };
   }
 
   // Resets the composer's give/receive/target selection once a trade actually goes through —
@@ -749,6 +806,15 @@ export default function Game(): JSX.Element {
               <PanelLeftIcon className="game__sidebar-side-toggle-icon" />
             )}
           </button>
+          <button
+            type="button"
+            className="game__sidebar-side-toggle"
+            onClick={() => setShortcutsOpen(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+          >
+            ?
+          </button>
           <PauseControl
             room={room}
             players={players}
@@ -771,6 +837,7 @@ export default function Game(): JSX.Element {
           ownHand={ownHand}
           victoryPointsToWin={room.victoryPointsToWin}
         />
+        <RollStats log={room.log} />
         <GameLog log={room.log} chat={chat} players={players} turnOrder={room.turnOrder} onSend={(text) => void sendChatMessage(text)} />
       </aside>
 
@@ -936,6 +1003,30 @@ export default function Game(): JSX.Element {
         </div>
       )}
 
+      {shortcutsOpen && (
+        <div className="modal-overlay" onClick={() => setShortcutsOpen(false)}>
+          <div className="modal game__shortcuts-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Keyboard shortcuts</h3>
+            <dl className="game__shortcuts-list">
+              <dt><kbd>R</kbd></dt>
+              <dd>Roll the dice</dd>
+              <dt><kbd>E</kbd></dt>
+              <dd>End your turn</dd>
+              <dt><kbd>T</kbd></dt>
+              <dd>Open/close the trade composer</dd>
+              <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt>
+              <dd>Build a road / settlement / city</dd>
+              <dt><kbd>Esc</kbd></dt>
+              <dd>Cancel build mode / close the composer</dd>
+              <dt><kbd>?</kbd></dt>
+              <dd>Show or hide this help</dd>
+            </dl>
+            <div className="modal__actions">
+              <button type="button" onClick={() => setShortcutsOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
       {leaveConfirmOpen && (
         <div className="modal-overlay">
           <div className="modal">

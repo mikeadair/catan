@@ -1,0 +1,75 @@
+.roll-stats {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.roll-stats__summary {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-dim);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.roll-stats__summary:hover {
+  color: var(--color-text);
+}
+
+.roll-stats__bars {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  gap: 3px;
+  margin-top: 10px;
+}
+
+.roll-stats__col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+
+.roll-stats__bar-area {
+  position: relative;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.roll-stats__bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-accent);
+  opacity: 0.85;
+  border-radius: 3px 3px 0 0;
+  min-height: 0;
+}
+
+/* Thin tick marking the statistically expected count for this sum, so lucky/unlucky numbers
+   read against the bell curve rather than only against each other. */
+.roll-stats__expected {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+.roll-stats__label {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+}
+
+.roll-stats__label--hot {
+  color: var(--color-danger);
+}
