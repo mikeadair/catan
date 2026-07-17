@@ -123,6 +123,9 @@
 .trade-offers__actions {
   display: flex;
   gap: 6px;
+  /* Three buttons (Accept / Counter / Reject) don't fit the panel's fixed width on one
+     line — wrap instead of overflowing past the card edge. */
+  flex-wrap: wrap;
 }
 
 .trade-offers__actions button {

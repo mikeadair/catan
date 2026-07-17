@@ -13,6 +13,9 @@ export interface PlayerRosterProps {
   largestArmyUid: string | null;
   ownHand: PrivateHand | null;
   victoryPointsToWin: number;
+  /** Per-player current longest road *chain* length (not piece count) — computed by the
+   * caller from public board state via the engine's longestRoadForPlayer. */
+  longestRoadLengths: Record<string, number>;
 }
 
 export default function PlayerRoster({
@@ -24,6 +27,7 @@ export default function PlayerRoster({
   largestArmyUid,
   ownHand,
   victoryPointsToWin,
+  longestRoadLengths,
 }: PlayerRosterProps): JSX.Element {
   const hiddenVp = ownHand ? ownHand.devCards.filter((c) => c.type === 'victoryPoint').length : 0;
 
@@ -90,9 +94,12 @@ export default function PlayerRoster({
                         <LargestArmyIcon className="player-roster__award-icon" aria-label="Largest Army" />
                       )}
                     </span>
-                    <span className="player-roster__mini-stat" title="Road pieces built (not longest-road length)">
+                    <span
+                      className="player-roster__mini-stat"
+                      title={`Longest road chain: ${longestRoadLengths[uid] ?? 0} (award at 5+) — ${p.roadsBuilt} road piece${p.roadsBuilt === 1 ? '' : 's'} built`}
+                    >
                       <RoadIcon className="player-roster__mini-stat-icon" />
-                      {p.roadsBuilt}
+                      {longestRoadLengths[uid] ?? 0}
                       {longestRoadUid === uid && (
                         <LongestRoadIcon className="player-roster__award-icon" aria-label="Longest Road" />
                       )}

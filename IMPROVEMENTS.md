@@ -113,14 +113,15 @@ tooltip (e.g. "End turn (E)"). Without that they're a hidden feature nobody find
 
 ## Phase 4 — Gameplay-feel features (M)
 
-### B4. Counter-offer on incoming trades (DEFERRED — needs engine change)
-**Correction to the review:** this is *not* pure wiring. `proposeTrade` requires the current
-player (`requireCurrentPlayer` in rules.ts), and an incoming trade's responder is by
-definition not the current player — so a counter needs a new engine action (e.g.
-`counterTrade`: responder-initiated, validates affordability, marks the original `countered`
-via the existing status value, creates a new offer targeted at the proposer with `counterOf`
-set). Bots would also need to respond to counters targeted at them mid-turn
-(`decideMainAction` currently ignores trades targeted at the bot).
+### B4. Counter-offer on incoming trades ✅
+Implemented via a new `counterTrade` engine action (the review's "pure wiring" framing was
+wrong — `proposeTrade` requires the current player, so a responder-initiated counter needed
+engine support): validates against the original trade (pending, directed at or open to the
+actor, give affordable), marks it `countered`, and creates a new offer targeted back at the
+original proposer with `counterOf`/`proposedTurn` set. Client: Counter button on incoming
+offers pre-seeds the composer flipped around (target locked, Bank Trade disabled, button
+reads "Send Counter"). Bots: `decideMainAction` now answers pending trades targeted at the
+bot first, so a bot proposer responds to counters instead of letting them expire.
 `TradeOffers.tsx` supports only Accept/Reject/Withdraw. Add a "Counter" button that opens the
 trade composer pre-seeded with `tradeGive` = their `receive`, `tradeReceive` = their `give`,
 `tradeTargetUid` = proposer, and rejects the original. All composer state is already lifted
@@ -162,13 +163,15 @@ cards played, rolls made, robber steals — derivable by folding over `room.log`
 client-side (no engine change for a first pass). Turns the ending into a shareable moment.
 **Touches:** `GameOverStandings.tsx`, possibly a small log-aggregation helper.
 
-### B8. Live longest-road length in roster (engine touch)
+### B8. Live longest-road length in roster ✅
 The engine computes longest road to award `longestRoadUid`, but per-player current chain
 length isn't in `PublicPlayer`, so the roster can only show the award icon and raw
 `roadsBuilt`. Exposing `longestRoadLength` per player lets the roster show "4/5 to Longest
 Road" — a real strategic signal.
-**Touches:** `packages/engine/src/rules.ts` + `types.ts` (public player projection),
-`PlayerRoster.tsx`; functions pass-through is automatic (same reducer).
+**Implemented without any engine/schema change:** the engine already exports
+`longestRoadForPlayer`, so Game.tsx computes each player's live chain length client-side
+from public board state and passes it to PlayerRoster — the road mini-stat now shows chain
+length (tooltip carries piece count).
 
 ---
 

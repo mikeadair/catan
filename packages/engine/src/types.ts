@@ -367,6 +367,11 @@ export type GameAction =
   | { type: 'bankTrade'; uid: string; give: Resource; giveAmount: number; receive: Resource }
   | { type: 'proposeTrade'; uid: string; give: Partial<ResourceCount>; receive: Partial<ResourceCount>; targetUid: string | null }
   | { type: 'respondTrade'; uid: string; tradeId: string; accept: boolean }
+  // A responder's counter-proposal to a pending trade: rejects the original (status
+  // 'countered') and creates a new offer targeted back at the original proposer. Exists as
+  // its own action (rather than respondTrade + proposeTrade) because proposeTrade requires
+  // the current player, and a responder by definition isn't.
+  | { type: 'counterTrade'; uid: string; tradeId: string; give: Partial<ResourceCount>; receive: Partial<ResourceCount> }
   | { type: 'cancelTrade'; uid: string; tradeId: string }
   // Proposer-only: picks one of an open trade's interestedUids to actually execute the
   // swap with. Targeted trades never need this — accepting one executes immediately via

@@ -95,7 +95,14 @@ export default function TradePreview(): JSX.Element {
       robberPhaseStartedAt: null,
       setupTurnStartedAt: null,
       botActionClaim: null,
-      log: [],
+      // A few structured entries so log-derived UI (RollStats, GameLog's turn dividers,
+      // GameOverStandings' totals) has something to render in the harness.
+      log: [
+        { id: 'l1', ts: Date.now() - 60_000, message: 'You rolled a 8.', meta: { kind: 'diceRoll', roll: [3, 5], gains: { p0: { ore: 1 }, p1: { grain: 2 } } } },
+        { id: 'l2', ts: Date.now() - 45_000, message: 'Bot Alice built a road.' },
+        { id: 'l3', ts: Date.now() - 30_000, message: 'Bot Alice rolled a 6.', meta: { kind: 'diceRoll', roll: [2, 4], gains: { p2: { lumber: 1 } } } },
+        { id: 'l4', ts: Date.now() - 15_000, message: 'Bot Bob rolled a 7.', meta: { kind: 'diceRoll', roll: [3, 4] } },
+      ],
       createdAt: Date.now(),
       victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
       discardLimit: DEFAULT_DISCARD_LIMIT,

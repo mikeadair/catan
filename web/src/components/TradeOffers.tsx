@@ -133,6 +133,9 @@ export interface TradeOffersProps {
    * avoid double-submits. */
   blocked: boolean;
   onRespondTrade: (tradeId: string, accept: boolean) => void;
+  /** Opens the trade composer pre-seeded as a counter to this trade (see Game.tsx's
+   * startCounterOffer) — nothing is submitted until the player sends the counter. */
+  onCounterTrade: (trade: TradeOffer) => void;
   onCancelTrade: (tradeId: string) => void;
   onFinalizeTrade: (tradeId: string, withUid: string) => void;
 }
@@ -144,6 +147,7 @@ export default function TradeOffers({
   trades,
   blocked,
   onRespondTrade,
+  onCounterTrade,
   onCancelTrade,
   onFinalizeTrade,
 }: TradeOffersProps): JSX.Element | null {
@@ -326,6 +330,14 @@ export default function TradeOffers({
                       }
                     >
                       Accept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCounterTrade(t)}
+                      disabled={actionsDisabled}
+                      title={actionsDisabledTitle ?? 'Open the composer pre-filled with this offer flipped around'}
+                    >
+                      Counter
                     </button>
                     <button
                       type="button"

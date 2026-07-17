@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
-import { computeRollGains, legalActionTypes, type GameStateBundle } from '@catan/engine';
-import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, VertexId } from '@catan/engine';
+import { computeRollGains, legalActionTypes, longestRoadForPlayer, type GameStateBundle } from '@catan/engine';
+import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, TradeOffer, VertexId } from '@catan/engine';
 import { DISCARD_TIMEOUT_SECONDS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, ROBBER_TIMEOUT_SECONDS, SETUP_TIMEOUT_SECONDS } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
 import { playSfx, type SfxKind } from '../audio/sfx';
@@ -99,10 +99,15 @@ export default function Game(): JSX.Element {
   const [tradeGive, setTradeGive] = useState<Partial<ResourceCount>>({});
   const [tradeReceive, setTradeReceive] = useState<Partial<ResourceCount>>({});
   const [tradeTargetUid, setTradeTargetUid] = useState<string>('');
+  // Non-null while the composer is composing a counter-offer to this incoming trade — the
+  // composer's Offer button then submits `counterTrade` (legal for a responder) instead of
+  // `proposeTrade` (current-player only).
+  const [counteringTradeId, setCounteringTradeId] = useState<string | null>(null);
   function resetTradeComposer() {
     setTradeGive({});
     setTradeReceive({});
     setTradeTargetUid('');
+    setCounteringTradeId(null);
   }
   // Whether the trade composer (TradeBar's "you want" row/steppers/target-select/Offer/Bank
   // buttons, plus the hand's tap-to-select mode) is showing. Off by default — the composer
@@ -458,6 +463,10 @@ export default function Game(): JSX.Element {
   const legalTypes = legalActionTypes(bundle, uid);
   const resources = ownHand?.resources ?? { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
   const tradeGiveTotal = RESOURCES.reduce((s, r) => s + (tradeGive[r] ?? 0), 0);
+  // Per-player current longest chain, recomputed client-side from public board state (cheap:
+  // a handful of edges per player) — the engine only persists who *holds the award*
+  // (longestRoadUid), not each player's live length, and the roster wants the live number.
+  const longestRoadLengths = Object.fromEntries(room.turnOrder.map((u) => [u, longestRoadForPlayer(room, u)]));
 
   async function runAction(action: GameAction): Promise<boolean> {
     setPendingActionType(action.type);
@@ -509,8 +518,21 @@ export default function Game(): JSX.Element {
   // next one. Left untouched on failure so a rejected/errored attempt doesn't lose the
   // player's in-progress selection.
   async function handleProposeTrade(give: Partial<ResourceCount>, receive: Partial<ResourceCount>, targetUid: string | null) {
-    const ok = await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
+    const ok = counteringTradeId
+      ? await runAction({ type: 'counterTrade', uid: uid!, tradeId: counteringTradeId, give, receive })
+      : await runAction({ type: 'proposeTrade', uid: uid!, give, receive, targetUid });
     if (ok) resetTradeComposer();
+  }
+
+  // Pre-seed the composer with the incoming offer flipped around (their ask becomes our
+  // give, their give becomes our ask, targeted back at them) — the player then adjusts the
+  // amounts and submits via the normal Offer button, which sends counterTrade (above).
+  function startCounterOffer(trade: TradeOffer) {
+    setTradeGive({ ...trade.receive });
+    setTradeReceive({ ...trade.give });
+    setTradeTargetUid(trade.proposerUid);
+    setCounteringTradeId(trade.id);
+    setTradeComposerOpen(true);
   }
 
   async function handleBankTrade(give: Resource, giveAmount: number, receive: Resource) {
@@ -786,6 +808,7 @@ export default function Game(): JSX.Element {
             blocked={pendingActionType !== null}
             onRespondTrade={(tradeId, accept) => void runAction({ type: 'respondTrade', uid, tradeId, accept })}
             onCancelTrade={(tradeId) => void runAction({ type: 'cancelTrade', uid, tradeId })}
+            onCounterTrade={startCounterOffer}
             onFinalizeTrade={(tradeId, withUid) => void runAction({ type: 'finalizeTrade', uid, tradeId, withUid })}
           />
         </div>
@@ -836,6 +859,7 @@ export default function Game(): JSX.Element {
           largestArmyUid={room.largestArmyUid}
           ownHand={ownHand}
           victoryPointsToWin={room.victoryPointsToWin}
+          longestRoadLengths={longestRoadLengths}
         />
         <RollStats log={room.log} />
         <GameLog log={room.log} chat={chat} players={players} turnOrder={room.turnOrder} onSend={(text) => void sendChatMessage(text)} />
@@ -853,6 +877,7 @@ export default function Game(): JSX.Element {
             targetUid={tradeTargetUid}
             onTargetUidChange={setTradeTargetUid}
             canTrade={legalTypes.includes('bankTrade') || legalTypes.includes('proposeTrade')}
+            counteringTradeId={counteringTradeId}
             blocked={pendingActionType !== null}
             onBankTrade={(give, giveAmount, receive) => void handleBankTrade(give, giveAmount, receive)}
             onProposeTrade={(give, receive, targetUid) => void handleProposeTrade(give, receive, targetUid)}

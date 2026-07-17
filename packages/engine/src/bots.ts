@@ -747,6 +747,16 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
   const player = players[botUid];
   const hand = hands[botUid];
 
+  // 0. Answer any pending trade targeted directly at this bot first — e.g. a counter-offer
+  // to its own earlier proposal (counterTrade targets the original proposer, i.e. the current
+  // player). The off-turn trade driver deliberately skips the current player's bot, so
+  // without this a counter aimed at a bot would sit unanswered until it expired.
+  const targetedAtMe = trades.find((t) => t.status === 'pending' && t.targetUid === botUid && t.proposerUid !== botUid);
+  if (targetedAtMe) {
+    const response = decideTradeResponse(bundle, botUid, difficulty);
+    if (response) return response;
+  }
+
   if (difficulty === 'easy' && Math.random() < EASY_SKIP_BUILD_CHANCE) {
     return { type: 'endTurn', uid: botUid };
   }

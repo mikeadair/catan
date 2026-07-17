@@ -756,6 +756,52 @@ describe('trading', () => {
     });
   });
 
+  it('counterTrade marks the original countered and targets a new offer back at the proposer', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources = { brick: 2, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[other].resources = { brick: 0, lumber: 0, ore: 0, grain: 2, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const originalId = bundle.trades[0].id;
+
+    // The responder (not the current player) counters: asks for 2 brick instead of giving 1 grain for 1.
+    bundle = applyAction(bundle, { type: 'counterTrade', uid: other, tradeId: originalId, give: { grain: 1 }, receive: { brick: 2 } });
+    expect(bundle.trades[0].status).toBe('countered');
+    const counter = bundle.trades[1];
+    expect(counter.status).toBe('pending');
+    expect(counter.proposerUid).toBe(other);
+    expect(counter.targetUid).toBe(uid);
+    expect(counter.counterOf).toBe(originalId);
+
+    // Original proposer accepts the counter — a targeted trade, so it executes immediately.
+    bundle = applyAction(bundle, { type: 'respondTrade', uid, tradeId: counter.id, accept: true });
+    expect(bundle.trades[1].status).toBe('accepted');
+    expect(bundle.hands[uid].resources).toMatchObject({ brick: 0, grain: 1 });
+    expect(bundle.hands[other].resources).toMatchObject({ brick: 2, grain: 1 });
+  });
+
+  it('counterTrade rejects countering your own trade and unaffordable counters', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources = { brick: 1, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    bundle.hands[other].resources = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+
+    expect(() => applyAction(bundle, { type: 'counterTrade', uid, tradeId, give: { brick: 1 }, receive: { grain: 1 } })).toThrow(/own trade/);
+    expect(() =>
+      applyAction(bundle, { type: 'counterTrade', uid: other, tradeId, give: { grain: 1 }, receive: { brick: 1 } }),
+    ).toThrow(/do not have/);
+  });
+
   it('rejects responding to your own trade', () => {
     let bundle = makeGame(2);
     bundle = driveSetup(bundle);

@@ -1256,6 +1256,45 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       break;
     }
 
+    case 'counterTrade': {
+      // Deliberately no requireCurrentPlayer: a counter comes from a responder, who by
+      // definition isn't the current player. Legality is anchored to the original trade
+      // (pending, directed at or open to this uid) instead.
+      requirePhase(room, ['roll', 'main']);
+      const original = trades.find((t) => t.id === action.tradeId);
+      if (!original) throw new Error('Unknown trade');
+      if (original.status !== 'pending') throw new Error('Trade is no longer pending');
+      if (original.proposerUid === action.uid) throw new Error('Cannot counter your own trade');
+      if (original.targetUid && original.targetUid !== action.uid) {
+        throw new Error('This trade is not directed at you');
+      }
+      const counterHand = requireHand(hands, action.uid);
+      if (!canAfford(counterHand.resources, action.give)) {
+        throw new Error('You do not have the resources you are offering');
+      }
+      original.status = 'countered';
+      trades.push({
+        id: nanoid(),
+        proposerUid: action.uid,
+        targetUid: original.proposerUid,
+        give: action.give,
+        receive: action.receive,
+        status: 'pending',
+        counterOf: original.id,
+        createdAt: Date.now(),
+        proposedTurn: room.turnNumber,
+        interestedUids: [],
+        rejectedUids: [],
+      });
+      extendTurnTimerForTrade(room);
+      const originalProposer = players[original.proposerUid];
+      addLog(
+        room,
+        `${players[action.uid].displayName} countered ${originalProposer ? `${originalProposer.displayName}'s` : 'a'} trade offer.`,
+      );
+      break;
+    }
+
     case 'respondTrade': {
       const trade = trades.find((t) => t.id === action.tradeId);
       if (!trade) throw new Error('Unknown trade');
@@ -1696,7 +1735,10 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     const hasRespondable = trades.some(
       (t) => t.status === 'pending' && t.proposerUid !== uid && (t.targetUid === uid || t.targetUid === null),
     );
-    if (hasRespondable) types.push('respondTrade');
+    if (hasRespondable) {
+      types.push('respondTrade');
+      types.push('counterTrade');
+    }
     return types;
   }
 

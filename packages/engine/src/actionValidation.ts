@@ -19,6 +19,7 @@ const ACTION_TYPES: GameAction['type'][] = [
   'bankTrade',
   'proposeTrade',
   'respondTrade',
+  'counterTrade',
   'cancelTrade',
   'finalizeTrade',
   'endTurn',
@@ -129,6 +130,11 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
     case 'respondTrade':
       if (!isString(a.tradeId)) throw new Error('respondTrade requires tradeId');
       if (typeof a.accept !== 'boolean') throw new Error('respondTrade requires accept: boolean');
+      return;
+    case 'counterTrade':
+      if (!isString(a.tradeId)) throw new Error('counterTrade requires tradeId');
+      if (!isPartialResourceCount(a.give)) throw new Error('counterTrade requires give');
+      if (!isPartialResourceCount(a.receive)) throw new Error('counterTrade requires receive');
       return;
     case 'cancelTrade':
       if (!isString(a.tradeId)) throw new Error('cancelTrade requires tradeId');

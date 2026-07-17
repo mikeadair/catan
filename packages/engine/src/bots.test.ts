@@ -956,6 +956,27 @@ describe('decideBotAction: does not spam an already-rejected trade', () => {
     expect(action?.type).toBe('proposeTrade');
   });
 
+  it('the current-player bot answers a pending trade targeted at it before doing anything else', () => {
+    const { bundle, botUid } = makeMainPhaseGame('normal', { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 });
+    // A counter-offer aimed back at the bot (great deal: 2 wool for 1 ore, and ore is plentiful).
+    bundle.trades.push({
+      id: 'counter',
+      proposerUid: 'p1',
+      targetUid: botUid,
+      give: { wool: 2 },
+      receive: { ore: 1 },
+      status: 'pending',
+      counterOf: 'orig',
+      createdAt: Date.now(),
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('respondTrade');
+    if (action?.type === 'respondTrade') {
+      expect(action.tradeId).toBe('counter');
+    }
+  });
+
   it('an accepted past trade never suppresses a new proposal', () => {
     const { bundle, botUid } = makeMainPhaseGame(
       'normal',

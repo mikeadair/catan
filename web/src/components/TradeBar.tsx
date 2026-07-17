@@ -40,6 +40,10 @@ export interface TradeBarProps {
   targetUid: string;
   onTargetUidChange: (uid: string) => void;
   canTrade: boolean;
+  /** Non-null while composing a counter-offer to an incoming trade — proposing is then legal
+   * even off-turn (submitted as counterTrade by the parent), the target is locked to the
+   * original proposer, and bank trades don't apply. */
+  counteringTradeId: string | null;
   /** True while a different action is already in flight — blocks new trade actions to
    * avoid double-submits. */
   blocked: boolean;
@@ -63,6 +67,7 @@ export default function TradeBar({
   targetUid,
   onTargetUidChange,
   canTrade,
+  counteringTradeId,
   blocked,
   onBankTrade,
   onProposeTrade,
@@ -100,12 +105,13 @@ export default function TradeBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.bank]);
 
-  const canPropose = canTrade && !blocked && giveTotal > 0 && receiveTotal > 0 && !bankShortResource;
+  const countering = counteringTradeId !== null;
+  const canPropose = (canTrade || countering) && !blocked && giveTotal > 0 && receiveTotal > 0 && !bankShortResource;
   const proposeReason = blocked
     ? 'Waiting for previous action…'
     : canPropose
       ? undefined
-      : !canTrade
+      : !canTrade && !countering
         ? 'Not your turn'
         : bankShortResource
           ? `Not enough ${RESOURCE_LABEL[bankShortResource]} available in the bank`
@@ -123,7 +129,7 @@ export default function TradeBar({
     receivedOne.amount === 1 &&
     givenOne.amount === bankRate;
   const canBankTrade =
-    canTrade && !blocked && validBankShape && receivedOne !== null && room.bank[receivedOne.resource] >= 1;
+    canTrade && !countering && !blocked && validBankShape && receivedOne !== null && room.bank[receivedOne.resource] >= 1;
   const bankTradeReason = blocked
     ? 'Waiting for previous action…'
     : canBankTrade
@@ -203,8 +209,8 @@ export default function TradeBar({
 
       <div className="trade-bar__actions">
         <label className="trade-bar__target">
-          <span className="trade-bar__target-label">Trade with</span>
-          <select value={targetUid} onChange={(e) => onTargetUidChange(e.target.value)} aria-label="Trade target">
+          <span className="trade-bar__target-label">{countering ? 'Countering' : 'Trade with'}</span>
+          <select value={targetUid} onChange={(e) => onTargetUidChange(e.target.value)} aria-label="Trade target" disabled={countering}>
             <option value="">Open to all</option>
             {otherPlayers.map((p) => (
               <option key={p.uid} value={p.uid}>
@@ -224,7 +230,7 @@ export default function TradeBar({
             disabled={!canPropose}
             title={proposeReason}
           >
-            Offer Trade
+            {countering ? 'Send Counter' : 'Offer Trade'}
           </button>
           <button
             type="button"
