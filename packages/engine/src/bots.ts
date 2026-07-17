@@ -46,7 +46,7 @@ import {
   TERRAIN_RESOURCE,
 } from './types';
 import { pipCount, vertexLegalForFogSetup } from './board';
-import type { GameStateBundle } from './rules';
+import { hexProtectsWeakPlayer, type GameStateBundle } from './rules';
 
 export function decideBotAction(bundle: GameStateBundle, botUid: string): GameAction | null {
   try {
@@ -286,7 +286,17 @@ function decideRobberMove(
     }
   }
 
-  const candidateHexes = board.hexes.filter((h) => h.id !== board.robberHexId);
+  let candidateHexes = board.hexes.filter((h) => h.id !== board.robberHexId);
+  if (room.safeMode) {
+    // Mirrors rules.ts's own moveRobber/playKnight handling exactly (including its fail-open
+    // fallback) — without this, a bot had no idea Safe Mode existed at all, so early game
+    // (everyone still at their 2 starting-settlement VP, before anyone reaches 3) it would
+    // keep proposing whatever hex scored best regardless of protection, have the server
+    // reject it every single beat, and never make progress until ROBBER_TIMEOUT_SECONDS
+    // finally forced a random (but correctly Safe-Mode-aware) placement on its behalf.
+    const unprotected = candidateHexes.filter((h) => !hexProtectsWeakPlayer(room, players, h.id));
+    if (unprotected.length > 0) candidateHexes = unprotected;
+  }
   let bestHex = candidateHexes[0];
   let bestScore = -Infinity;
   for (const hex of candidateHexes) {

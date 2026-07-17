@@ -218,7 +218,7 @@ function verticesAdjacentToHex(room: RoomState, hexId: string): VertexId[] {
  * visible victory points — such a hex is off-limits for the robber while Safe Mode is on.
  * (Deliberately visibleVictoryPoints, not the hidden-VP-inclusive total: this is a targeting
  * rule based on public information, not a way to leak someone's hidden VP dev cards.) */
-function hexProtectsWeakPlayer(room: RoomState, players: Record<string, PublicPlayer>, hexId: string): boolean {
+export function hexProtectsWeakPlayer(room: RoomState, players: Record<string, PublicPlayer>, hexId: string): boolean {
   return verticesAdjacentToHex(room, hexId).some((vId) => {
     const building = room.vertices[vId];
     const owner = building && players[building.uid];

@@ -76,6 +76,40 @@ describe('decideBotAction: robber phase', () => {
     expect(action).not.toBeNull();
     expect(action?.type).toBe('moveRobber');
   });
+
+  // Regression coverage: decideRobberMove scored candidate hexes purely by occupancy/leader
+  // heuristics, with no idea Safe Mode (room.safeMode) or hexProtectsWeakPlayer existed at
+  // all — so early game, before anyone reaches 3 visible VP (everyone still just has their
+  // starting settlements), it would happily target the one occupied hex it could see, have
+  // the server reject that exact action every single beat (see applyAction's 'moveRobber'
+  // handler), and never make progress until ROBBER_TIMEOUT_SECONDS forced a random (but
+  // correctly Safe-Mode-aware) placement instead. It now mirrors the server's own check.
+  it('never proposes a hex Safe Mode protects when a legal alternative exists', () => {
+    const bundle = makeGame();
+    const board = bundle.room.board!;
+    const botUid = bundle.room.turnOrder.find((u) => bundle.players[u].isBot)!;
+    const otherUid = bundle.room.turnOrder.find((u) => u !== botUid)!;
+
+    bundle.room.safeMode = true;
+    // Early game: everyone still just has their 2 starting-settlement VP — under 3, so
+    // "weak" and protected under Safe Mode.
+    for (const uid of bundle.room.turnOrder) bundle.players[uid].visibleVictoryPoints = 2;
+
+    // The only occupied hex on the board — without the Safe Mode check, this is exactly what
+    // the occupancy-scoring heuristic would target, since every other hex scores 0.
+    const hex = board.hexes.find((h) => h.terrain !== 'desert')!;
+    const vertex = Object.values(board.vertices).find((v) => v.adjacentHexIds.includes(hex.id))!;
+    bundle.room.vertices[vertex.id] = { type: 'settlement', uid: otherUid };
+
+    bundle.room.phase = 'robber';
+    bundle.room.currentPlayerIndex = bundle.room.turnOrder.indexOf(botUid);
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('moveRobber');
+    // The real, strongest check: the server's own reducer must accept this action outright,
+    // not just that decideBotAction returned *something* (it always did, legal or not).
+    expect(() => applyAction(bundle, action!)).not.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
