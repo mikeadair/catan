@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuthUid } from './firebase/auth';
 import { useGameStore, getLastRoomId } from './state/store';
 import { unlockAudio, isMuted, setMuted, playSfx } from './audio/sfx';
+import { SoundOnIcon, SoundOffIcon } from './components/gameIcons';
 import Home from './routes/Home';
 import Lobby from './routes/Lobby';
 import Game from './routes/Game';
@@ -78,7 +79,7 @@ function App() {
         aria-label={muted ? 'Unmute sound' : 'Mute sound'}
         title={muted ? 'Unmute sound' : 'Mute sound'}
       >
-        {muted ? '🔇' : '🔊'}
+        {muted ? <SoundOffIcon className="sound-toggle__icon" /> : <SoundOnIcon className="sound-toggle__icon" />}
       </button>
       {!roomId || !room ? <Home uid={uid} /> : room.status === 'lobby' ? <Lobby /> : <Game />}
     </>

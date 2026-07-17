@@ -39,7 +39,7 @@ export default function MapPickerGrid({ selected, onSelect, disabled }: MapPicke
             onKeyDown={interactive ? (e) => activateOnEnterOrSpace(e, select) : undefined}
           >
             <MapPreview mapPreset={p.id} variant="thumbnail" />
-            <div className="map-picker-card__body">
+            <div className="map-picker-card__body" title={p.details}>
               <div className="map-picker-card__name">{p.name}</div>
               <div className="map-picker-card__desc">{p.description}</div>
             </div>

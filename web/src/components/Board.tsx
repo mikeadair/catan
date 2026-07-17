@@ -597,22 +597,28 @@ export default function BoardView({
               </g>
             )}
             {hex.id === board.robberHexId && (
-              <g
-                transform={`translate(${center.x + SIZE * 0.42}, ${center.y - SIZE * 0.5})`}
-                data-testid="robber"
-                data-hex-id={hex.id}
-              >
-                <circle r={14} fill="#1c1c1c" stroke="#e8e9ec" strokeWidth={1.5} />
-                <image
-                  href={robberIcon}
-                  x={-12}
-                  y={-12}
-                  width={24}
-                  height={24}
-                  style={{ pointerEvents: 'none' }}
-                  preserveAspectRatio="xMidYMid meet"
-                />
-              </g>
+              <>
+                {/* Dim the blocked hex so "this tile produces nothing" reads at a glance,
+                    not just from spotting the badge. */}
+                <polygon points={points} fill="rgba(8, 10, 18, 0.38)" style={{ pointerEvents: 'none' }} />
+                <g
+                  transform={`translate(${center.x + SIZE * 0.42}, ${center.y - SIZE * 0.5})`}
+                  data-testid="robber"
+                  data-hex-id={hex.id}
+                >
+                  <circle r={20} fill="rgba(0, 0, 0, 0.45)" />
+                  <circle r={17} fill="#1c1c1c" stroke="#e8e9ec" strokeWidth={2.5} />
+                  <image
+                    href={robberIcon}
+                    x={-15}
+                    y={-15}
+                    width={30}
+                    height={30}
+                    style={{ pointerEvents: 'none' }}
+                    preserveAspectRatio="xMidYMid meet"
+                  />
+                </g>
+              </>
             )}
           </g>
         );

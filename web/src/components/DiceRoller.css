@@ -15,7 +15,11 @@
 }
 
 .dice-roller:disabled {
-  opacity: 0.45;
+  /* Dimmed enough to read as not-clickable, but no further: the last roll shown here is
+     shared table context (it explains everyone's gains), so it must stay legible even when
+     it isn't this player's turn to roll. */
+  opacity: 0.8;
+  border-color: var(--color-border);
   cursor: default;
 }
 
@@ -57,7 +61,8 @@
 
 .dice-roller__caption {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 19px;
+  line-height: 1;
   color: var(--color-accent);
 }
 

@@ -49,6 +49,12 @@
   font-size: 11px;
   line-height: 1.35;
   color: var(--color-text-dim);
+  /* Blurbs are written short (see MapPreset.description), but clamp as a guardrail so one
+     long description can never balloon its card past its siblings. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
 
 /* When the preset count is odd, the last card would otherwise sit alone in

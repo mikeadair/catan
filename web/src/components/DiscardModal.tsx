@@ -37,6 +37,21 @@ export default function DiscardModal({
     setSelected({});
   }
 
+  // Pre-fill a most-held-first suggestion (shedding from the biggest piles keeps the hand
+  // diverse) that the player can still adjust before confirming — a large discard is
+  // otherwise `required` individual taps against the countdown.
+  function handleAutoPick() {
+    const remaining: ResourceCount = { ...resources };
+    const next: Partial<ResourceCount> = {};
+    for (let i = 0; i < required; i++) {
+      const r = RESOURCES.reduce((best, cur) => ((remaining[cur] ?? 0) > (remaining[best] ?? 0) ? cur : best));
+      if ((remaining[r] ?? 0) <= 0) break;
+      next[r] = (next[r] ?? 0) + 1;
+      remaining[r] -= 1;
+    }
+    setSelected(next);
+  }
+
   return (
     <div className="modal-overlay">
       <div className="modal discard-modal modal--danger">
@@ -58,6 +73,9 @@ export default function DiscardModal({
         </p>
         <ResourceHand resources={resources} variant="cards" selected={selected} onChange={setSelected} max={required} />
         <div className="modal__actions">
+          <button type="button" onClick={handleAutoPick} title="Fill the selection from your biggest piles — adjust before confirming">
+            Auto-pick
+          </button>
           <button type="button" className="modal__confirm" onClick={handleConfirm} disabled={selectedTotal !== required}>
             Discard
           </button>

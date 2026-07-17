@@ -73,3 +73,8 @@
 .sound-toggle:hover {
   border-color: var(--color-accent);
 }
+
+.sound-toggle__icon {
+  width: 18px;
+  height: 18px;
+}

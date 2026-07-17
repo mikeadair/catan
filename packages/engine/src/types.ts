@@ -75,7 +75,12 @@ export type MapPresetId = 'official-beginner' | 'balanced-random' | 'chaos' | 'e
 export interface MapPreset {
   id: MapPresetId;
   name: string;
+  // One or two short sentences — rendered directly on the picker card, so it has to fit the
+  // same footprint as every other card's blurb.
   description: string;
+  // Optional full rules explanation for presets whose mechanics need more than the blurb
+  // (surfaced as a tooltip/expandable, never inline on the card).
+  details?: string;
 }
 
 export type BuildingType = 'settlement' | 'city';

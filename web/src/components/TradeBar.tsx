@@ -68,6 +68,10 @@ export default function TradeBar({
   onProposeTrade,
 }: TradeBarProps): JSX.Element {
   const rates = computePortRates(room, uid);
+  // Summarize the rates for the header hint: the flat rate most resources trade at (4:1, or
+  // 3:1 with a generic port), plus any per-resource 2:1 port rates that beat it.
+  const baseRate = Math.max(...RESOURCES.map((r) => rates[r]));
+  const portRateEntries = RESOURCES.map((r) => [r, rates[r]] as const).filter(([, rate]) => rate < baseRate);
   const otherPlayers = Object.values(players).filter((p) => p.uid !== uid);
 
   const giveTotal = RESOURCES.reduce((s, r) => s + (give[r] ?? 0), 0);
@@ -150,7 +154,20 @@ export default function TradeBar({
   return (
     <div className="trade-bar">
       <div className="trade-bar__want">
-        <span className="trade-bar__want-label">You want</span>
+        <div className="trade-bar__want-header">
+          <span className="trade-bar__want-label">You want</span>
+          <span className="trade-bar__rates" title="Your bank trade rates (improved by ports you've settled)">
+            Bank {baseRate}:1
+            {portRateEntries.map(([r, rate]) => (
+              <span key={r}>
+                {' · '}
+                <strong>
+                  {RESOURCE_LABEL[r]} {rate}:1
+                </strong>
+              </span>
+            ))}
+          </span>
+        </div>
         <div className="trade-bar__want-cards">
           {RESOURCES.map((r) => {
             const count = receive[r] ?? 0;

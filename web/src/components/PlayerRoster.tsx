@@ -12,6 +12,7 @@ export interface PlayerRosterProps {
   longestRoadUid: string | null;
   largestArmyUid: string | null;
   ownHand: PrivateHand | null;
+  victoryPointsToWin: number;
 }
 
 export default function PlayerRoster({
@@ -22,12 +23,20 @@ export default function PlayerRoster({
   longestRoadUid,
   largestArmyUid,
   ownHand,
+  victoryPointsToWin,
 }: PlayerRosterProps): JSX.Element {
   const hiddenVp = ownHand ? ownHand.devCards.filter((c) => c.type === 'victoryPoint').length : 0;
 
   return (
     <div className="player-roster">
-      <div className="player-roster__header">Players</div>
+      <div className="player-roster__header">
+        Players
+        {/* The win condition is a lobby setting guests may never have seen — surfacing it here
+            keeps "how close is everyone?" answerable from the roster alone. */}
+        <span className="player-roster__win-target" title={`First player to ${victoryPointsToWin} victory points wins`}>
+          first to {victoryPointsToWin} <VictoryPointIcon className="player-roster__win-target-icon" />
+        </span>
+      </div>
       <ul className="player-roster__list">
         {turnOrder.map((uid) => {
           const p = players[uid];
@@ -81,7 +90,7 @@ export default function PlayerRoster({
                         <LargestArmyIcon className="player-roster__award-icon" aria-label="Largest Army" />
                       )}
                     </span>
-                    <span className="player-roster__mini-stat" title="Roads built">
+                    <span className="player-roster__mini-stat" title="Road pieces built (not longest-road length)">
                       <RoadIcon className="player-roster__mini-stat-icon" />
                       {p.roadsBuilt}
                       {longestRoadUid === uid && (

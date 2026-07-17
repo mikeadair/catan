@@ -14,6 +14,26 @@
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.player-roster__win-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.player-roster__win-target-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .player-roster__list {
@@ -198,8 +218,8 @@
 }
 
 .player-roster__card-badge-icon {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
@@ -244,8 +264,8 @@
 }
 
 .player-roster__mini-stat-icon {
-  width: 12px;
-  height: 12px;
+  width: 15px;
+  height: 15px;
   color: var(--color-text-dim);
   flex-shrink: 0;
 }

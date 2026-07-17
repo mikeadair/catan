@@ -30,6 +30,28 @@
   white-space: nowrap;
 }
 
+/* "You want" label left, this player's current bank/port rates right — the rates were
+   previously discoverable only inside the Bank Trade button's disabled tooltip, which made
+   owning a port feel like nothing changed. */
+.trade-bar__want-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.trade-bar__rates {
+  font-size: 11px;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+
+.trade-bar__rates strong {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
 .trade-bar__want-cards {
   /* A 2-column grid rather than flex-wrap: RESOURCES is a fixed 5-element list (see
      @catan/engine's types.ts), so wrapping would always strand the last card (Wool) alone on
@@ -74,6 +96,10 @@
 .trade-bar__want-card:last-child {
   grid-column: 1 / -1;
   justify-self: center;
+  /* Match the exact footprint of the four cards above (one column = half the row minus half
+     the 8px gap) — sized-to-content, Wool's shorter name made its card visibly narrower than
+     its siblings, which read as a layout bug rather than a centered feature row. */
+  width: calc(50% - 4px);
 }
 
 .trade-bar__want-card::before {

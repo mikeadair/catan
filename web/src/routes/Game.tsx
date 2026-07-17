@@ -18,7 +18,7 @@ import DevCardPanel from '../components/DevCardPanel';
 import TradeBar from '../components/TradeBar';
 import TradeOffers from '../components/TradeOffers';
 import ResourceHand from '../components/ResourceHand';
-import { PauseIcon, TradeIcon } from '../components/gameIcons';
+import { PanelLeftIcon, PanelRightIcon, PauseIcon, TradeIcon } from '../components/gameIcons';
 import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import GameOverStandings from '../components/GameOverStandings';
@@ -638,6 +638,13 @@ export default function Game(): JSX.Element {
   else if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
   else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
   else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
+  else if ((room.phase === 'roll' || room.phase === 'main') && !isCurrentPlayer) {
+    // An opponent's ordinary turn is most of the game, and without this branch it was the
+    // one state with no banner at all — leaving "whose turn is it?" answerable only by
+    // spotting the sidebar roster highlight.
+    const current = players[room.turnOrder[room.currentPlayerIndex]];
+    phaseBanner = current ? `${current.displayName}'s turn…` : null;
+  }
   else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `${setupRoundLabel}Waiting for ${waitingOn.displayName} to set up…` : null;
@@ -736,7 +743,11 @@ export default function Game(): JSX.Element {
             title={`Move sidebar to the ${sidebarSide === 'left' ? 'right' : 'left'}`}
             aria-label={`Move sidebar to the ${sidebarSide === 'left' ? 'right' : 'left'}`}
           >
-            {sidebarSide === 'left' ? '⇥' : '⇤'}
+            {sidebarSide === 'left' ? (
+              <PanelRightIcon className="game__sidebar-side-toggle-icon" />
+            ) : (
+              <PanelLeftIcon className="game__sidebar-side-toggle-icon" />
+            )}
           </button>
           <PauseControl
             room={room}
@@ -758,6 +769,7 @@ export default function Game(): JSX.Element {
           longestRoadUid={room.longestRoadUid}
           largestArmyUid={room.largestArmyUid}
           ownHand={ownHand}
+          victoryPointsToWin={room.victoryPointsToWin}
         />
         <GameLog log={room.log} chat={chat} players={players} turnOrder={room.turnOrder} onSend={(text) => void sendChatMessage(text)} />
       </aside>

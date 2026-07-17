@@ -232,6 +232,12 @@
   color: var(--color-text);
 }
 
+.game__sidebar-side-toggle-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 .game__leave-button {
   background: var(--color-panel);
   border: 1px solid var(--color-border);

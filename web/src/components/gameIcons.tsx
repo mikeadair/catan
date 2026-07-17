@@ -138,3 +138,45 @@ export function MonopolyIcon(props: IconProps): JSX.Element {
     </svg>
   );
 }
+
+/* A framed panel with its sidebar filled on one side plus an arrow pointing at the other —
+ * "move the sidebar to that side," where the bare ⇤/⇥ arrow glyphs it replaces read as
+ * nothing in particular (and rendered glyph-font-dependently to boot). */
+export function PanelRightIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth={2} fill="none" />
+      <rect x="15" y="6" width="5" height="12" fill="currentColor" />
+      <path d="M6 12 H11 M11 12 L8.5 9.5 M11 12 L8.5 14.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+export function PanelLeftIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <rect x="2" y="4" width="20" height="16" rx="2" stroke="currentColor" strokeWidth={2} fill="none" />
+      <rect x="4" y="6" width="5" height="12" fill="currentColor" />
+      <path d="M18 12 H13 M13 12 L15.5 9.5 M13 12 L15.5 14.5" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+export function SoundOnIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 9 H8 L13 4 V20 L8 15 H4 Z" fill="currentColor" strokeLinejoin="round" />
+      <path d="M16 8.5 A5 5 0 0 1 16 15.5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" fill="none" />
+      <path d="M18.5 5.5 A9 9 0 0 1 18.5 18.5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
+
+export function SoundOffIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 9 H8 L13 4 V20 L8 15 H4 Z" fill="currentColor" strokeLinejoin="round" />
+      <path d="M16 9.5 L21 14.5 M21 9.5 L16 14.5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
