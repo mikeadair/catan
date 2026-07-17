@@ -25,6 +25,7 @@ import type {
 import {
   BUILD_COSTS,
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
   DEFAULT_TURN_TIMER_SECONDS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DISCARD_TIMEOUT_SECONDS,
@@ -64,6 +65,9 @@ export interface CreateGameRoomBase {
   discardLimit?: number;
   /** Per-turn countdown, enforced via 'timeoutEndTurn'. undefined = default; null = disabled. */
   turnTimerSeconds?: number | null;
+  /** Per-trade-responder countdown, enforced via 'timeoutTradeResponse'. undefined = default;
+   * null = disabled. */
+  tradeResponseTimerSeconds?: number | null;
   /** Robber can't target a hex touching a sub-3-VP player's settlement/city. Default false. */
   safeMode?: boolean;
 }
@@ -173,6 +177,21 @@ function extendTurnTimerForTrade(room: RoomState): void {
   if (extension <= 0) return;
   room.turnStartedAt += extension;
   room.turnTimerExtensionMs = alreadyExtendedMs + extension;
+}
+
+/** Every uid who still needs to respond to `trade` — the single target for a targeted trade
+ * (only while it's still 'pending'; once answered, status flips off 'pending' entirely so
+ * there's nothing left to time out), or every other room member who hasn't yet accepted
+ * (interestedUids) or rejected (rejectedUids) an open trade. Used by both
+ * 'timeoutTradeResponse' (who to auto-reject once room.tradeResponseTimerSeconds elapses) and
+ * legalActionTypes (whether that action is currently reportable) so the two can't drift apart.
+ * Mirrors respondersFor in web/src/components/TradeOffers.tsx (duplicated rather than shared —
+ * this package has no dependency on web). */
+function pendingTradeResponders(trade: TradeOffer, players: Record<string, PublicPlayer>): string[] {
+  if (trade.targetUid !== null) return trade.status === 'pending' ? [trade.targetUid] : [];
+  const interested = new Set(trade.interestedUids ?? []);
+  const rejected = new Set(trade.rejectedUids ?? []);
+  return Object.keys(players).filter((uid) => uid !== trade.proposerUid && !interested.has(uid) && !rejected.has(uid));
 }
 
 /** "At least half" of non-bot seats — bots never vote and are excluded from the denominator. */
@@ -585,6 +604,8 @@ export function createGame(
     discardLimit: roomBase.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     // undefined (unspecified) -> default; null (explicitly disabled) stays null.
     turnTimerSeconds: roomBase.turnTimerSeconds !== undefined ? roomBase.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    tradeResponseTimerSeconds:
+      roomBase.tradeResponseTimerSeconds !== undefined ? roomBase.tradeResponseTimerSeconds : DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
     safeMode: roomBase.safeMode ?? false,
     paused: false,
     pausedAt: null,
@@ -1432,6 +1453,35 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       break;
     }
 
+    case 'timeoutTradeResponse': {
+      // No requireCurrentPlayer/requirePhase gate — like timeoutEndTurn/expireTrades, any
+      // room member may report this, re-validated against the real clock below rather than
+      // trusted. Unlike expireTrades, this only rejects the specific responders who are
+      // actually overdue on a still-pending trade, not the trade itself.
+      if (room.tradeResponseTimerSeconds === null) throw new Error('No trade response timer is configured for this room');
+      const now = Date.now();
+      let timedOutAny = false;
+      for (const trade of trades) {
+        if (trade.status !== 'pending' || now - trade.createdAt < room.tradeResponseTimerSeconds * 1000) continue;
+        const overdue = pendingTradeResponders(trade, players);
+        for (const responderUid of overdue) {
+          if (trade.targetUid === null) {
+            trade.rejectedUids ??= [];
+            trade.rejectedUids.push(responderUid);
+          } else {
+            trade.status = 'rejected';
+          }
+          addLog(
+            room,
+            `${players[responderUid]?.displayName ?? 'A player'} didn't respond to a trade in time, so it was automatically rejected.`,
+          );
+          timedOutAny = true;
+        }
+      }
+      if (!timedOutAny) throw new Error('No trade responses have timed out yet');
+      break;
+    }
+
     case 'voteToPause': {
       const player = requirePlayer(players, action.uid);
       if (player.isBot) throw new Error('Bots cannot vote');
@@ -1579,6 +1629,17 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
   // room member may report an expiry (mirrors timeoutEndTurn just below).
   if (trades.some((t) => t.status === 'pending' && Date.now() - t.createdAt >= TRADE_EXPIRY_MS)) {
     types.push('expireTrades');
+  }
+  if (
+    room.tradeResponseTimerSeconds !== null &&
+    trades.some(
+      (t) =>
+        t.status === 'pending' &&
+        Date.now() - t.createdAt >= room.tradeResponseTimerSeconds! * 1000 &&
+        pendingTradeResponders(t, players).length > 0,
+    )
+  ) {
+    types.push('timeoutTradeResponse');
   }
 
   if (room.phase === 'discard') {

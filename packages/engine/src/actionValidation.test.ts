@@ -25,6 +25,7 @@ describe('assertValidActionShape', () => {
       { type: 'removeSeat', uid: 'p0', targetUid: 'p0' },
       { type: 'timeoutEndTurn', uid: 'p0' },
       { type: 'expireTrades', uid: 'p0' },
+      { type: 'timeoutTradeResponse', uid: 'p0' },
       { type: 'voteToPause', uid: 'p0' },
       { type: 'voteToUnpause', uid: 'p0' },
     ];

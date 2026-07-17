@@ -34,12 +34,13 @@ export async function loadRoomForTx(tx: Transaction, roomId: string): Promise<Ro
   return { id: roomId, ...roomData, devCardDeck };
 }
 
-// Of every action type, only endTurn and expireTrades actually read the broader
-// pending-trades list (endTurn to auto-cancel the actor's own open offers; expireTrades to
-// scan every pending offer for one that's aged out) — see web/src/firebase/rooms.ts for the
-// original rationale (skips a network round-trip for the common case).
+// Of every action type, only endTurn, expireTrades, and timeoutTradeResponse actually read
+// the broader pending-trades list (endTurn to auto-cancel the actor's own open offers;
+// expireTrades/timeoutTradeResponse to scan every pending offer for one that's aged out) —
+// see web/src/firebase/rooms.ts for the original rationale (skips a network round-trip for
+// the common case).
 export async function fetchPendingTradesIfNeeded(roomId: string, action: GameAction): Promise<TradeOffer[]> {
-  if (action.type !== 'endTurn' && action.type !== 'expireTrades') return [];
+  if (action.type !== 'endTurn' && action.type !== 'expireTrades' && action.type !== 'timeoutTradeResponse') return [];
   const snap = await db
     .collection('rooms')
     .doc(roomId)

@@ -15,6 +15,9 @@ const DISCARD_MAX = 12;
 const TURN_TIMER_MIN = 30;
 const TURN_TIMER_MAX = 600;
 const DEFAULT_TURN_TIMER_SECONDS_FALLBACK = 120;
+const TRADE_RESPONSE_TIMER_MIN = 5;
+const TRADE_RESPONSE_TIMER_MAX = 60;
+const DEFAULT_TRADE_RESPONSE_TIMER_SECONDS_FALLBACK = 15;
 const BOT_DIFFICULTIES: BotDifficulty[] = ['easy', 'normal', 'hard'];
 const BOT_DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
 
@@ -111,6 +114,22 @@ export default function Lobby(): JSX.Element {
 
   function handleChangeTurnTimerSeconds(value: number) {
     run(() => updateRoomSettings(roomId!, { turnTimerSeconds: clamp(value, TURN_TIMER_MIN, TURN_TIMER_MAX) }));
+  }
+
+  function handleToggleTradeResponseTimer(enabled: boolean) {
+    run(() =>
+      updateRoomSettings(roomId!, {
+        tradeResponseTimerSeconds: enabled ? DEFAULT_TRADE_RESPONSE_TIMER_SECONDS_FALLBACK : null,
+      }),
+    );
+  }
+
+  function handleChangeTradeResponseTimerSeconds(value: number) {
+    run(() =>
+      updateRoomSettings(roomId!, {
+        tradeResponseTimerSeconds: clamp(value, TRADE_RESPONSE_TIMER_MIN, TRADE_RESPONSE_TIMER_MAX),
+      }),
+    );
   }
 
   function handleToggleSafeMode(enabled: boolean) {
@@ -312,6 +331,32 @@ export default function Lobby(): JSX.Element {
                   value={room.turnTimerSeconds}
                   disabled={fieldsDisabled}
                   onChange={(e) => handleChangeTurnTimerSeconds(Number(e.target.value) || TURN_TIMER_MIN)}
+                />
+              </label>
+            )}
+            <label className="lobby__field lobby__field--checkbox">
+              <input
+                type="checkbox"
+                checked={room.tradeResponseTimerSeconds !== null}
+                disabled={fieldsDisabled}
+                onChange={(e) => handleToggleTradeResponseTimer(e.target.checked)}
+              />
+              <span>Trade response timer</span>
+            </label>
+            {room.tradeResponseTimerSeconds !== null && (
+              <label className="lobby__field">
+                <span>
+                  Seconds to respond to a trade ({TRADE_RESPONSE_TIMER_MIN}–{TRADE_RESPONSE_TIMER_MAX})
+                </span>
+                <input
+                  type="number"
+                  min={TRADE_RESPONSE_TIMER_MIN}
+                  max={TRADE_RESPONSE_TIMER_MAX}
+                  value={room.tradeResponseTimerSeconds}
+                  disabled={fieldsDisabled}
+                  onChange={(e) =>
+                    handleChangeTradeResponseTimerSeconds(Number(e.target.value) || TRADE_RESPONSE_TIMER_MIN)
+                  }
                 />
               </label>
             )}

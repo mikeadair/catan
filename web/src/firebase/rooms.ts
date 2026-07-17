@@ -24,6 +24,7 @@ import {
   STARTING_BANK,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
   DEFAULT_TURN_TIMER_SECONDS,
   type RoomState,
   type PublicPlayer,
@@ -162,6 +163,7 @@ export async function createRoom(
     victoryPointsToWin?: number;
     discardLimit?: number;
     turnTimerSeconds?: number | null;
+    tradeResponseTimerSeconds?: number | null;
     safeMode?: boolean;
     preferredColor?: PlayerColor;
   }
@@ -217,6 +219,10 @@ export async function createRoom(
     victoryPointsToWin: settings?.victoryPointsToWin ?? DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: settings?.discardLimit ?? DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: settings?.turnTimerSeconds !== undefined ? settings.turnTimerSeconds : DEFAULT_TURN_TIMER_SECONDS,
+    tradeResponseTimerSeconds:
+      settings?.tradeResponseTimerSeconds !== undefined
+        ? settings.tradeResponseTimerSeconds
+        : DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
     safeMode: settings?.safeMode ?? false,
     paused: false,
     pausedAt: null,
@@ -357,6 +363,7 @@ export interface RoomSettingsUpdate {
   victoryPointsToWin?: number;
   discardLimit?: number;
   turnTimerSeconds?: number | null;
+  tradeResponseTimerSeconds?: number | null;
   safeMode?: boolean;
 }
 

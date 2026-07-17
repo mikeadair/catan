@@ -11,7 +11,13 @@
 import { useEffect, type JSX } from 'react';
 import { generateBoard } from '@catan/engine';
 import type { RoomState, PublicPlayer, PrivateHand, TradeOffer } from '@catan/engine';
-import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from '@catan/engine';
+import {
+  PLAYER_COLORS,
+  DEFAULT_VICTORY_POINTS_TO_WIN,
+  DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TURN_TIMER_SECONDS,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
+} from '@catan/engine';
 import { useGameStore } from './state/store';
 import Game from './routes/Game';
 
@@ -94,6 +100,7 @@ export default function TradePreview(): JSX.Element {
       victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
       discardLimit: DEFAULT_DISCARD_LIMIT,
       turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+      tradeResponseTimerSeconds: DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
       safeMode: false,
       paused: false,
       pausedAt: null,

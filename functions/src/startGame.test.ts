@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import {
   DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
   DEFAULT_TURN_TIMER_SECONDS,
   DEFAULT_VICTORY_POINTS_TO_WIN,
   PLAYER_COLORS,
@@ -69,6 +70,7 @@ async function seedLobbyRoom(roomId: string, hostUid: string, otherUids: string[
     victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+    tradeResponseTimerSeconds: DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
     safeMode: false,
     paused: false,
     pausedAt: null,

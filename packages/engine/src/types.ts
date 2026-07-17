@@ -254,6 +254,11 @@ export interface RoomState {
   victoryPointsToWin: number; // default DEFAULT_VICTORY_POINTS_TO_WIN
   discardLimit: number; // hand size that triggers a discard on a rolled 7; default DEFAULT_DISCARD_LIMIT
   turnTimerSeconds: number | null; // countdown shown per turn; null = disabled. Enforced server-side via 'timeoutEndTurn'.
+  // How long a responder has to answer a pending trade before they're auto-rejected on its
+  // behalf; null = disabled. Default DEFAULT_TRADE_RESPONSE_TIMER_SECONDS. Enforced
+  // server-side via 'timeoutTradeResponse' — distinct from TRADE_EXPIRY_MS, which is a fixed,
+  // non-configurable ceiling on the whole trade's lifetime regardless of individual responses.
+  tradeResponseTimerSeconds: number | null;
   // When on, the robber can't target a hex touching any player's settlement/city while that
   // player has fewer than 3 visible victory points — see hexProtectsWeakPlayer in rules.ts
   // ('moveRobber'/'playKnight'). Fails open rather than leaving the robber with no legal
@@ -297,6 +302,8 @@ export const MAX_CITIES = 4;
 export const DEFAULT_VICTORY_POINTS_TO_WIN = 10;
 export const DEFAULT_DISCARD_LIMIT = 7;
 export const DEFAULT_TURN_TIMER_SECONDS = 120;
+// Default for RoomState.tradeResponseTimerSeconds — see 'timeoutTradeResponse' in rules.ts.
+export const DEFAULT_TRADE_RESPONSE_TIMER_SECONDS = 15;
 // Every proposeTrade (player- or bot-initiated) pushes the current turn's deadline back by
 // this much — see extendTurnTimerForTrade in rules.ts — so an active trade negotiation isn't
 // cut off by the turn timer mid-conversation.
@@ -369,6 +376,12 @@ export type GameAction =
   // client) and flips only those to 'expired'. Mirrors timeoutEndTurn's "any connected client
   // may report it" pattern — see web/src/state/store.ts for the polling that drives this.
   | { type: 'expireTrades'; uid: string }
+  // Any room member may submit this at any time; rules.ts re-validates that at least one
+  // pending trade has a responder who hasn't answered within room.tradeResponseTimerSeconds
+  // of the trade's createdAt (never trusted from the client), and auto-rejects every such
+  // responder on that trade (not the whole trade, unlike expireTrades) — see
+  // pendingTradeResponders in rules.ts and web/src/state/store.ts for the polling.
+  | { type: 'timeoutTradeResponse'; uid: string }
   // uid casts (or withdraws) a vote to flip `paused` the opposite way of its current value.
   // Bots never vote; majority is computed over non-bot turnOrder members only.
   | { type: 'voteToPause'; uid: string }

@@ -84,6 +84,11 @@ const offTurnBotTradeInFlight = new Set<string>();
 // scheduled timeout gets lost (e.g. a backgrounded/throttled tab).
 let tradeExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Trade-response timeout (room.tradeResponseTimerSeconds): same single-scheduled-timer
+// pattern as trade expiry just above, just keyed off each pending trade's still-unanswered
+// responders rather than the trade's own overall TTL.
+let tradeResponseTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
 function teardown() {
   unsubscribers.forEach((u) => u());
   unsubscribers = [];
@@ -106,6 +111,10 @@ function teardown() {
   if (tradeExpiryTimer) {
     clearTimeout(tradeExpiryTimer);
     tradeExpiryTimer = null;
+  }
+  if (tradeResponseTimeoutTimer) {
+    clearTimeout(tradeResponseTimeoutTimer);
+    tradeResponseTimeoutTimer = null;
   }
 }
 
@@ -252,6 +261,61 @@ function scheduleTradeExpiryCheck(roomId: string, get: () => GameStore): void {
   tradeExpiryTimer = setTimeout(() => runTradeExpiryIfDue(roomId, get), delay);
 }
 
+// ---------------------------------------------------------------------------
+// Trade-response timeout
+// ---------------------------------------------------------------------------
+
+/** Same predicate rules.ts's pendingTradeResponders uses server-side to decide who's still on
+ * the hook for a trade (duplicated here, not imported, since it's just a cheap filter for
+ * deciding whether to schedule a check — the real decision is re-validated server-side by
+ * applyAction, never trusted from here). */
+function hasPendingResponders(trade: TradeOffer, players: Record<string, PublicPlayer>): boolean {
+  if (trade.targetUid !== null) return true; // caller already filtered to status === 'pending'
+  const interested = new Set(trade.interestedUids ?? []);
+  const rejected = new Set(trade.rejectedUids ?? []);
+  return Object.keys(players).some((uid) => uid !== trade.proposerUid && !interested.has(uid) && !rejected.has(uid));
+}
+
+function runTradeResponseTimeoutIfDue(roomId: string, get: () => GameStore): void {
+  const { roomId: currentRoomId, room, uid, trades, players } = get();
+  if (currentRoomId === roomId && room?.status === 'playing' && uid && room.tradeResponseTimerSeconds !== null) {
+    const now = Date.now();
+    const deadlineMs = room.tradeResponseTimerSeconds * 1000;
+    const anyOverdue = trades.some(
+      (t) => t.status === 'pending' && now - t.createdAt >= deadlineMs && hasPendingResponders(t, players),
+    );
+    if (anyOverdue) {
+      void fbDispatchAction(roomId, { type: 'timeoutTradeResponse', uid }).catch(() => {});
+    }
+  }
+  scheduleTradeResponseTimeoutCheck(roomId, get);
+}
+
+/**
+ * (Re)arms a single timer targeted at whichever pending trade with an unanswered responder
+ * will time out soonest, rather than polling on a fixed cadence — same shape as
+ * scheduleTradeExpiryCheck just above, just keyed off room.tradeResponseTimerSeconds instead
+ * of the fixed TRADE_EXPIRY_MS, and skipping trades every eligible responder has already
+ * answered (nothing left to time out there).
+ */
+function scheduleTradeResponseTimeoutCheck(roomId: string, get: () => GameStore): void {
+  if (tradeResponseTimeoutTimer) {
+    clearTimeout(tradeResponseTimeoutTimer);
+    tradeResponseTimeoutTimer = null;
+  }
+  const { roomId: currentRoomId, room, trades, players } = get();
+  if (currentRoomId !== roomId || room?.status !== 'playing' || room.tradeResponseTimerSeconds === null) return;
+
+  const now = Date.now();
+  const deadlineMs = room.tradeResponseTimerSeconds * 1000;
+  const deadlines = trades
+    .filter((t) => t.status === 'pending' && hasPendingResponders(t, players))
+    .map((t) => t.createdAt + deadlineMs);
+  if (deadlines.length === 0) return;
+  const delay = Math.max(0, Math.min(...deadlines) - now) + TRADE_EXPIRY_CHECK_BUFFER_MS;
+  tradeResponseTimeoutTimer = setTimeout(() => runTradeResponseTimeoutIfDue(roomId, get), delay);
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   uid: null,
   roomId: null,
@@ -292,6 +356,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         set({ trades });
         triggerOffTurnBotTradeChecks(roomId, get);
         scheduleTradeExpiryCheck(roomId, get);
+        scheduleTradeResponseTimeoutCheck(roomId, get);
       })
     );
     unsubscribers.push(subscribeChat(roomId, (chat) => set({ chat })));
@@ -316,6 +381,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       runBotActionIfDue(roomId, get);
       triggerOffTurnBotTradeChecks(roomId, get);
       scheduleTradeExpiryCheck(roomId, get);
+      scheduleTradeResponseTimeoutCheck(roomId, get);
     }, BOT_FALLBACK_MS);
   },
 

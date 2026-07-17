@@ -4,7 +4,13 @@ import type { JSX } from 'react';
 import { generateBoard, initialFogRevealHexIds } from '@catan/engine';
 import Board from './components/Board';
 import type { RoomState, PublicPlayer, MapPresetId } from '@catan/engine';
-import { PLAYER_COLORS, DEFAULT_VICTORY_POINTS_TO_WIN, DEFAULT_DISCARD_LIMIT, DEFAULT_TURN_TIMER_SECONDS } from '@catan/engine';
+import {
+  PLAYER_COLORS,
+  DEFAULT_VICTORY_POINTS_TO_WIN,
+  DEFAULT_DISCARD_LIMIT,
+  DEFAULT_TURN_TIMER_SECONDS,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
+} from '@catan/engine';
 import './routes/Game.css';
 
 export default function DevPreview(): JSX.Element {
@@ -46,6 +52,7 @@ export default function DevPreview(): JSX.Element {
     victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
     discardLimit: DEFAULT_DISCARD_LIMIT,
     turnTimerSeconds: DEFAULT_TURN_TIMER_SECONDS,
+    tradeResponseTimerSeconds: DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
     safeMode: false,
     paused: false,
     pausedAt: null,

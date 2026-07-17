@@ -16,7 +16,12 @@ import {
 
 function makeGame(
   playerCount = 4,
-  opts: { victoryPointsToWin?: number; discardLimit?: number; turnTimerSeconds?: number | null } = {},
+  opts: {
+    victoryPointsToWin?: number;
+    discardLimit?: number;
+    turnTimerSeconds?: number | null;
+    tradeResponseTimerSeconds?: number | null;
+  } = {},
 ): GameStateBundle {
   const seatedPlayers = Array.from({ length: playerCount }, (_, i) => ({
     uid: `p${i}`,
@@ -1304,6 +1309,87 @@ describe('expireTrades', () => {
 
     bundle.trades[0].createdAt = Date.now() - TRADE_EXPIRY_MS - 1000;
     expect(legalActionTypes(bundle, other)).toContain('expireTrades');
+  });
+});
+
+describe('timeoutTradeResponse', () => {
+  it('rejects when no pending trade response has aged past tradeResponseTimerSeconds yet', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+
+    expect(() => applyAction(bundle, { type: 'timeoutTradeResponse', uid: other })).toThrow(/timed out yet/i);
+  });
+
+  it('rejects when the trade response timer is disabled (null)', () => {
+    let bundle = makeGame(2, { tradeResponseTimerSeconds: null });
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    bundle.trades[0].createdAt = Date.now() - 60_000;
+
+    expect(() => applyAction(bundle, { type: 'timeoutTradeResponse', uid: other })).toThrow(
+      /no trade response timer is configured/i,
+    );
+  });
+
+  it('auto-rejects an overdue targeted trade, reportable by any room member', () => {
+    let bundle = makeGame(3);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const [other, bystander] = bundle.room.turnOrder.filter((u) => u !== uid);
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+    bundle.trades[0].createdAt = Date.now() - (bundle.room.tradeResponseTimerSeconds! * 1000 + 1000);
+
+    // Reported by an uninvolved bystander, not the target or proposer.
+    bundle = applyAction(bundle, { type: 'timeoutTradeResponse', uid: bystander });
+    expect(bundle.trades.find((t) => t.id === tradeId)?.status).toBe('rejected');
+    expect(bundle.room.log.at(-1)?.message).toContain("didn't respond");
+  });
+
+  it('auto-rejects only the still-pending responders of an overdue open trade, leaving one who already answered untouched', () => {
+    let bundle = makeGame(3);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const [otherA, otherB] = bundle.room.turnOrder.filter((u) => u !== uid);
+    bundle.hands[uid].resources.brick = 1;
+    bundle.hands[otherA].resources.grain = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    const tradeId = bundle.trades[0].id;
+    // otherA answers in time (expresses interest); otherB never responds.
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: otherA, tradeId, accept: true });
+    bundle.trades[0].createdAt = Date.now() - (bundle.room.tradeResponseTimerSeconds! * 1000 + 1000);
+
+    bundle = applyAction(bundle, { type: 'timeoutTradeResponse', uid: otherB });
+    const trade = bundle.trades.find((t) => t.id === tradeId)!;
+    expect(trade.status).toBe('pending'); // the whole trade isn't killed, unlike expireTrades
+    expect(trade.interestedUids).toContain(otherA);
+    expect(trade.rejectedUids).toContain(otherB);
+  });
+
+  it('is offered via legalActionTypes only once a pending trade response has actually timed out', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    expect(legalActionTypes(bundle, other)).not.toContain('timeoutTradeResponse');
+
+    bundle.trades[0].createdAt = Date.now() - (bundle.room.tradeResponseTimerSeconds! * 1000 + 1000);
+    expect(legalActionTypes(bundle, other)).toContain('timeoutTradeResponse');
   });
 });
 
