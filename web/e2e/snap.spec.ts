@@ -52,7 +52,7 @@
 // at a time instead of one flat directory of everything. SNAP_URL ad hoc captures (no registry
 // entry, so no screen to file under) stay directly under snap-screenshots/.
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { SNAP_COMPONENTS, SNAP_SCENARIOS, type SnapComponent } from './snap-components';
 
 const SCREENSHOT_DIR = 'e2e/snap-screenshots'; // relative to web/ (the suite's cwd) — gitignored
@@ -163,8 +163,6 @@ async function captureComponent(
 }
 
 test('snap', async ({ page }) => {
-  mkdirSync(SCREENSHOT_DIR, { recursive: true });
-
   if (process.env.SNAP_LIST) {
     printRegistry();
     return;
@@ -177,6 +175,17 @@ test('snap', async ({ page }) => {
   const url = process.env.SNAP_URL;
   const scenarioName = process.env.SNAP_SCENARIO;
   const componentName = process.env.SNAP_COMPONENT;
+
+  // A full sweep (the true default, or SNAP_COMPONENT=all) is meant to be a complete,
+  // self-consistent snapshot of the current registry — wipe the whole output dir first so a
+  // renamed/removed registry entry's stale file doesn't linger and look like it's still
+  // current. A single named capture (SNAP_COMPONENT=<name>/SNAP_SCENARIO/SNAP_URL) only ever
+  // touches its own file, so leave every other previously-captured screenshot alone.
+  const isFullSweep = !url && !scenarioName && (!componentName || componentName === 'all');
+  if (isFullSweep) {
+    rmSync(SCREENSHOT_DIR, { recursive: true, force: true });
+  }
+  mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
   if (url) {
     // Ad hoc escape hatch — not in the registry.

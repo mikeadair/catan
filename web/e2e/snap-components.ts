@@ -7,7 +7,7 @@
 // `SNAP_LIST=1 npm run snap` prints this whole registry (components + scenarios) without
 // navigating anywhere, if you just want to check what's available.
 export type SnapPreview = 'home' | 'lobby' | 'trade' | 'board';
-export type SnapScreen = 'main-menu' | 'lobby' | 'game';
+export type SnapScreen = 'main-menu' | 'lobby' | 'game' | 'game/maps';
 
 export interface SnapComponent {
   /** CSS selector for the element to screenshot (first match). */
@@ -170,7 +170,46 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.catan-board',
     preview: 'board',
     screen: 'game',
-    description: 'Hex board SVG (use ?preview=board&map=<preset> via SNAP_URL directly for a non-default map)',
+    description: 'Hex board SVG, default map (official-beginner) — see game/maps/ below for every preset',
+  },
+  // One entry per MapPresetId (packages/engine/src/mapPresets.ts), filed under their own
+  // subfolder so a review pass can check every map's rendering at once without wading through
+  // the rest of the game screen's captures. board (above) stays the quick single-default-map
+  // check most workflows actually want.
+  'map-official-beginner': {
+    selector: '.catan-board',
+    preview: 'board',
+    screen: 'game/maps',
+    query: 'map=official-beginner',
+    description: 'Hex board SVG — official-beginner preset',
+  },
+  'map-balanced-random': {
+    selector: '.catan-board',
+    preview: 'board',
+    screen: 'game/maps',
+    query: 'map=balanced-random',
+    description: 'Hex board SVG — balanced-random preset',
+  },
+  'map-chaos': {
+    selector: '.catan-board',
+    preview: 'board',
+    screen: 'game/maps',
+    query: 'map=chaos',
+    description: 'Hex board SVG — chaos preset',
+  },
+  'map-extended-5-6p': {
+    selector: '.catan-board',
+    preview: 'board',
+    screen: 'game/maps',
+    query: 'map=extended-5-6p',
+    description: 'Hex board SVG — extended-5-6p preset',
+  },
+  'map-fog-of-war': {
+    selector: '.catan-board',
+    preview: 'board',
+    screen: 'game/maps',
+    query: 'map=fog-of-war',
+    description: 'Hex board SVG — fog-of-war preset (desert corners + hidden ring)',
   },
   sidebar: {
     selector: '.game__sidebar',
