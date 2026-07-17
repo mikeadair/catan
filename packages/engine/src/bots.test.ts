@@ -825,7 +825,9 @@ describe('decideBotAction: voluntary development card plays', () => {
 // Trade-repetition guard
 // ---------------------------------------------------------------------------
 
-describe('decideBotAction: does not spam an already-rejected trade within the same turn', () => {
+describe('decideBotAction: does not spam an already-rejected trade', () => {
+  // Note: trades without a proposedTurn field (older docs) exercise the legacy same-turn-only
+  // fallback keyed on createdAt vs turnStartedAt — the first two tests below cover that path.
   it('does not re-propose an identical open trade already rejected earlier this turn', () => {
     const { bundle, botUid } = makeMainPhaseGame(
       'normal',
@@ -870,6 +872,110 @@ describe('decideBotAction: does not spam an already-rejected trade within the sa
       status: 'rejected',
       counterOf: null,
       createdAt: bundle.room.turnStartedAt - 1000, // resolved on a previous turn
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('proposeTrade');
+  });
+
+  it('does not re-propose the same ask rejected within the cross-turn cooldown', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    bundle.room.turnNumber = 10;
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'rejected',
+      counterOf: null,
+      createdAt: bundle.room.turnStartedAt - 1000, // a previous turn...
+      proposedTurn: 8, // ...but only 2 turns ago — inside the cooldown window
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('proposeTrade');
+  });
+
+  it('dedupes on the receive side alone — a shifted give combination for the same ask still counts', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    bundle.room.turnNumber = 10;
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { grain: 1 }, // different give than the { ore: 1 } the bot would offer now
+      receive: { wool: 1 }, // ...but the identical underlying ask
+      status: 'rejected',
+      counterOf: null,
+      createdAt: bundle.room.turnStartedAt - 1000,
+      proposedTurn: 9,
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).not.toBe('proposeTrade');
+  });
+
+  it('proposes the same ask again once the cooldown has elapsed', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    bundle.room.turnNumber = 10;
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'rejected',
+      counterOf: null,
+      createdAt: bundle.room.turnStartedAt - 1000,
+      proposedTurn: 6, // 4 turns ago — past the 3-turn cooldown
+    });
+
+    const action = decideBotAction(bundle, botUid);
+    expect(action?.type).toBe('proposeTrade');
+  });
+
+  it('an accepted past trade never suppresses a new proposal', () => {
+    const { bundle, botUid } = makeMainPhaseGame(
+      'normal',
+      { brick: 2, lumber: 2, ore: 3, grain: 2, wool: 0 },
+      { citiesMaxed: true, roadsMaxed: true, devCardDeckCount: 0 },
+    );
+    bundle.hands['p1'].resources.wool = 2;
+    bundle.room.bank.wool -= 2;
+
+    bundle.room.turnNumber = 10;
+    bundle.trades.push({
+      id: 'old',
+      proposerUid: botUid,
+      targetUid: null,
+      give: { ore: 1 },
+      receive: { wool: 1 },
+      status: 'accepted',
+      counterOf: null,
+      createdAt: Date.now(),
+      proposedTurn: 10,
     });
 
     const action = decideBotAction(bundle, botUid);

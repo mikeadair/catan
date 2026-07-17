@@ -1246,6 +1246,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         status: 'pending',
         counterOf: null,
         createdAt: Date.now(),
+        proposedTurn: room.turnNumber,
         interestedUids: [],
         rejectedUids: [],
       };

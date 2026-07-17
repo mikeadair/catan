@@ -188,6 +188,11 @@ export interface TradeOffer {
   status: TradeStatus;
   counterOf: string | null;
   createdAt: number;
+  // room.turnNumber when this offer was proposed. Lets bots apply a cross-turn cooldown
+  // before re-asking for the same resources after a rejection (see askedRecently in bots.ts),
+  // instead of re-proposing every single turn while a deficit persists. Optional so
+  // older-shaped docs still typecheck.
+  proposedTurn?: number;
   // Open trades (targetUid === null) only: uids who've accepted and are waiting for the
   // proposer to pick one via finalizeTrade. Accepting a *targeted* trade still executes
   // immediately (see respondTrade in rules.ts) since there's only ever one possible

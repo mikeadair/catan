@@ -543,39 +543,41 @@ function decidePlayerTrade(bundle: GameStateBundle, botUid: string, difficulty: 
 
     const receive: Partial<ResourceCount> = {};
     for (const r of missingTypes) receive[r] = deficits[r]!;
-    if (alreadyTriedThisTurn(bundle, botUid, give, receive)) continue;
+    if (askedRecently(bundle, botUid, receive)) continue;
     return { type: 'proposeTrade', uid: botUid, give, receive, targetUid: null };
   }
   return null;
 }
 
-/** Same give/receive shape, resource-for-resource (ignores id/timestamps) — used to recognize
- * "this is the exact trade we already tried," not just "some trade or other is pending." */
+/** Same resource shape, resource-for-resource (ignores id/timestamps) — used to recognize
+ * "this is the same ask we already tried," not just "some trade or other is pending." */
 function sameTradeShape(a: Partial<ResourceCount>, b: Partial<ResourceCount>): boolean {
   return RESOURCES.every((r) => (a[r] ?? 0) === (b[r] ?? 0));
 }
 
-/** Whether this bot already proposed this exact give/receive shape earlier in the *current*
- * turn and it's since been resolved (rejected or cancelled) one way or another. Without this,
- * a rejected open trade whose underlying resource gap hasn't changed gets re-proposed verbatim
- * the moment decideMainAction next runs — and since the proposer's own bot driver now reacts
- * to trade updates promptly (see triggerBotCheck in store.ts) rather than waiting out the old
- * 15s fallback poll, that re-proposal could otherwise fire almost immediately, reading as the
- * bot spamming the same just-declined ask instead of moving on with its turn. */
-function alreadyTriedThisTurn(
-  bundle: GameStateBundle,
-  botUid: string,
-  give: Partial<ResourceCount>,
-  receive: Partial<ResourceCount>,
-): boolean {
+/** How many turns a bot sits out before re-asking for the same resources after an offer
+ * failed (rejected/cancelled/expired/countered). Long enough that a perpetually-one-short
+ * bot doesn't read as spamming the identical declined ask every turn now that turns resolve
+ * quickly (see triggerBotCheck in store.ts), short enough that a genuinely changed table
+ * still gets a retry. */
+const TRADE_RETRY_COOLDOWN_TURNS = 3;
+
+/** Whether this bot already asked for this same `receive` shape recently and the offer
+ * resolved without an acceptance. Keyed on the receive side alone — the actual ask — so a
+ * shifted `give` combination for the same underlying need still counts as a repeat. Recency
+ * is `proposedTurn` within TRADE_RETRY_COOLDOWN_TURNS turns; older docs without that field
+ * fall back to the original same-turn-only check via createdAt. */
+function askedRecently(bundle: GameStateBundle, botUid: string, receive: Partial<ResourceCount>): boolean {
   const { room, trades } = bundle;
   return trades.some(
     (t) =>
       t.proposerUid === botUid &&
       t.status !== 'pending' &&
-      t.createdAt >= room.turnStartedAt &&
-      sameTradeShape(t.give, give) &&
-      sameTradeShape(t.receive, receive),
+      t.status !== 'accepted' &&
+      sameTradeShape(t.receive, receive) &&
+      (t.proposedTurn !== undefined
+        ? room.turnNumber - t.proposedTurn <= TRADE_RETRY_COOLDOWN_TURNS
+        : t.createdAt >= room.turnStartedAt),
   );
 }
 
