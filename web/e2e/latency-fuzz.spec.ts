@@ -54,8 +54,7 @@
 //      passing run writes none of these; when one does fire, its console log line sits right
 //      next to the failing expect()'s own output so a human can immediately correlate the
 //      specific assertion failure with the exact visual transition that produced it.
-// Both save under e2e/latency-fuzz-screenshots/ (gitignored — ad hoc per-run output, not the
-// committed baseline images under e2e/screenshots/).
+// Both save under e2e/latency-fuzz-screenshots/ (gitignored — ad hoc per-run output).
 import { expect, test } from '@playwright/test';
 import { addBots, createRoom, joinRoomByCode, playThroughSetupForSelf, setDisplayName, startGame } from './helpers';
 import {

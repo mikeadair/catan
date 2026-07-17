@@ -13,7 +13,7 @@ firestore-debug.log
 .gstack/
 
 # Ad hoc, per-run screenshots from web/e2e/latency-fuzz.spec.ts — for human review of a given
-# run, not committed baseline images like web/e2e/screenshots/*.png.
+# run.
 web/e2e/latency-fuzz-screenshots/
 
 # Same idea for web/e2e/state-gallery.spec.ts — a broad one-off visual-coverage gallery for

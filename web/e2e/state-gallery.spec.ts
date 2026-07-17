@@ -16,8 +16,8 @@
 //   cd web && npm run test:e2e:gallery
 //
 // Screenshots save to e2e/state-gallery-screenshots/ (gitignored, one-off visual-review
-// material — not the committed baseline images under e2e/screenshots/, and not the seeded,
-// chance-gated captures under e2e/latency-fuzz-screenshots/). Filenames are purely
+// material — not the seeded, chance-gated captures under e2e/latency-fuzz-screenshots/).
+// Filenames are purely
 // descriptive (state + player, e.g. `trade-composer-with-selections.png`,
 // `robber-victim-select.png`) — no seed, since reproducing an exact randomized run isn't the
 // point here; each test just drives straight to the state it wants.

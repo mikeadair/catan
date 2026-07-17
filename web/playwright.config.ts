@@ -8,15 +8,13 @@ export default defineConfig({
   // The latency-fuzz suite (web/e2e/latency-fuzz.spec.ts) has its own dedicated config
   // (playwright.latency.config.ts, run via the test:e2e:latency npm script) and must stay out
   // of this one: it's deliberately slower and more resource-hungry (real injected network
-  // latency, multiple browser contexts, generous settle windows) and this config's
-  // test:e2e:screenshots script already runs on every push to main in
-  // .github/workflows/deploy.yml — we don't want that picking it up by accident.
+  // latency, multiple browser contexts, generous settle windows) and this is the default
+  // config behind test:e2e/test:e2e:ui — we don't want that picking it up by accident.
   //
   // The state-gallery suite (web/e2e/state-gallery.spec.ts) gets the same treatment via its
   // own playwright.gallery.config.ts + test:e2e:gallery npm script: it's opt-in, one-off
   // visual-review material (screenshots saved to the gitignored e2e/state-gallery-screenshots/
-  // dir, not the committed baseline images this config's own test:e2e:screenshots produces),
-  // so it must never get silently picked up by a default `npx playwright test` invocation.
+  // dir), so it must never get silently picked up by a default `npx playwright test` invocation.
   //
   // snap.spec.ts (playwright.snap.config.ts, `npm run snap`) gets the same treatment for the
   // same reason: it's a parameterized single-test tool driven by env vars (SNAP_URL etc.), not

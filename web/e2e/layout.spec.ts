@@ -15,7 +15,6 @@ import {
 test('home screen has no page overflow', async ({ page }) => {
   await setDisplayName(page, 'LayoutBot');
   await assertNoPageOverflow(page);
-  await page.screenshot({ path: 'e2e/screenshots/home.png' });
 });
 
 test('lobby has no page overflow, even fully seated', async ({ page }) => {
@@ -25,7 +24,6 @@ test('lobby has no page overflow, even fully seated', async ({ page }) => {
 
   await addBots(page, 5); // fill every remaining seat
   await assertNoPageOverflow(page);
-  await page.screenshot({ path: 'e2e/screenshots/lobby-full.png' });
 });
 
 test('game board has no page overflow during setup', async ({ page }) => {
@@ -34,7 +32,6 @@ test('game board has no page overflow during setup', async ({ page }) => {
   await addBots(page, 2);
   await startGame(page);
   await assertNoPageOverflow(page);
-  await page.screenshot({ path: 'e2e/screenshots/game-setup.png' });
 });
 
 test('game board has no page overflow mid-game (post-setup)', async ({ page }) => {
@@ -49,5 +46,4 @@ test('game board has no page overflow mid-game (post-setup)', async ({ page }) =
   await playThroughSetupForSelf(page);
 
   await assertNoPageOverflow(page);
-  await page.screenshot({ path: 'e2e/screenshots/game-mid.png' });
 });

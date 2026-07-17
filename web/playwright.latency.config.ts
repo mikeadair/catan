@@ -6,9 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
 // config's own file discovery (testMatch/testIgnore), and a CLI file-path argument only
 // narrows an *already-discovered* file set — it can't add an ignored file back in. So the only
 // way to keep this suite out of every default `npx playwright test` invocation (including the
-// existing `test:e2e`/`test:e2e:screenshots`/`test:e2e:ui` scripts, one of which — screenshots
-// — already runs on every push to main in .github/workflows/deploy.yml) while still being able
-// to run it deliberately is to give it its own config entirely.
+// existing `test:e2e`/`test:e2e:ui` scripts) while still being able to run it deliberately is
+// to give it its own config entirely.
 const PORT = 5183;
 const baseURL = `http://localhost:${PORT}`;
 

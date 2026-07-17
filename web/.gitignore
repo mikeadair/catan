@@ -20,10 +20,6 @@ dist-ssr
 /blob-report/
 /playwright/.cache/
 
-# e2e/screenshots/ is NOT ignored — CI regenerates and commits these on every push to main
-# (see .github/workflows/deploy.yml's capture-screenshots job) so they're always readable
-# straight from the repo, e.g. by a Claude session, without needing to drive a browser.
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

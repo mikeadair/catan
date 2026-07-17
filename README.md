@@ -15,8 +15,8 @@ A browser-based Settlers of Catan clone with real-time multiplayer, built on Fir
 ## Stack
 
 - React + TypeScript + Vite, Zustand for local state
-- Firebase: Firestore (game state), Anonymous Auth, Hosting
-- Client-authoritative: clients compute moves and write new state via Firestore transactions; security rules enforce membership/turn-ownership, not full rule legality
+- Firebase: Firestore (game state), Anonymous Auth, Hosting, Cloud Functions
+- Server-authoritative: clients call the `submitAction`/`startGame` Cloud Functions, which re-run the shared engine reducer server-side and are the sole authority over game state; `firestore.rules` denies direct client writes to game-state docs once a room is `'playing'`
 
 ## Development
 
@@ -33,7 +33,7 @@ cd web
 npm run test
 ```
 
-Run e2e tests (Playwright — drives the real app through Home → Lobby → a full game against production Firebase, at 1080p/ultrawide/1366×768; screenshots land in `web/e2e/screenshots/`):
+Run e2e tests (Playwright — drives the real app through Home → Lobby → a full game against the Firebase Local Emulator Suite, at 1080p/ultrawide/1366×768):
 
 ```bash
 cd web

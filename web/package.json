@@ -12,7 +12,6 @@
     "pretest:e2e": "npm run build --prefix ../packages/engine && npm run build --prefix ../functions && npm run build:e2e-bridge --prefix ../functions",
     "test:e2e": "firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh\"",
     "test:e2e:ui": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --ui\"",
-    "test:e2e:screenshots": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --project=desktop-1080p\"",
     "test:e2e:latency": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --config=playwright.latency.config.ts\"",
     "test:e2e:gallery": "npm run pretest:e2e && firebase emulators:exec --project mikeadair-catan --only auth,firestore \"bash e2e/run-with-bridge.sh --config=playwright.gallery.config.ts\"",
     "snap": "playwright test --config=playwright.snap.config.ts"
