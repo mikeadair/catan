@@ -133,7 +133,7 @@ describe('generateBoard: extended-5-6p', () => {
 });
 
 describe('generateBoard: fog-of-war', () => {
-  const EXPECTED_OASIS_NUMBERS = [2, 3, 4, 5, 6, 6, 8, 8, 9, 10, 11, 12].sort((a, b) => a - b);
+  const EXPECTED_OASIS_NUMBERS = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
   const DIRS = [
     [1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1],
   ] as const;
@@ -146,31 +146,33 @@ describe('generateBoard: fog-of-war', () => {
   const isAdjacent = (a: { q: number; r: number }, b: { q: number; r: number }): boolean =>
     DIRS.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
 
-  it('has 37 hexes with correct terrain/port counts (12 oasis + 18 hidden + 6 desert + 1 gold)', () => {
+  it('has 61 hexes with correct terrain/port counts (30 oasis spanning rings 4+3 + 18 hidden + 12 desert + 1 gold)', () => {
     const board = generateBoard('fog-of-war', 'seed-fog');
-    expect(board.hexes).toHaveLength(37);
+    expect(board.hexes).toHaveLength(61);
 
+    // Combined oasis pool (rings 4+3, 30 hexes: 5,7,5,6,7) + hidden (rings 1+2, 18 hexes:
+    // 3,4,3,4,4) = 8,11,8,10,11.
     const counts = terrainCounts(board);
-    expect(counts.hills).toBe(5); // 2 oasis + 3 hidden
-    expect(counts.forest).toBe(7); // 3 oasis + 4 hidden
-    expect(counts.mountains).toBe(5); // 2 oasis + 3 hidden
-    expect(counts.fields).toBe(6); // 2 oasis + 4 hidden
-    expect(counts.pasture).toBe(7); // 3 oasis + 4 hidden
-    expect(counts.desert).toBe(6);
+    expect(counts.hills).toBe(8);
+    expect(counts.forest).toBe(11);
+    expect(counts.mountains).toBe(8);
+    expect(counts.fields).toBe(10);
+    expect(counts.pasture).toBe(11);
+    expect(counts.desert).toBe(12); // 6 on ring 4 + 6 continuing onto ring 3
     expect(board.hexes.filter((h) => h.terrain === 'gold')).toHaveLength(1);
 
     const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
     for (const d of desertHexes) expect(d.number).toBeNull();
     expect(desertHexes.map((d) => d.id)).toContain(board.robberHexId);
 
-    // Row widths 4,5,6,7,6,5,4 (7 rows) — a true radius-3 hexagon, unlike extended-5-6p's
-    // asymmetric shape. Verified directly (not just the 37 count) since that's what makes
-    // "one revealed outer ring + two hidden rings" well-defined in the first place (see
+    // Row widths 5,6,7,8,9,8,7,6,5 (9 rows) — a true radius-4 hexagon, unlike extended-5-6p's
+    // asymmetric shape. Verified directly (not just the 61 count) since that's what makes
+    // "two revealed outer rings + two hidden rings" well-defined in the first place (see
     // initialFogRevealHexIds).
     const rowWidths = new Map<number, number>();
     for (const h of board.hexes) rowWidths.set(h.coord.r, (rowWidths.get(h.coord.r) ?? 0) + 1);
     expect([...rowWidths.entries()].sort(([a], [b]) => a - b)).toEqual([
-      [-3, 4], [-2, 5], [-1, 6], [0, 7], [1, 6], [2, 5], [3, 4],
+      [-4, 5], [-3, 6], [-2, 7], [-1, 8], [0, 9], [1, 8], [2, 7], [3, 6], [4, 5],
     ]);
 
     expect(board.ports).toHaveLength(9);
@@ -185,56 +187,114 @@ describe('generateBoard: fog-of-war', () => {
     }
   });
 
-  it('places exactly 6 desert hexes, all on ring 3 (the always-revealed outer ring), across many seeds', () => {
+  it('places exactly 12 desert hexes, 6 on ring 4 and 6 continuing onto ring 3, across many seeds', () => {
     for (let i = 0; i < 15; i++) {
       const board = generateBoard('fog-of-war', `fog-desert-seed-${i}`);
       const desertHexes = board.hexes.filter((h) => h.terrain === 'desert');
-      expect(desertHexes, `seed ${i}`).toHaveLength(6);
+      expect(desertHexes, `seed ${i}`).toHaveLength(12);
       for (const d of desertHexes) {
-        expect(cubeRadius(d.coord), `seed ${i}, hex ${d.id}`).toBe(3);
+        const r = cubeRadius(d.coord);
+        expect([3, 4], `seed ${i}, hex ${d.id}`).toContain(r);
         expect(d.number, `seed ${i}, hex ${d.id}`).toBeNull();
+      }
+      const ring4Desert = desertHexes.filter((d) => cubeRadius(d.coord) === 4);
+      const ring3Desert = desertHexes.filter((d) => cubeRadius(d.coord) === 3);
+      expect(ring4Desert, `seed ${i}`).toHaveLength(6);
+      expect(ring3Desert, `seed ${i}`).toHaveLength(6);
+
+      // Each ring-3 desert hex continues the corridor inward from a ring-4 desert hex, not
+      // floating independently — every one of them must be adjacent to a ring-4 desert hex.
+      for (const d of ring3Desert) {
+        const hasRing4DesertNeighbor = ring4Desert.some((r4) => isAdjacent(d.coord, r4.coord));
+        expect(hasRing4DesertNeighbor, `seed ${i}, hex ${d.id}`).toBe(true);
       }
     }
   });
 
-  it('each desert hex is a lone singleton between two oasis clusters (no desert-desert adjacency, no oasis/desert overlap)', () => {
+  it('each desert hex (on either revealed ring) is a lone singleton between two oasis clusters (no desert-desert adjacency, no oasis/desert overlap)', () => {
     for (let i = 0; i < 15; i++) {
       const board = generateBoard('fog-of-war', `fog-oasis-seed-${i}`);
-      const ring3 = board.hexes.filter((h) => cubeRadius(h.coord) === 3);
-      expect(ring3, `seed ${i}`).toHaveLength(18);
-      const desertHexes = ring3.filter((h) => h.terrain === 'desert');
-      const oasisHexes = ring3.filter((h) => h.terrain !== 'desert');
-      expect(desertHexes, `seed ${i}`).toHaveLength(6);
-      expect(oasisHexes, `seed ${i}`).toHaveLength(12);
+      const outer = board.hexes.filter((h) => cubeRadius(h.coord) === 4 || cubeRadius(h.coord) === 3);
+      expect(outer, `seed ${i}`).toHaveLength(42);
+      const desertHexes = outer.filter((h) => h.terrain === 'desert');
+      const oasisHexes = outer.filter((h) => h.terrain !== 'desert');
+      expect(desertHexes, `seed ${i}`).toHaveLength(12);
+      expect(oasisHexes, `seed ${i}`).toHaveLength(30);
 
-      // Every desert hex's ring-3 neighbors must all be oasis hexes — confirms the pairing
-      // logic never accidentally leaves two desert hexes adjacent to each other.
+      // Every desert hex has at most one desert neighbor within the two revealed rings — its
+      // own radial continuation partner on the *other* ring (the whole point of the corridor
+      // spanning both rings) — and never a same-ring desert neighbor, confirming the pairing
+      // logic never accidentally leaves two same-ring desert hexes adjacent to each other.
       for (const d of desertHexes) {
-        const neighbors = ring3.filter((h) => h.id !== d.id && isAdjacent(h.coord, d.coord));
+        const neighbors = outer.filter((h) => h.id !== d.id && isAdjacent(h.coord, d.coord));
         expect(neighbors.length, `seed ${i}, hex ${d.id}`).toBeGreaterThan(0);
-        for (const n of neighbors) {
-          expect(n.terrain, `seed ${i}, hex ${d.id} neighbor ${n.id}`).not.toBe('desert');
+        const desertNeighbors = neighbors.filter((n) => n.terrain === 'desert');
+        expect(desertNeighbors.length, `seed ${i}, hex ${d.id}`).toBeLessThanOrEqual(1);
+        for (const dn of desertNeighbors) {
+          expect(cubeRadius(dn.coord), `seed ${i}, hex ${d.id} desert neighbor ${dn.id}`).not.toBe(cubeRadius(d.coord));
         }
       }
 
-      // Every oasis hex has at least one ring-3 neighbor that's also an oasis hex (its
-      // cluster partner) — no oasis hex is an isolated singleton.
+      // Every oasis hex has at least one same-status neighbor within the two revealed rings —
+      // no oasis hex is an isolated singleton.
       for (const o of oasisHexes) {
-        const neighbors = ring3.filter((h) => h.id !== o.id && isAdjacent(h.coord, o.coord));
+        const neighbors = outer.filter((h) => h.id !== o.id && isAdjacent(h.coord, o.coord));
         expect(neighbors.some((n) => n.terrain !== 'desert'), `seed ${i}, hex ${o.id}`).toBe(true);
       }
     }
   });
 
-  it('every revealed non-desert, non-gold hex gets a number from the oasis pool', () => {
+  it('oasis clusters genuinely span both revealed rings, forming exactly 6 connected wedges divided by desert', () => {
+    for (let i = 0; i < 15; i++) {
+      const board = generateBoard('fog-of-war', `fog-wedge-seed-${i}`);
+      const outer = board.hexes.filter((h) => cubeRadius(h.coord) === 4 || cubeRadius(h.coord) === 3);
+      const oasisHexes = outer.filter((h) => h.terrain !== 'desert');
+      const byId = new Map(oasisHexes.map((h) => [h.id, h]));
+
+      // Flood-fill through oasis-only adjacency (never stepping onto a desert hex) to find
+      // connected components — should be exactly 6 (one per compass wedge), and at least one
+      // of them must contain hexes from *both* rings, or this would just be "two independently
+      // patterned rings" rather than genuinely spanning clusters.
+      const seen = new Set<string>();
+      const components: (typeof oasisHexes)[] = [];
+      for (const start of oasisHexes) {
+        if (seen.has(start.id)) continue;
+        const component: typeof oasisHexes = [];
+        const queue = [start];
+        seen.add(start.id);
+        while (queue.length > 0) {
+          const cur = queue.pop()!;
+          component.push(cur);
+          for (const h of oasisHexes) {
+            if (!seen.has(h.id) && isAdjacent(cur.coord, h.coord)) {
+              seen.add(h.id);
+              queue.push(h);
+            }
+          }
+        }
+        components.push(component);
+      }
+      expect(components, `seed ${i}`).toHaveLength(6);
+      for (const c of components) expect(c.length, `seed ${i}`).toBe(5); // 3 (ring 4) + 2 (ring 3)
+
+      const spansBothRings = components.some(
+        (c) => c.some((h) => cubeRadius(h.coord) === 4) && c.some((h) => cubeRadius(h.coord) === 3),
+      );
+      expect(spansBothRings, `seed ${i}`).toBe(true);
+      expect(byId.size, `seed ${i}`).toBe(30);
+    }
+  });
+
+  it('every revealed non-desert, non-gold hex gets a number from the shared oasis pool', () => {
     const board = generateBoard('fog-of-war', 'seed-fog-gold');
     const centerHex = board.hexes.find((h) => h.coord.q === 0 && h.coord.r === 0)!;
     expect(centerHex.terrain).toBe('gold');
 
-    const validNumbers = new Set(EXPECTED_OASIS_NUMBERS);
+    const validOasisNumbers = new Set(EXPECTED_OASIS_NUMBERS);
     for (const hex of board.hexes) {
-      if (hex.terrain === 'gold' || hex.terrain === 'desert') continue;
-      if (hex.number !== null) expect(validNumbers.has(hex.number)).toBe(true);
+      if (hex.terrain === 'gold' || hex.terrain === 'desert' || hex.number === null) continue;
+      const r = cubeRadius(hex.coord);
+      if (r === 4 || r === 3) expect(validOasisNumbers.has(hex.number)).toBe(true);
     }
   });
 

@@ -25,6 +25,6 @@ export const MAP_PRESETS: MapPreset[] = [
     id: 'fog-of-war',
     name: 'Fog of War',
     description:
-      'A larger 37-hex board. The outer ring is known at the start: 6 two-tile "oasis" clusters of real resources at the compass directions, with a lone desert tile between each pair — so desert is the single most common tile out there, and the fertile spots are the exception. A gold tile sits at the very center, guaranteed to roll a hot 6 or 8. The two hidden rings in between reveal one hex at a time (with a freshly random number) as your roads reach them, granting a resource on discovery. The gold tile lets whoever rolls it pick their own resource, but can\'t be settled on at setup.',
+      'A larger 61-hex board. The outer two rings are known at the start, forming 6 radial "oasis" wedges of real resources at the compass directions that span both rings, divided from each other by 6 desert corridors that cut all the way through both rings too — so desert is the single most common tile out there, and the fertile spots are the exception. A gold tile sits at the very center, guaranteed to roll a hot 6 or 8. The two hidden rings in between reveal one hex at a time (with a freshly random number) as your roads reach them, granting a resource on discovery. The gold tile lets whoever rolls it pick their own resource, but can\'t be settled on at setup.',
   },
 ];
