@@ -168,6 +168,14 @@ test('snap', async ({ page }) => {
     return;
   }
 
+  // SNAP_VIEWPORT=WxH (e.g. 1280x720) overrides the config's default 1920x1080 — for checking
+  // how a screen holds up at other desktop sizes.
+  const viewportOverride = process.env.SNAP_VIEWPORT;
+  if (viewportOverride) {
+    const [w, h] = viewportOverride.split('x').map(Number);
+    if (Number.isFinite(w) && Number.isFinite(h)) await page.setViewportSize({ width: w, height: h });
+  }
+
   // Explicit SNAP_PAD applies everywhere; otherwise registry captures (which know their own
   // component and can afford a sensible default) get DEFAULT_PAD, while the SNAP_URL ad hoc
   // escape hatch (arbitrary, un-registered selector) stays a tight crop unless asked for more.

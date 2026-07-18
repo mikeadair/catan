@@ -71,3 +71,13 @@
   color: var(--color-text-dim);
   letter-spacing: 0.02em;
 }
+
+/* Compact variant for medium desktops — pairs with Game.css's max-width: 1500px rules, so the
+   whole action cluster fits beside the (narrowed) hand box instead of wrapping into a tall
+   column that starves the board row. */
+@media (max-width: 1500px) {
+  .build-toolbar__button {
+    min-width: 84px;
+    padding: 8px 10px;
+  }
+}

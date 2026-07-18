@@ -541,3 +541,66 @@
   padding: 10px 20px;
   font-weight: 700;
 }
+
+/* --- Responsive: medium desktop (~1280-1500px wide) ---------------------------------------
+   The toolbar's fixed-width hand box (620px) plus the 320px sidebar left the build/dev action
+   cluster ~300px at 1280px wide — its buttons stacked into a tall column, and since the
+   toolbar lives in the grid's `auto` row, that height came straight out of the board's `1fr`
+   row (collapsing the board entirely at 1280x720). Shrink the fixed-footprint pieces instead:
+   the hand box narrows (its card groups wrap within), the sidebar gives up 40px, and the
+   build buttons compact (see BuildToolbar.css's matching media query). */
+@media (max-width: 1500px) {
+  .game {
+    grid-template-columns: 1fr 280px;
+  }
+  .game--sidebar-left {
+    grid-template-columns: 280px 1fr;
+  }
+  .game--fog {
+    grid-template-columns: 1fr 240px;
+  }
+  .game--fog.game--sidebar-left {
+    grid-template-columns: 240px 1fr;
+  }
+  .game__toolbar-main {
+    gap: 10px;
+  }
+  .game__toolbar-hand {
+    width: 380px;
+    flex: 0 0 380px;
+    min-height: 150px;
+  }
+  /* Board water margins are widest on the left at these sizes — parking the trades overlay
+     there keeps it clear of the bottom-right dice roller it was starting to cover. */
+  .game__trades-overlay {
+    left: 12px;
+    right: auto;
+  }
+}
+
+/* Short viewports: trim the hand box's two-row budget — one row plus the label is plenty when
+   vertical space is the scarce resource, and the occasional second row growing the footer is
+   the lesser evil vs. permanently starving the board's 1fr row. */
+@media (max-height: 840px) {
+  .game__toolbar-hand {
+    min-height: 118px;
+  }
+}
+
+/* --- Responsive: extra-large desktop (>= 2200px wide) --------------------------------------
+   The board SVG already scales up to fill its column; the fixed 320px sidebar just reads
+   disproportionately small out there — give it (and the fog variant) a bit more room. */
+@media (min-width: 2200px) {
+  .game {
+    grid-template-columns: 1fr 380px;
+  }
+  .game--sidebar-left {
+    grid-template-columns: 380px 1fr;
+  }
+  .game--fog {
+    grid-template-columns: 1fr 320px;
+  }
+  .game--fog.game--sidebar-left {
+    grid-template-columns: 320px 1fr;
+  }
+}
