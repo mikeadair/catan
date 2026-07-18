@@ -43,7 +43,7 @@ import {
   MIN_OPEN_TRADE_WINDOW_MS,
   RESOURCES,
   STARTING_BANK,
-  TERRAIN_RESOURCE,
+  TERRAIN_RESOURCE, GamePhase
 } from './types';
 import { pipCount, vertexLegalForFogSetup } from './board';
 import { hexProtectsWeakPlayer, type GameStateBundle } from './rules';
@@ -63,23 +63,23 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
   if (!player || !hand || !room.board) return null;
   const difficulty: BotDifficulty = player.botDifficulty ?? 'normal';
 
-  if (room.phase === 'discard') {
+  if (room.phase === GamePhase.Discard) {
     if (!room.pendingDiscardUids.includes(botUid)) return null;
     return decideDiscard(bundle, botUid);
   }
 
-  if (room.phase === 'goldPick') {
+  if (room.phase === GamePhase.GoldPick) {
     const pending = room.pendingGoldPicks.find((p) => p.uid === botUid);
     if (!pending) return null;
     return decideGoldPick(bundle, botUid, pending.amount);
   }
 
-  if (room.phase === 'setup1' || room.phase === 'setup2') {
+  if (room.phase === GamePhase.Setup1 || room.phase === GamePhase.Setup2) {
     if (room.turnOrder[room.currentPlayerIndex] !== botUid) return null;
     return decideSetupAction(bundle, botUid, difficulty);
   }
 
-  if (room.phase === 'robber') {
+  if (room.phase === GamePhase.Robber) {
     if (room.turnOrder[room.currentPlayerIndex] !== botUid) return null;
     return decideRobberMove(bundle, botUid, null, difficulty);
   }
@@ -96,16 +96,16 @@ function decideBotActionInner(bundle: GameStateBundle, botUid: string): GameActi
   // triggerOffTurnBotTradeChecks in store.ts) finally picks it up. decideTradeResponse itself
   // already no-ops (returns null) when there's nothing respondable, so this is a cheap check
   // on every turn.
-  if (room.phase === 'roll' || room.phase === 'main') {
+  if (room.phase === GamePhase.Roll || room.phase === GamePhase.Main) {
     const tradeResponse = decideTradeResponse(bundle, botUid, difficulty);
     if (tradeResponse) return tradeResponse;
   }
 
-  if (room.phase === 'roll') {
+  if (room.phase === GamePhase.Roll) {
     return { type: 'rollDice', uid: botUid };
   }
 
-  if (room.phase === 'main') {
+  if (room.phase === GamePhase.Main) {
     return decideMainAction(bundle, botUid, difficulty);
   }
 

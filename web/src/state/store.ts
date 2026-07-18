@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { RoomState, PublicPlayer, PrivateHand, TradeOffer, GameAction } from '@catan/engine';
-import { TRADE_EXPIRY_MS } from '@catan/engine';
+import { TRADE_EXPIRY_MS, RoomStatus, predictAction } from '@catan/engine';
 import {
   subscribeRoom,
   subscribePlayers,
@@ -102,6 +102,14 @@ let tradeExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 // responders rather than the trade's own overall TTL.
 let tradeResponseTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Bumped every time any game-state listener (room/players/trades/ownHand) delivers a server
+// snapshot. dispatch()'s optimistic overlay records the epoch it was applied at; its
+// on-error rollback only restores the pre-prediction copy if the epoch hasn't moved, because
+// any snapshot that landed in between is newer truth than that copy. (On success there's
+// nothing to do: the post-action snapshots simply overwrite the overlay with the real thing,
+// which for a predictable action is identical modulo server-generated ids/timestamps.)
+let serverSnapshotEpoch = 0;
+
 function teardown() {
   unsubscribers.forEach((u) => u());
   unsubscribers = [];
@@ -136,7 +144,7 @@ function teardown() {
 // ever driven), computed here against state we already have locally from the room/players
 // listeners — so most of the time we can tell "nothing to do" without touching Firestore.
 function isBotTurn(room: RoomState | null, players: Record<string, PublicPlayer>): boolean {
-  if (!room || room.status !== 'playing') return false;
+  if (!room || room.status !== RoomStatus.Playing) return false;
   const currentUid = room.turnOrder[room.currentPlayerIndex];
   return !!currentUid && players[currentUid]?.isBot === true;
 }
@@ -206,7 +214,7 @@ function runOffTurnBotTradeIfDue(roomId: string, botUid: string, get: () => Game
  */
 function triggerOffTurnBotTradeChecks(roomId: string, get: () => GameStore): void {
   const { roomId: currentRoomId, room, players, trades } = get();
-  if (currentRoomId !== roomId || !room || room.status !== 'playing') return;
+  if (currentRoomId !== roomId || !room || room.status !== RoomStatus.Playing) return;
   const currentUid = room.turnOrder[room.currentPlayerIndex];
 
   for (const [botUid, player] of Object.entries(players)) {
@@ -247,7 +255,7 @@ function triggerOffTurnBotTradeChecks(roomId: string, get: () => GameStore): voi
 
 function runTradeExpiryIfDue(roomId: string, get: () => GameStore): void {
   const { roomId: currentRoomId, room, uid, trades } = get();
-  if (currentRoomId === roomId && room?.status === 'playing' && !room.paused && uid) {
+  if (currentRoomId === roomId && room?.status === RoomStatus.Playing && !room.paused && uid) {
     const now = Date.now();
     if (trades.some((t) => t.status === 'pending' && now - t.createdAt >= TRADE_EXPIRY_MS)) {
       void fbDispatchAction(roomId, { type: 'expireTrades', uid }).catch(() => {});
@@ -271,7 +279,7 @@ function scheduleTradeExpiryCheck(roomId: string, get: () => GameStore): void {
   // While paused the server rejects expireTrades ("Game is paused"), so arming a timer would
   // just spin against a deadline that can never resolve — stay dark and let the room
   // listener re-arm on unpause.
-  if (currentRoomId !== roomId || room?.status !== 'playing' || room.paused) return;
+  if (currentRoomId !== roomId || room?.status !== RoomStatus.Playing || room.paused) return;
 
   const now = Date.now();
   const deadlines = trades.filter((t) => t.status === 'pending').map((t) => t.createdAt + TRADE_EXPIRY_MS);
@@ -297,7 +305,7 @@ function hasPendingResponders(trade: TradeOffer, players: Record<string, PublicP
 
 function runTradeResponseTimeoutIfDue(roomId: string, get: () => GameStore): void {
   const { roomId: currentRoomId, room, uid, trades, players } = get();
-  if (currentRoomId === roomId && room?.status === 'playing' && !room.paused && uid && room.tradeResponseTimerSeconds !== null) {
+  if (currentRoomId === roomId && room?.status === RoomStatus.Playing && !room.paused && uid && room.tradeResponseTimerSeconds !== null) {
     const now = Date.now();
     const deadlineMs = room.tradeResponseTimerSeconds * 1000;
     const anyOverdue = trades.some(
@@ -324,7 +332,7 @@ function scheduleTradeResponseTimeoutCheck(roomId: string, get: () => GameStore)
   }
   const { roomId: currentRoomId, room, trades, players } = get();
   // Same paused rationale as scheduleTradeExpiryCheck above.
-  if (currentRoomId !== roomId || room?.status !== 'playing' || room.paused || room.tradeResponseTimerSeconds === null) return;
+  if (currentRoomId !== roomId || room?.status !== RoomStatus.Playing || room.paused || room.tradeResponseTimerSeconds === null) return;
 
   const now = Date.now();
   const deadlineMs = room.tradeResponseTimerSeconds * 1000;
@@ -359,6 +367,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     unsubscribers.push(
       subscribeRoom(roomId, (room) => {
+        serverSnapshotEpoch += 1;
         set({ room });
         triggerBotCheck(roomId, get);
         triggerOffTurnBotTradeChecks(roomId, get);
@@ -371,6 +380,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     unsubscribers.push(
       subscribePlayers(roomId, (players) => {
+        serverSnapshotEpoch += 1;
         set({ players });
         triggerBotCheck(roomId, get);
         triggerOffTurnBotTradeChecks(roomId, get);
@@ -378,6 +388,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     unsubscribers.push(
       subscribeTrades(roomId, (trades) => {
+        serverSnapshotEpoch += 1;
         set({ trades });
         tradesReady = true;
         // A trade being proposed/accepted/rejected/cancelled only ever touches the trades
@@ -397,7 +408,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const uid = get().uid;
     if (uid) {
-      unsubscribers.push(subscribeOwnHand(roomId, uid, (ownHand) => set({ ownHand })));
+      unsubscribers.push(
+        subscribeOwnHand(roomId, uid, (ownHand) => {
+          serverSnapshotEpoch += 1;
+          set({ ownHand });
+        })
+      );
       heartbeat(roomId, uid).catch(() => {});
       heartbeatTimer = setInterval(() => {
         heartbeat(roomId, uid).catch(() => {});
@@ -430,11 +446,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   dispatch: async (action) => {
-    const { roomId } = get();
+    const { roomId, uid, room, players, trades, ownHand } = get();
     if (!roomId) return;
+
+    // Optimistic overlay: render the engine's locally-computed result of this action now
+    // instead of after the callable round trip + snapshot fan-out. predictAction returns
+    // null for anything it can't compute faithfully (randomness, hidden hands, illegal
+    // moves) — those dispatches stay a plain round trip, exactly as before. The server
+    // remains the sole authority: its snapshots overwrite the overlay either way.
+    //
+    // Known cosmetic tradeoff: a predicted proposeTrade carries a locally-generated trade
+    // id the server's own doc then replaces, so that one row can remount on confirm.
+    // The bot-driver timers may also briefly read overlaid state; harmless, since every
+    // bot submission is re-validated inside submitAction's transaction.
+    let rollback: (() => void) | null = null;
+    if (uid && room && ownHand && room.status === RoomStatus.Playing) {
+      const predicted = predictAction({ room, players, trades, uid, ownHand }, action);
+      if (predicted) {
+        const prev = { room, players, trades, ownHand };
+        const epochAtOverlay = serverSnapshotEpoch;
+        set({
+          room: predicted.room,
+          players: predicted.players,
+          trades: predicted.trades,
+          ownHand: predicted.hands[uid],
+        });
+        rollback = () => {
+          if (serverSnapshotEpoch === epochAtOverlay) set(prev);
+        };
+      }
+    }
+
     try {
       await fbDispatchAction(roomId, action);
     } catch (err) {
+      rollback?.();
       set({ error: err instanceof Error ? err.message : String(err) });
       throw err;
     }

@@ -18,7 +18,7 @@ import {
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from './config';
-import { decideBotAction } from '@catan/engine';
+import { decideBotAction, GamePhase, RoomStatus } from '@catan/engine';
 import {
   PLAYER_COLORS,
   STARTING_BANK,
@@ -57,6 +57,7 @@ interface SubmitActionRequest {
   roomId: string;
   action: GameAction;
   asBotUid?: string;
+  warmup?: boolean;
 }
 interface SubmitActionResponse {
   ok: true;
@@ -190,7 +191,7 @@ export async function createRoom(
   const room: Omit<RoomState, 'id'> = {
     code,
     hostUid,
-    status: 'lobby',
+    status: RoomStatus.Lobby,
     mapPreset,
     seed: nanoid(16),
     board: null,
@@ -198,7 +199,7 @@ export async function createRoom(
     edges: {},
     turnOrder: [hostUid],
     currentPlayerIndex: 0,
-    phase: 'lobby',
+    phase: GamePhase.Lobby,
     diceRoll: null,
     bank: { ...STARTING_BANK },
     devCardDeck: [], // placeholder while status is 'lobby' — no real deck exists yet, nothing to leak; startGame (Cloud Function) is what deals real cards, kept server-only
@@ -282,7 +283,7 @@ export async function joinRoom(
       throw new Error('Room not found');
     }
     const room = snap.data() as Omit<RoomState, 'id'>;
-    if (room.status !== 'lobby') {
+    if (room.status !== RoomStatus.Lobby) {
       throw new Error('Room already started');
     }
     if (room.turnOrder.includes(uid)) {
@@ -310,7 +311,7 @@ export async function addBot(roomId: string, difficulty: BotDifficulty): Promise
       throw new Error('Room not found');
     }
     const room = snap.data() as Omit<RoomState, 'id'>;
-    if (room.status !== 'lobby') {
+    if (room.status !== RoomStatus.Lobby) {
       throw new Error('Room already started');
     }
     const currentUid = auth.currentUser?.uid ?? null;
@@ -383,7 +384,7 @@ export async function removeSeat(roomId: string, uid: string): Promise<void> {
 
   // Lobby: still a direct client write, same as every other lobby-management action —
   // nothing hidden or resource-bearing is at stake before a game starts.
-  if (room.status === 'lobby') {
+  if (room.status === RoomStatus.Lobby) {
     await runTransaction(db, async (tx) => {
       const ref = roomRef(roomId);
       const pRef = playerRef(roomId, uid);
@@ -441,6 +442,16 @@ export async function dispatchAction(roomId: string, action: GameAction): Promis
   await submitActionCallable({ roomId, action });
 }
 
+/** Fire-and-forget cold-start probe for the submitAction function. Cloud Functions v2 spins
+ * containers down when idle, and the first callable after that pays a multi-second cold
+ * start — firing this on Game mount moves that cost to before the player's first click.
+ * The server returns before auth/Firestore, so this can never touch game state. */
+export function warmUpSubmitAction(): void {
+  submitActionCallable({ warmup: true } as SubmitActionRequest).catch(() => {
+    // Purely best-effort: a failed warm-up costs nothing but the cold start it was avoiding.
+  });
+}
+
 /**
  * Runs decideBotAction for a single bot uid and, if it produced an action, submits it via
  * submitAction (asBotUid). Shared by claimAndRunBotAction (the current-turn driver) and
@@ -478,7 +489,7 @@ export async function claimAndRunBotAction(
   players: Record<string, PublicPlayer>,
   trades: TradeOffer[] = [],
 ): Promise<boolean> {
-  if (room.status !== 'playing') return false;
+  if (room.status !== RoomStatus.Playing) return false;
 
   const botUid = room.turnOrder[room.currentPlayerIndex];
   if (!botUid) return false;
@@ -522,7 +533,7 @@ export async function claimAndRunOffTurnBotTrade(
   trades: TradeOffer[],
   botUid: string,
 ): Promise<boolean> {
-  if (room.status !== 'playing') return false;
+  if (room.status !== RoomStatus.Playing) return false;
   if (room.turnOrder[room.currentPlayerIndex] === botUid) return false; // it's this bot's own turn; claimAndRunBotAction owns that path
   if (!players[botUid]?.isBot) return false;
 

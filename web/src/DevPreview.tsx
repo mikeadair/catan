@@ -1,7 +1,7 @@
 // Temporary, local-only preview harness for iterating on Board.tsx visuals without touching
 // Firebase at all. Wired in from main.tsx behind a query param; delete before shipping.
 import type { JSX } from 'react';
-import { generateBoard, initialFogRevealHexIds } from '@catan/engine';
+import { generateBoard, initialFogRevealHexIds, GamePhase, RoomStatus } from '@catan/engine';
 import Board from './components/Board';
 import type { RoomState, PublicPlayer, MapPresetId } from '@catan/engine';
 import {
@@ -23,7 +23,7 @@ export default function DevPreview(): JSX.Element {
     id: 'preview',
     code: 'PREVW',
     hostUid: 'p0',
-    status: 'playing',
+    status: RoomStatus.Playing,
     mapPreset,
     seed: 'preview-seed',
     board,
@@ -31,7 +31,7 @@ export default function DevPreview(): JSX.Element {
     edges: {},
     turnOrder: ['p0', 'p1'],
     currentPlayerIndex: 0,
-    phase: 'main',
+    phase: GamePhase.Main,
     diceRoll: null,
     bank: { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 },
     devCardDeck: [],

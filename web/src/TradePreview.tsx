@@ -9,7 +9,7 @@
 // `stateOverrides` map. Kept as a flat field-merge (not a second full RoomState literal per
 // state) so every state variant still gets the same board/players/hand as the default preview.
 import { useEffect, type JSX } from 'react';
-import { generateBoard } from '@catan/engine';
+import { generateBoard, GamePhase, RoomStatus } from '@catan/engine';
 import type { RoomState, PublicPlayer, PrivateHand, TradeOffer } from '@catan/engine';
 import {
   PLAYER_COLORS,
@@ -22,10 +22,10 @@ import { useGameStore } from './state/store';
 import Game from './routes/Game';
 
 const stateOverrides: Record<string, Partial<RoomState>> = {
-  discard: { phase: 'discard', pendingDiscardUids: ['p0'], discardPhaseStartedAt: Date.now() - 5_000 },
-  'robber-hex': { phase: 'robber', robberPhaseStartedAt: Date.now() - 5_000 },
-  'gold-pick': { phase: 'goldPick', pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
-  'game-over': { phase: 'gameOver', winnerUid: 'p0' },
+  discard: { phase: GamePhase.Discard, pendingDiscardUids: ['p0'], discardPhaseStartedAt: Date.now() - 5_000 },
+  'robber-hex': { phase: GamePhase.Robber, robberPhaseStartedAt: Date.now() - 5_000 },
+  'gold-pick': { phase: GamePhase.GoldPick, pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
+  'game-over': { phase: GamePhase.GameOver, winnerUid: 'p0' },
   'road-building': { pendingRoadBuilding: { uid: 'p0', roadsRemaining: 2 } },
   paused: { paused: true, pausedAt: Date.now() - 3_000 },
   // Not-yet-paused but a vote is already in ("Pausing… (X/Y)") / paused with a resume vote
@@ -39,8 +39,8 @@ const stateOverrides: Record<string, Partial<RoomState>> = {
   // 'setup1-road' additionally needs `vertices`/`lastSetupSettlementVertexId` populated with a
   // real board-generated vertex id, which isn't known until generateBoard() runs — see the
   // stateName === 'setup1-road' special-case below instead of here.
-  'setup1-settlement': { phase: 'setup1', setupRound: 1, vertices: {}, edges: {} },
-  'setup1-road': { phase: 'setup1', setupRound: 1, edges: {} },
+  'setup1-settlement': { phase: GamePhase.Setup1, setupRound: 1, vertices: {}, edges: {} },
+  'setup1-road': { phase: GamePhase.Setup1, setupRound: 1, edges: {} },
 };
 
 // Separate from stateOverrides (room-phase variants) — this overrides the local player's own
@@ -72,7 +72,7 @@ export default function TradePreview(): JSX.Element {
       id: 'preview',
       code: 'PREVW',
       hostUid: 'p0',
-      status: 'playing',
+      status: RoomStatus.Playing,
       mapPreset: 'official-beginner',
       seed: 'preview-seed',
       board,
@@ -80,7 +80,7 @@ export default function TradePreview(): JSX.Element {
       edges: {},
       turnOrder: ['p0', 'p1', 'p2'],
       currentPlayerIndex: 0,
-      phase: 'main',
+      phase: GamePhase.Main,
       diceRoll: [3, 4],
       bank: { brick: 14, lumber: 9, ore: 19, grain: 5, wool: 0 },
       devCardDeck: [],

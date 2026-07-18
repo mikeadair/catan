@@ -6,3 +6,4 @@ export * from './rules';
 export * from './mapPresets';
 export * from './actionHands';
 export * from './actionValidation';
+export * from './prediction';

@@ -7,6 +7,7 @@ import Home from './routes/Home';
 import Lobby from './routes/Lobby';
 import Game from './routes/Game';
 import './App.css';
+import { RoomStatus } from '@catan/engine';
 
 function App() {
   const { uid, loading } = useAuthUid();
@@ -81,7 +82,7 @@ function App() {
       >
         {muted ? <SoundOffIcon className="sound-toggle__icon" /> : <SoundOnIcon className="sound-toggle__icon" />}
       </button>
-      {!roomId || !room ? <Home uid={uid} /> : room.status === 'lobby' ? <Lobby /> : <Game />}
+      {!roomId || !room ? <Home uid={uid} /> : room.status === RoomStatus.Lobby ? <Lobby /> : <Game />}
     </>
   );
 }

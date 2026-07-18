@@ -34,6 +34,11 @@ describe('submitActionHandler', () => {
     await expectHttpsErrorCode(submitActionHandler(fakeRequest({ roomId, action }, null)), 'unauthenticated');
   });
 
+  it('answers a warmup probe immediately, even unauthenticated, without touching state', async () => {
+    const result = await submitActionHandler(fakeRequest({ warmup: true } as SubmitActionRequest, null));
+    expect(result).toEqual({ ok: true });
+  });
+
   it('rejects a caller who is not a member of the room', async () => {
     await seedPlayingRoom(roomId, [
       { uid: 'p0', displayName: 'Host', isBot: false },

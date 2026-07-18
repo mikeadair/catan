@@ -14,7 +14,7 @@ import {
   DEFAULT_VICTORY_POINTS_TO_WIN,
   DEFAULT_DISCARD_LIMIT,
   DEFAULT_TURN_TIMER_SECONDS,
-  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS,
+  DEFAULT_TRADE_RESPONSE_TIMER_SECONDS, GamePhase, RoomStatus
 } from '@catan/engine';
 import { useGameStore } from './state/store';
 import Lobby from './routes/Lobby';
@@ -32,7 +32,7 @@ export default function LobbyPreview(): JSX.Element {
       id: 'preview',
       code: 'PREVW',
       hostUid: 'p0',
-      status: 'lobby',
+      status: RoomStatus.Lobby,
       mapPreset: 'official-beginner',
       seed: 'preview-seed',
       board: null,
@@ -40,7 +40,7 @@ export default function LobbyPreview(): JSX.Element {
       edges: {},
       turnOrder: uids,
       currentPlayerIndex: 0,
-      phase: 'setup1',
+      phase: GamePhase.Setup1,
       diceRoll: null,
       bank: { brick: 19, lumber: 19, ore: 19, grain: 19, wool: 19 },
       devCardDeck: [],

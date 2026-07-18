@@ -8,6 +8,10 @@ export interface SubmitActionRequest {
   action: GameAction;
   /** Present only when the caller is driving a bot's turn on its behalf. */
   asBotUid?: string;
+  /** Cold-start probe (see warmUpSubmitAction in web/src/firebase/rooms.ts): the handler
+   * returns immediately, before auth or any Firestore access, so the only work done is the
+   * part worth paying for early — booting this function's container. */
+  warmup?: boolean;
 }
 export interface SubmitActionResponse {
   ok: true;
@@ -19,6 +23,9 @@ export interface SubmitActionResponse {
 export async function submitActionHandler(
   request: CallableRequest<SubmitActionRequest>,
 ): Promise<SubmitActionResponse> {
+  if (request.data?.warmup === true) {
+    return { ok: true };
+  }
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Must be signed in.');
   }

@@ -98,18 +98,31 @@ export interface DevCard {
   boughtTurn: number;
 }
 
-export type GamePhase =
-  | 'lobby'
-  | 'setup1'
-  | 'setup2'
-  | 'roll'
-  | 'main'
-  | 'discard'
-  | 'robber'
+// Wire values are frozen (they live in every existing Firestore room doc and in
+// firestore.rules string literals) — only the symbolic names may ever change. Referencing
+// these as GamePhase.Main / RoomStatus.Playing instead of bare strings makes call sites
+// greppable ('main' alone collides with the git branch, CSS, phase arrays, ...).
+export const GamePhase = {
+  Lobby: 'lobby',
+  Setup1: 'setup1',
+  Setup2: 'setup2',
+  Roll: 'roll',
+  Main: 'main',
+  Discard: 'discard',
+  Robber: 'robber',
   // One or more players rolled a gold hex's number and must each pick their resource(s)
   // before play resumes — see pendingGoldPicks on RoomState.
-  | 'goldPick'
-  | 'gameOver';
+  GoldPick: 'goldPick',
+  GameOver: 'gameOver',
+} as const;
+export type GamePhase = (typeof GamePhase)[keyof typeof GamePhase];
+
+export const RoomStatus = {
+  Lobby: 'lobby',
+  Playing: 'playing',
+  Finished: 'finished',
+} as const;
+export type RoomStatus = (typeof RoomStatus)[keyof typeof RoomStatus];
 
 export const PLAYER_COLORS = ['red', 'blue', 'white', 'orange', 'green', 'brown'] as const;
 export type PlayerColor = (typeof PLAYER_COLORS)[number];
@@ -216,7 +229,7 @@ export interface RoomState {
   id: string;
   code: string;
   hostUid: string;
-  status: 'lobby' | 'playing' | 'finished';
+  status: RoomStatus;
   mapPreset: MapPresetId;
   // Board layout is a deterministic function of this seed, so it's safe public info. Once a
   // game has started, though, the same seed is also the sole input to the dev-card shuffle

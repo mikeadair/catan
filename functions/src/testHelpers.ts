@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { createGame, type CreateGameSeatedPlayer, type GameStateBundle, type RoomState } from '@catan/engine';
+import { createGame, type CreateGameSeatedPlayer, type GameStateBundle, type RoomState, GamePhase } from '@catan/engine';
 import { devDeckRef, handRef, playerRef, roomRef } from './db';
 
 /**
@@ -25,7 +25,7 @@ export async function seedPlayingRoom(
     seatedPlayers,
   );
   bundle.room.phase = opts.phase ?? 'main';
-  if (bundle.room.phase === 'main' || bundle.room.phase === 'roll') {
+  if (bundle.room.phase === GamePhase.Main || bundle.room.phase === GamePhase.Roll) {
     bundle.room.setupRound = null;
     bundle.room.turnNumber = 1;
   }

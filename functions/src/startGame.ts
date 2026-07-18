@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
-import { createGame, type PublicPlayer, type RoomState } from '@catan/engine';
+import { createGame, type PublicPlayer, type RoomState, RoomStatus } from '@catan/engine';
 import { db, devDeckRef, handRef, playerRef, roomRef } from './db';
 
 export interface StartGameRequest {
@@ -32,7 +32,7 @@ export async function startGameHandler(request: CallableRequest<StartGameRequest
       if (callerUid !== room.hostUid) {
         throw new HttpsError('permission-denied', 'Only the host can start the game.');
       }
-      if (room.status !== 'lobby') {
+      if (room.status !== RoomStatus.Lobby) {
         throw new HttpsError('failed-precondition', 'Game already started.');
       }
 
@@ -78,7 +78,7 @@ export async function startGameHandler(request: CallableRequest<StartGameRequest
       const roomToWrite: Omit<RoomState, 'id' | 'devCardDeck'> = {
         ...roomWithoutSecrets,
         seed: '', // never persisted publicly; keep the field present only for type shape
-        status: 'playing',
+        status: RoomStatus.Playing,
         victoryPointsToWin: room.victoryPointsToWin,
         discardLimit: room.discardLimit,
         turnTimerSeconds: room.turnTimerSeconds,

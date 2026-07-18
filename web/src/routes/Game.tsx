@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { useGameStore } from '../state/store';
-import { computeRollGains, legalActionTypes, longestRoadForPlayer, type GameStateBundle } from '@catan/engine';
+import { warmUpSubmitAction } from '../firebase/rooms';
+import { computeRollGains, legalActionTypes, longestRoadForPlayer, type GameStateBundle, GamePhase } from '@catan/engine';
 import type { DevCardType, EdgeId, GameAction, Resource, ResourceCount, TradeOffer, VertexId } from '@catan/engine';
 import { DISCARD_TIMEOUT_SECONDS, MAX_CITIES, MAX_ROADS, MAX_SETTLEMENTS, RESOURCES, ROBBER_TIMEOUT_SECONDS, SETUP_TIMEOUT_SECONDS } from '@catan/engine';
 import { RESOURCE_LABEL } from '../components/resourceIcons';
@@ -156,6 +157,10 @@ export default function Game(): JSX.Element {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+  // Boot submitAction's Cloud Functions container before the player's first click needs it.
+  useEffect(() => {
+    warmUpSubmitAction();
+  }, []);
   // Every dispatched action is a real network round-trip; track which one (if any) is
   // in flight so controls can show pending state instead of just going inert with no
   // feedback until the promise settles.
@@ -211,7 +216,7 @@ export default function Game(): JSX.Element {
   // confirms the move actually landed (or, for a rejected/failed submission that never
   // changes phase, the next real robber phase starts it fresh anyway).
   useEffect(() => {
-    if (room?.phase !== 'robber') setRobberMoveSubmitted(false);
+    if (room?.phase !== GamePhase.Robber) setRobberMoveSubmitted(false);
   }, [room?.phase]);
 
   // Sound effects: play a cue for the newest log entry (covers rolls, builds, trades,
@@ -251,7 +256,7 @@ export default function Game(): JSX.Element {
     const prev = prevResourcesRef.current;
     prevResourcesRef.current = current;
     if (!current || !prev) return;
-    if (room?.phase !== 'setup1' && room?.phase !== 'setup2') return;
+    if (room?.phase !== GamePhase.Setup1 && room?.phase !== GamePhase.Setup2) return;
     const gains = RESOURCES.filter((r) => current[r] > prev[r]).map(
       (r) => `+${current[r] - prev[r]} ${RESOURCE_LABEL[r]}`,
     );
@@ -349,7 +354,7 @@ export default function Game(): JSX.Element {
   // shared turnStartedAt, so no coordination between clients is needed).
   useEffect(() => {
     if (!room || !uid) return;
-    if (room.paused || room.phase !== 'roll' || pendingActionType !== null) return;
+    if (room.paused || room.phase !== GamePhase.Roll || pendingActionType !== null) return;
     if (room.turnOrder[room.currentPlayerIndex] !== uid) return;
     const remaining = Math.max(0, AFK_AUTO_ROLL_MS - (Date.now() - room.turnStartedAt));
     const timer = setTimeout(() => {
@@ -365,7 +370,7 @@ export default function Game(): JSX.Element {
   useEffect(() => {
     if (!room || !uid) return;
     if (room.paused || room.turnTimerSeconds === null) return;
-    if (room.phase !== 'roll' && room.phase !== 'main') return;
+    if (room.phase !== GamePhase.Roll && room.phase !== GamePhase.Main) return;
     const remaining = Math.max(0, room.turnTimerSeconds * 1000 - (Date.now() - room.turnStartedAt));
     const timer = setTimeout(() => {
       void dispatchQuiet({ type: 'timeoutEndTurn', uid });
@@ -379,7 +384,7 @@ export default function Game(): JSX.Element {
   // rather than a configurable house rule.
   useEffect(() => {
     if (!room || !uid) return;
-    if (room.paused || room.phase !== 'discard' || room.discardPhaseStartedAt === null) return;
+    if (room.paused || room.phase !== GamePhase.Discard || room.discardPhaseStartedAt === null) return;
     const remaining = Math.max(0, DISCARD_TIMEOUT_SECONDS * 1000 - (Date.now() - room.discardPhaseStartedAt));
     const timer = setTimeout(() => {
       void dispatchQuiet({ type: 'timeoutDiscard', uid });
@@ -393,7 +398,7 @@ export default function Game(): JSX.Element {
   // game for everyone else.
   useEffect(() => {
     if (!room || !uid) return;
-    if (room.paused || room.phase !== 'robber' || room.robberPhaseStartedAt === null) return;
+    if (room.paused || room.phase !== GamePhase.Robber || room.robberPhaseStartedAt === null) return;
     const remaining = Math.max(0, ROBBER_TIMEOUT_SECONDS * 1000 - (Date.now() - room.robberPhaseStartedAt));
     const timer = setTimeout(() => {
       void dispatchQuiet({ type: 'timeoutRobber', uid });
@@ -407,7 +412,7 @@ export default function Game(): JSX.Element {
   // game before it's even started for everyone else.
   useEffect(() => {
     if (!room || !uid) return;
-    if (room.paused || (room.phase !== 'setup1' && room.phase !== 'setup2') || room.setupTurnStartedAt === null) return;
+    if (room.paused || (room.phase !== GamePhase.Setup1 && room.phase !== GamePhase.Setup2) || room.setupTurnStartedAt === null) return;
     const remaining = Math.max(0, SETUP_TIMEOUT_SECONDS * 1000 - (Date.now() - room.setupTurnStartedAt));
     const timer = setTimeout(() => {
       void dispatchQuiet({ type: 'timeoutSetupPlacement', uid });
@@ -423,7 +428,7 @@ export default function Game(): JSX.Element {
     return <div className="game-loading">Loading game…</div>;
   }
 
-  if (room.phase === 'gameOver') {
+  if (room.phase === GamePhase.GameOver) {
     shortcutsRef.current = {};
     const winner = room.winnerUid ? players[room.winnerUid] : null;
     const localWin = winner !== null && room.winnerUid === uid;
@@ -624,13 +629,13 @@ export default function Game(): JSX.Element {
   // setup-phase path, which every player hits on every game (hence "still sometimes" after
   // that other fix landed). Counting from room here guarantees this and Board's own un-arm
   // effect fire off the identical room snapshot.
-  const setupActive = (room.phase === 'setup1' || room.phase === 'setup2') && isCurrentPlayer;
+  const setupActive = (room.phase === GamePhase.Setup1 || room.phase === GamePhase.Setup2) && isCurrentPlayer;
   const selfRoadsFromRoom = Object.values(room.edges).filter((ownerUid) => ownerUid === uid).length;
   const selfSettlementsFromRoom = Object.values(room.vertices).filter((v) => v.uid === uid).length;
   const setupNeedsSettlement = setupActive && selfSettlementsFromRoom === selfRoadsFromRoom;
   const setupNeedsRoad = setupActive && !setupNeedsSettlement;
 
-  const robberHexStep = !robberMoveSubmitted && ((room.phase === 'robber' && isCurrentPlayer) || !!knightPending);
+  const robberHexStep = !robberMoveSubmitted && ((room.phase === GamePhase.Robber && isCurrentPlayer) || !!knightPending);
 
   // --- Resolve the Board's interaction mode + click handlers, in priority order.
   let interactionMode: BoardInteractionMode = 'none';
@@ -709,31 +714,31 @@ export default function Game(): JSX.Element {
     const n = room.pendingRoadBuilding.roadsRemaining;
     phaseBanner = `Road Building — place ${n} free road${n === 1 ? '' : 's'}.`;
   }
-  else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
-  else if ((room.phase === 'roll' || room.phase === 'main') && !isCurrentPlayer) {
+  else if (room.phase === GamePhase.Roll && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
+  else if ((room.phase === GamePhase.Roll || room.phase === GamePhase.Main) && !isCurrentPlayer) {
     // An opponent's ordinary turn is most of the game, and without this branch it was the
     // one state with no banner at all — leaving "whose turn is it?" answerable only by
     // spotting the sidebar roster highlight.
     const current = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = current ? `${current.displayName}'s turn…` : null;
   }
-  else if ((room.phase === 'setup1' || room.phase === 'setup2') && !isCurrentPlayer) {
+  else if ((room.phase === GamePhase.Setup1 || room.phase === GamePhase.Setup2) && !isCurrentPlayer) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `${setupRoundLabel}Waiting for ${waitingOn.displayName} to set up…` : null;
-  } else if (room.phase === 'robber' && !isCurrentPlayer && !robberVictimStep) {
+  } else if (room.phase === GamePhase.Robber && !isCurrentPlayer && !robberVictimStep) {
     const waitingOn = players[room.turnOrder[room.currentPlayerIndex]];
     phaseBanner = waitingOn ? `Waiting for ${waitingOn.displayName} to move the robber…` : null;
-  } else if (room.phase === 'discard' && !room.pendingDiscardUids.includes(uid) && room.pendingDiscardUids.length > 0) {
+  } else if (room.phase === GamePhase.Discard && !room.pendingDiscardUids.includes(uid) && room.pendingDiscardUids.length > 0) {
     const names = room.pendingDiscardUids.map((u) => players[u]?.displayName ?? 'someone');
     phaseBanner = `Waiting for ${names.join(', ')} to discard…`;
-  } else if (room.phase === 'goldPick' && !room.pendingGoldPicks.some((p) => p.uid === uid) && room.pendingGoldPicks.length > 0) {
+  } else if (room.phase === GamePhase.GoldPick && !room.pendingGoldPicks.some((p) => p.uid === uid) && room.pendingGoldPicks.length > 0) {
     const names = room.pendingGoldPicks.map((p) => players[p.uid]?.displayName ?? 'someone');
     phaseBanner = `Waiting for ${names.join(', ')} to pick their gold…`;
   }
 
   // Dice rolling only makes sense in roll/main; the toolbar itself (build/trade/hand) is
   // relevant throughout the whole live game now, so it's always mounted below.
-  const showDiceRoller = room.phase === 'roll' || room.phase === 'main';
+  const showDiceRoller = room.phase === GamePhase.Roll || room.phase === GamePhase.Main;
   const selfPlayer = players[uid];
   const piecesLeft = {
     roads: selfPlayer ? MAX_ROADS - selfPlayer.roadsBuilt : 0,
@@ -910,7 +915,7 @@ export default function Game(): JSX.Element {
             <DevCardPanel
               devCards={ownHand?.devCards ?? []}
               turnNumber={room.turnNumber}
-              canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === 'roll' || room.phase === 'main')}
+              canPlayAny={isCurrentPlayer && !room.devCardPlayedThisTurn && (room.phase === GamePhase.Roll || room.phase === GamePhase.Main)}
               blocked={pendingActionType !== null}
               onPlay={handlePlayDevCard}
             />
@@ -945,7 +950,7 @@ export default function Game(): JSX.Element {
       </footer>
 
       <DiscardModal
-        visible={room.phase === 'discard' && room.pendingDiscardUids.includes(uid)}
+        visible={room.phase === GamePhase.Discard && room.pendingDiscardUids.includes(uid)}
         resources={resources}
         onDiscard={(discarded) => void runAction({ type: 'discard', uid, resources: discarded })}
         discardPhaseStartedAt={room.discardPhaseStartedAt}
@@ -954,7 +959,7 @@ export default function Game(): JSX.Element {
       />
 
       <GoldPickModal
-        visible={room.phase === 'goldPick' && room.pendingGoldPicks.some((p) => p.uid === uid)}
+        visible={room.phase === GamePhase.GoldPick && room.pendingGoldPicks.some((p) => p.uid === uid)}
         amount={room.pendingGoldPicks.find((p) => p.uid === uid)?.amount ?? 0}
         bank={room.bank}
         onPick={(picked) => void runAction({ type: 'pickGoldResources', uid, resources: picked })}

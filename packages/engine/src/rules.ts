@@ -42,7 +42,7 @@ import {
   TERRAIN_RESOURCE,
   TRADE_EXPIRY_MS,
   TRADE_TURN_EXTENSION_MS,
-  TURN_TIMER_EXTENSION_CAP_MULTIPLIER,
+  TURN_TIMER_EXTENSION_CAP_MULTIPLIER, GamePhase, RoomStatus
 } from './types';
 import { generateBoard, initialFogRevealHexIds, vertexLegalForFogSetup } from './board';
 import { createRng, shuffle } from './rng';
@@ -112,14 +112,15 @@ function handSize(hand: PrivateHand): number {
 
 /** Picks `required` cards to discard at random from `hand` (a genuine card-by-card shuffle,
  * not a per-type weighting) — used by 'timeoutDiscard' for whichever players didn't discard
- * themselves in time. Deliberately Math.random(), not the board's seeded RNG: this is a
- * live, non-reproducible fallback, same as discoverHexesAtEdge's random number tokens. */
-function randomDiscardSelection(hand: PrivateHand, required: number): Partial<ResourceCount> {
+ * themselves in time. Deliberately live randomness (the caller's rng, Math.random on the
+ * server), not the board's seeded RNG: this is a non-reproducible fallback, same as
+ * discoverHexesAtEdge's random number tokens. */
+function randomDiscardSelection(hand: PrivateHand, required: number, rng: () => number): Partial<ResourceCount> {
   const pool: Resource[] = [];
   for (const r of RESOURCES) {
     for (let i = 0; i < hand.resources[r]; i++) pool.push(r);
   }
-  const picked = shuffle(pool, Math.random).slice(0, required);
+  const picked = shuffle(pool, rng).slice(0, required);
   const result: Partial<ResourceCount> = {};
   for (const r of picked) result[r] = (result[r] ?? 0) + 1;
   return result;
@@ -345,15 +346,15 @@ function totalVictoryPoints(player: PublicPlayer, hand: PrivateHand): number {
 
 function checkWin(bundle: GameStateBundle): void {
   const { room, players, hands } = bundle;
-  if (room.phase === 'gameOver') return;
+  if (room.phase === GamePhase.GameOver) return;
   for (const uid of room.turnOrder) {
     const p = players[uid];
     const h = hands[uid];
     if (!p || !h) continue;
     if (totalVictoryPoints(p, h) >= room.victoryPointsToWin) {
       room.winnerUid = uid;
-      room.phase = 'gameOver';
-      room.status = 'finished';
+      room.phase = GamePhase.GameOver;
+      room.status = RoomStatus.Finished;
       addLog(room, `${p.displayName} wins the game!`);
       return;
     }
@@ -476,7 +477,7 @@ const RANDOM_NUMBER_TOKENS = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
  * not a full shared edge) — not just hexes the edge runs along the full side of. Each edge
  * endpoint vertex can itself border up to 3 hexes, so we union in both endpoints'
  * adjacentHexIds alongside the edge's own adjacentHexIds. */
-function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discovererUid: string): void {
+function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discovererUid: string, rng: () => number): void {
   const { room, players, hands } = bundle;
   const board = room.board;
   if (!board || room.discoveredHexIds === null) return;
@@ -501,7 +502,7 @@ function discoverHexesAtEdge(bundle: GameStateBundle, edgeId: EdgeId, discoverer
     // "undiscovered" here. Guarded anyway (rather than assigning a random number) as
     // defense-in-depth, matching every other codepath's convention of number: null for desert.
     hex.number =
-      hex.terrain === 'desert' ? null : RANDOM_NUMBER_TOKENS[Math.floor(Math.random() * RANDOM_NUMBER_TOKENS.length)];
+      hex.terrain === 'desert' ? null : RANDOM_NUMBER_TOKENS[Math.floor(rng() * RANDOM_NUMBER_TOKENS.length)];
     addLog(room, `${players[discovererUid].displayName} revealed a ${hex.terrain} tile.`);
     const resource = hexResource(hex.terrain);
     if (resource && room.bank[resource] > 0) {
@@ -573,7 +574,7 @@ export function createGame(
     id: roomBase.id,
     code: roomBase.code,
     hostUid: roomBase.hostUid,
-    status: 'playing',
+    status: RoomStatus.Playing,
     mapPreset: roomBase.mapPreset,
     seed: roomBase.seed,
     board,
@@ -581,7 +582,7 @@ export function createGame(
     edges: {},
     turnOrder,
     currentPlayerIndex: 0,
-    phase: 'setup1',
+    phase: GamePhase.Setup1,
     diceRoll: null,
     bank: { ...STARTING_BANK },
     devCardDeck,
@@ -663,7 +664,11 @@ function edgeConnectsToOwnNetwork(room: RoomState, edgeId: EdgeId, uid: string):
 // applyAction
 // ---------------------------------------------------------------------------
 
-export function applyAction(bundle: GameStateBundle, action: GameAction): GameStateBundle {
+/** `rng` exists so a client-side optimistic prediction can pass a guard that *refuses*
+ * randomness (see prediction.ts) — any action path that would consume live randomness
+ * (dice, steals, timeout auto-picks, fog number tokens) then bails instead of silently
+ * diverging from what the server will compute. Server/authoritative callers omit it. */
+export function applyAction(bundle: GameStateBundle, action: GameAction, rng: () => number = Math.random): GameStateBundle {
   const next: GameStateBundle = structuredClone(bundle);
   const { room, players, hands, trades } = next;
   const board = room.board;
@@ -677,9 +682,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
   switch (action.type) {
     case 'rollDice': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll']);
-      const d1 = 1 + Math.floor(Math.random() * 6);
-      const d2 = 1 + Math.floor(Math.random() * 6);
+      requirePhase(room, [GamePhase.Roll]);
+      const d1 = 1 + Math.floor(rng() * 6);
+      const d2 = 1 + Math.floor(rng() * 6);
       room.diceRoll = [d1, d2];
       const roll = d1 + d2;
       // computeRollGains is a preview (doesn't account for the bank running short of a
@@ -699,9 +704,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         if (discardUids.length > 0) {
           room.pendingDiscardUids = discardUids;
           room.discardPhaseStartedAt = Date.now();
-          room.phase = 'discard';
+          room.phase = GamePhase.Discard;
         } else {
-          room.phase = 'robber';
+          room.phase = GamePhase.Robber;
           room.robberPhaseStartedAt = Date.now();
         }
       } else {
@@ -709,16 +714,16 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         const goldPicks = board ? computeGoldPickClaims(board, room.vertices, roll) : [];
         if (goldPicks.length > 0) {
           room.pendingGoldPicks = goldPicks;
-          room.phase = 'goldPick';
+          room.phase = GamePhase.GoldPick;
         } else {
-          room.phase = 'main';
+          room.phase = GamePhase.Main;
         }
       }
       break;
     }
 
     case 'pickGoldResources': {
-      requirePhase(room, ['goldPick']);
+      requirePhase(room, [GamePhase.GoldPick]);
       const pending = room.pendingGoldPicks.find((p) => p.uid === action.uid);
       if (!pending) throw new Error('You do not have a pending gold pick');
       if (action.resources.length !== pending.amount) {
@@ -739,13 +744,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       });
       room.pendingGoldPicks = room.pendingGoldPicks.filter((p) => p.uid !== action.uid);
       if (room.pendingGoldPicks.length === 0) {
-        room.phase = 'main';
+        room.phase = GamePhase.Main;
       }
       break;
     }
 
     case 'discard': {
-      requirePhase(room, ['discard']);
+      requirePhase(room, [GamePhase.Discard]);
       if (!room.pendingDiscardUids.includes(action.uid)) {
         throw new Error('You do not need to discard');
       }
@@ -764,7 +769,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.pendingDiscardUids = room.pendingDiscardUids.filter((u) => u !== action.uid);
       addLog(room, `${players[action.uid].displayName} discarded ${required} cards.`);
       if (room.pendingDiscardUids.length === 0) {
-        room.phase = 'robber';
+        room.phase = GamePhase.Robber;
         room.discardPhaseStartedAt = null;
         room.robberPhaseStartedAt = Date.now();
       }
@@ -772,7 +777,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
     }
 
     case 'timeoutDiscard': {
-      requirePhase(room, ['discard']);
+      requirePhase(room, [GamePhase.Discard]);
       if (room.discardPhaseStartedAt === null) throw new Error('No discard timer is running');
       const elapsedMs = Date.now() - room.discardPhaseStartedAt;
       if (elapsedMs < DISCARD_TIMEOUT_SECONDS * 1000) {
@@ -783,7 +788,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       for (const discardUid of [...room.pendingDiscardUids]) {
         const hand = requireHand(hands, discardUid);
         const required = Math.floor(handSize(hand) / 2);
-        const picked = randomDiscardSelection(hand, required);
+        const picked = randomDiscardSelection(hand, required, rng);
         deduct(hand.resources, picked);
         credit(room.bank, picked);
         players[discardUid].resourceCount = handSize(hand);
@@ -791,7 +796,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       }
       room.pendingDiscardUids = [];
       room.discardPhaseStartedAt = null;
-      room.phase = 'robber';
+      room.phase = GamePhase.Robber;
       room.robberPhaseStartedAt = Date.now();
       break;
     }
@@ -801,7 +806,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       const isKnight = action.type === 'playKnight';
       requireCurrentPlayer(room, action.uid);
       if (isKnight) {
-        requirePhase(room, ['roll', 'main']);
+        requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
         if (room.devCardPlayedThisTurn) throw new Error('Already played a development card this turn');
         const hand = requireHand(hands, action.uid);
         const idx = hand.devCards.findIndex((c) => c.id === action.devCardId && c.type === 'knight');
@@ -814,7 +819,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         players[action.uid].knightsPlayed += 1;
         room.devCardPlayedThisTurn = true;
       } else {
-        requirePhase(room, ['robber']);
+        requirePhase(room, [GamePhase.Robber]);
       }
       if (!board) throw new Error('No board');
       if (!board.hexes.some((h) => h.id === action.robberHexId)) {
@@ -849,7 +854,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           for (let i = 0; i < victimHand.resources[r]; i++) pool.push(r);
         }
         if (pool.length > 0) {
-          const stolen = pool[Math.floor(Math.random() * pool.length)];
+          const stolen = pool[Math.floor(rng() * pool.length)];
           victimHand.resources[stolen] -= 1;
           hands[action.uid].resources[stolen] += 1;
           players[victimUid].resourceCount = handSize(victimHand);
@@ -857,8 +862,8 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           addLog(room, `${players[action.uid].displayName} stole a card from ${players[victimUid].displayName}.`);
         }
       }
-      if (room.phase === 'robber') {
-        room.phase = 'main';
+      if (room.phase === GamePhase.Robber) {
+        room.phase = GamePhase.Main;
         room.robberPhaseStartedAt = null;
       }
       if (isKnight) recalcLargestArmy(room, players);
@@ -866,7 +871,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
     }
 
     case 'timeoutRobber': {
-      requirePhase(room, ['robber']);
+      requirePhase(room, [GamePhase.Robber]);
       if (room.robberPhaseStartedAt === null) throw new Error('No robber timer is running');
       const elapsedMs = Date.now() - room.robberPhaseStartedAt;
       if (elapsedMs < ROBBER_TIMEOUT_SECONDS * 1000) {
@@ -883,16 +888,16 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       // Fail open, matching moveRobber's own safe-mode handling: if every remaining hex would
       // be protected, allow any of them rather than having nothing legal to pick.
       const pool = unprotected.length > 0 ? unprotected : legalHexes;
-      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      const chosen = pool[Math.floor(rng() * pool.length)];
       board.robberHexId = chosen.id;
-      room.phase = 'main';
+      room.phase = GamePhase.Main;
       room.robberPhaseStartedAt = null;
       addLog(room, `${players[timedOutUid].displayName} ran out of time — the robber moved at random.`);
       break;
     }
 
     case 'timeoutSetupPlacement': {
-      requirePhase(room, ['setup1', 'setup2']);
+      requirePhase(room, [GamePhase.Setup1, GamePhase.Setup2]);
       if (room.setupTurnStartedAt === null) throw new Error('No setup timer is running');
       const elapsedMs = Date.now() - room.setupTurnStartedAt;
       if (elapsedMs < SETUP_TIMEOUT_SECONDS * 1000) {
@@ -913,14 +918,14 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           return vertexLegalForFogSetup(board, room.discoveredHexIds, vId);
         });
         if (candidates.length === 0) throw new Error('No legal setup settlement spot available to time out into');
-        const vertexId = candidates[Math.floor(Math.random() * candidates.length)];
+        const vertexId = candidates[Math.floor(rng() * candidates.length)];
         room.vertices[vertexId] = { type: 'settlement', uid: timedOutUid };
         player.settlementsBuilt += 1;
         room.lastSetupSettlementVertexId = vertexId;
         room.setupTurnStartedAt = Date.now(); // fresh window for the free road still owed
         addLog(room, `${player.displayName} ran out of time — a settlement was placed at random.`);
 
-        if (room.phase === 'setup2') {
+        if (room.phase === GamePhase.Setup2) {
           for (const hexId of board.vertices[vertexId].adjacentHexIds) {
             const hex = board.hexes.find((h) => h.id === hexId);
             if (!hex) continue;
@@ -940,12 +945,12 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         const v = board.vertices[anchor];
         const options = v.adjacentEdgeIds.filter((eId) => !room.edges[eId]);
         if (options.length === 0) throw new Error('No legal setup road available to time out into');
-        const edgeId = options[Math.floor(Math.random() * options.length)];
+        const edgeId = options[Math.floor(rng() * options.length)];
         room.edges[edgeId] = timedOutUid;
         player.roadsBuilt += 1;
         room.lastSetupSettlementVertexId = null;
         addLog(room, `${player.displayName} ran out of time — a road was placed at random.`);
-        discoverHexesAtEdge(next, edgeId, timedOutUid);
+        discoverHexesAtEdge(next, edgeId, timedOutUid, rng);
         advanceSetupTurn(room); // also resets/clears setupTurnStartedAt for whatever's next
       }
       recalcLongestRoad(room, players);
@@ -962,7 +967,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (player.roadsBuilt >= MAX_ROADS) throw new Error('No road pieces remaining');
 
       if (action.free) {
-        requirePhase(room, ['setup1', 'setup2']);
+        requirePhase(room, [GamePhase.Setup1, GamePhase.Setup2]);
         if (player.settlementsBuilt !== player.roadsBuilt + 1) {
           throw new Error('Must place a settlement before its free road');
         }
@@ -978,7 +983,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         // Free placement granted by a played Road Building card — same connectivity rule as
         // a paid road, no cost. Sharing this case is what gives card roads identical behavior
         // to normal ones (immediate placement, fog discovery below, longest-road recalc).
-        requirePhase(room, ['roll', 'main']);
+        requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
         if (!edgeConnectsToOwnNetwork(room, action.edgeId, action.uid)) {
           throw new Error('Road must connect to your existing roads or buildings');
         }
@@ -990,7 +995,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
             : null;
         addLog(room, `${player.displayName} placed a free road (Road Building).`);
       } else {
-        requirePhase(room, ['roll', 'main']);
+        requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
         if (!canAfford(hands[action.uid].resources, BUILD_COSTS.road)) {
           throw new Error('Cannot afford a road');
         }
@@ -1004,7 +1009,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         player.resourceCount = handSize(hands[action.uid]);
         addLog(room, `${player.displayName} built a road.`);
       }
-      discoverHexesAtEdge(next, action.edgeId, action.uid);
+      discoverHexesAtEdge(next, action.edgeId, action.uid, rng);
       recalcLongestRoad(room, players);
       recomputeVisibleVP(room, players);
       break;
@@ -1021,7 +1026,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (player.settlementsBuilt >= MAX_SETTLEMENTS) throw new Error('No settlement pieces remaining');
 
       if (action.free) {
-        requirePhase(room, ['setup1', 'setup2']);
+        requirePhase(room, [GamePhase.Setup1, GamePhase.Setup2]);
         if (player.settlementsBuilt !== player.roadsBuilt) {
           throw new Error('Already placed this turn\'s free settlement');
         }
@@ -1042,7 +1047,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         room.setupTurnStartedAt = Date.now();
         addLog(room, `${player.displayName} placed a settlement.`);
 
-        if (room.phase === 'setup2') {
+        if (room.phase === GamePhase.Setup2) {
           for (const hexId of board2.vertices[action.vertexId].adjacentHexIds) {
             const hex = board2.hexes.find((h) => h.id === hexId);
             if (!hex) continue;
@@ -1056,7 +1061,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
           player.resourceCount = handSize(hands[action.uid]);
         }
       } else {
-        requirePhase(room, ['roll', 'main']);
+        requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
         if (!canAfford(hands[action.uid].resources, BUILD_COSTS.settlement)) {
           throw new Error('Cannot afford a settlement');
         }
@@ -1077,7 +1082,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'buildCity': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       const player = requirePlayer(players, action.uid);
       const building = room.vertices[action.vertexId];
       if (!building || building.uid !== action.uid || building.type !== 'settlement') {
@@ -1100,7 +1105,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'buyDevCard': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       if (room.devCardDeck.length === 0) throw new Error('The development card deck is empty');
       if (!canAfford(hands[action.uid].resources, BUILD_COSTS.devCard)) {
         throw new Error('Cannot afford a development card');
@@ -1119,7 +1124,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'playRoadBuilding': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       if (room.devCardPlayedThisTurn) throw new Error('Already played a development card this turn');
       const player = requirePlayer(players, action.uid);
       const hand = requireHand(hands, action.uid);
@@ -1146,7 +1151,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'playYearOfPlenty': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       if (room.devCardPlayedThisTurn) throw new Error('Already played a development card this turn');
       const hand = requireHand(hands, action.uid);
       const idx = hand.devCards.findIndex((c) => c.id === action.devCardId && c.type === 'yearOfPlenty');
@@ -1173,7 +1178,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'playMonopoly': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       if (room.devCardPlayedThisTurn) throw new Error('Already played a development card this turn');
       const hand = requireHand(hands, action.uid);
       const idx = hand.devCards.findIndex((c) => c.id === action.devCardId && c.type === 'monopoly');
@@ -1206,7 +1211,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'bankTrade': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       const hand = requireHand(hands, action.uid);
       const rate = playerPortRate(room, action.uid, action.give);
       if (action.giveAmount !== rate) {
@@ -1235,7 +1240,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'proposeTrade': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       const hand = requireHand(hands, action.uid);
       if (!canAfford(hand.resources, action.give)) {
         throw new Error('You do not have the resources you are offering');
@@ -1263,7 +1268,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       // Deliberately no requireCurrentPlayer: a counter comes from a responder, who by
       // definition isn't the current player. Legality is anchored to the original trade
       // (pending, directed at or open to this uid) instead.
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       const original = trades.find((t) => t.id === action.tradeId);
       if (!original) throw new Error('Unknown trade');
       if (original.status !== 'pending') throw new Error('Trade is no longer pending');
@@ -1434,7 +1439,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
     case 'endTurn': {
       requireCurrentPlayer(room, action.uid);
-      requirePhase(room, ['main']);
+      requirePhase(room, [GamePhase.Main]);
       for (const trade of trades) {
         if (trade.proposerUid === action.uid && trade.status === 'pending') {
           trade.status = 'cancelled';
@@ -1442,7 +1447,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       }
       room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.turnOrder.length;
       room.turnNumber += 1;
-      room.phase = 'roll';
+      room.phase = GamePhase.Roll;
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
       room.pendingRoadBuilding = null;
@@ -1453,7 +1458,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
     }
 
     case 'timeoutEndTurn': {
-      requirePhase(room, ['roll', 'main']);
+      requirePhase(room, [GamePhase.Roll, GamePhase.Main]);
       if (room.turnTimerSeconds === null) throw new Error('No turn timer is configured for this room');
       const elapsedMs = Date.now() - room.turnStartedAt;
       if (elapsedMs < room.turnTimerSeconds * 1000) {
@@ -1469,7 +1474,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       }
       room.currentPlayerIndex = (room.currentPlayerIndex + 1) % room.turnOrder.length;
       room.turnNumber += 1;
-      room.phase = 'roll';
+      room.phase = GamePhase.Roll;
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
       room.pendingRoadBuilding = null;
@@ -1569,7 +1574,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (!isSelf && !isHostKickingBot) {
         throw new Error('Not allowed to remove this seat');
       }
-      if (room.phase === 'setup1' || room.phase === 'setup2') {
+      if (room.phase === GamePhase.Setup1 || room.phase === GamePhase.Setup2) {
         throw new Error('Cannot leave or remove a seat during setup');
       }
       const removedIndex = room.turnOrder.indexOf(action.targetUid);
@@ -1622,18 +1627,18 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
 
 function advanceSetupTurn(room: RoomState): void {
   const n = room.turnOrder.length;
-  if (room.phase === 'setup1') {
+  if (room.phase === GamePhase.Setup1) {
     if (room.currentPlayerIndex < n - 1) {
       room.currentPlayerIndex += 1;
       room.setupTurnStartedAt = Date.now();
     } else {
-      room.phase = 'setup2';
+      room.phase = GamePhase.Setup2;
       room.setupRound = 2;
       room.setupTurnStartedAt = Date.now();
     }
-  } else if (room.phase === 'setup2') {
+  } else if (room.phase === GamePhase.Setup2) {
     if (room.currentPlayerIndex === 0) {
-      room.phase = 'roll';
+      room.phase = GamePhase.Roll;
       room.setupRound = null;
       room.turnNumber = 1;
       room.turnStartedAt = Date.now();
@@ -1662,7 +1667,7 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   const isCurrent = room.turnOrder[room.currentPlayerIndex] === uid;
 
-  if (room.phase === 'gameOver') return types;
+  if (room.phase === GamePhase.GameOver) return types;
 
   if (room.paused) {
     if (!player.isBot) types.push('voteToUnpause');
@@ -1688,7 +1693,7 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     types.push('timeoutTradeResponse');
   }
 
-  if (room.phase === 'discard') {
+  if (room.phase === GamePhase.Discard) {
     if (room.pendingDiscardUids.includes(uid)) types.push('discard');
     if (
       room.discardPhaseStartedAt !== null &&
@@ -1699,12 +1704,12 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     return types;
   }
 
-  if (room.phase === 'goldPick') {
+  if (room.phase === GamePhase.GoldPick) {
     if (room.pendingGoldPicks.some((p) => p.uid === uid)) types.push('pickGoldResources');
     return types;
   }
 
-  if (room.phase === 'robber') {
+  if (room.phase === GamePhase.Robber) {
     if (isCurrent) types.push('moveRobber');
     if (
       room.robberPhaseStartedAt !== null &&
@@ -1715,7 +1720,7 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     return types;
   }
 
-  if (room.phase === 'setup1' || room.phase === 'setup2') {
+  if (room.phase === GamePhase.Setup1 || room.phase === GamePhase.Setup2) {
     if (isCurrent) {
       if (player.settlementsBuilt === player.roadsBuilt) types.push('buildSettlement');
       else types.push('buildRoad');
@@ -1730,7 +1735,7 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
   }
 
   if (
-    (room.phase === 'roll' || room.phase === 'main') &&
+    (room.phase === GamePhase.Roll || room.phase === GamePhase.Main) &&
     room.turnTimerSeconds !== null &&
     Date.now() - room.turnStartedAt >= room.turnTimerSeconds * 1000
   ) {
@@ -1752,7 +1757,7 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
   // regardless of affordability or the paid-build gates below.
   const freeRoadPending = room.pendingRoadBuilding?.uid === uid && player.roadsBuilt < MAX_ROADS;
 
-  if (room.phase === 'roll') {
+  if (room.phase === GamePhase.Roll) {
     types.push('rollDice');
     if (freeRoadPending) types.push('buildRoad');
     if (

@@ -3,7 +3,7 @@
 // startGame). Reuses the real Board component so the preview always matches what actually
 // renders in-game.
 import { useMemo, type JSX } from 'react';
-import { generateBoard, initialFogRevealHexIds, type MapPresetId, type RoomState } from '@catan/engine';
+import { generateBoard, initialFogRevealHexIds, type MapPresetId, type RoomState, GamePhase, RoomStatus } from '@catan/engine';
 import Board from './Board';
 import './MapPreview.css';
 
@@ -20,7 +20,7 @@ export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewPr
       id: 'preview',
       code: '',
       hostUid: '',
-      status: 'lobby',
+      status: RoomStatus.Lobby,
       mapPreset,
       seed: '',
       board,
@@ -28,7 +28,7 @@ export default function MapPreview({ mapPreset, variant = 'full' }: MapPreviewPr
       edges: {},
       turnOrder: [],
       currentPlayerIndex: 0,
-      phase: 'lobby',
+      phase: GamePhase.Lobby,
       diceRoll: null,
       devCardDeck: [],
       devCardDeckCount: 0,
