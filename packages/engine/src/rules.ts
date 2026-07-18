@@ -613,6 +613,7 @@ export function createGame(
     discoveredHexIds: roomBase.mapPreset === 'fog-of-war' ? initialFogRevealHexIds(board.hexes) : null,
     pendingGoldPicks: [],
     devCardPlayedThisTurn: false,
+    pendingRoadBuilding: null,
     lastSetupSettlementVertexId: null,
   };
 
@@ -973,6 +974,21 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
         player.roadsBuilt += 1;
         room.lastSetupSettlementVertexId = null;
         advanceSetupTurn(room);
+      } else if (room.pendingRoadBuilding && room.pendingRoadBuilding.uid === action.uid) {
+        // Free placement granted by a played Road Building card — same connectivity rule as
+        // a paid road, no cost. Sharing this case is what gives card roads identical behavior
+        // to normal ones (immediate placement, fog discovery below, longest-road recalc).
+        requirePhase(room, ['roll', 'main']);
+        if (!edgeConnectsToOwnNetwork(room, action.edgeId, action.uid)) {
+          throw new Error('Road must connect to your existing roads or buildings');
+        }
+        room.edges[action.edgeId] = action.uid;
+        player.roadsBuilt += 1;
+        room.pendingRoadBuilding =
+          room.pendingRoadBuilding.roadsRemaining > 1
+            ? { uid: action.uid, roadsRemaining: room.pendingRoadBuilding.roadsRemaining - 1 }
+            : null;
+        addLog(room, `${player.displayName} placed a free road (Road Building).`);
       } else {
         requirePhase(room, ['roll', 'main']);
         if (!canAfford(hands[action.uid].resources, BUILD_COSTS.road)) {
@@ -1112,32 +1128,19 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       if (hand.devCards[idx].boughtTurn === room.turnNumber) {
         throw new Error('Cannot play a development card the same turn it was bought');
       }
-      const board2 = board!;
-      const [e1, e2] = action.edgeIds;
-      if (e1 === e2) throw new Error('Must choose two different edges');
-      if (!board2.edges[e1] || !board2.edges[e2]) throw new Error('Unknown edge');
-      if (room.edges[e1] || room.edges[e2]) throw new Error('Edge already has a road');
-      if (player.roadsBuilt + 2 > MAX_ROADS) throw new Error('Not enough road pieces remaining');
-      if (!edgeConnectsToOwnNetwork(room, e1, action.uid)) {
-        throw new Error('First road must connect to your existing network');
-      }
-      room.edges[e1] = action.uid;
-      player.roadsBuilt += 1;
-      if (!edgeConnectsToOwnNetwork(room, e2, action.uid)) {
-        // undo first placement before failing, keep applyAction atomic
-        delete room.edges[e1];
-        player.roadsBuilt -= 1;
-        throw new Error('Second road must connect to your existing network');
-      }
-      room.edges[e2] = action.uid;
-      player.roadsBuilt += 1;
+      // Playing the card only *arms* the free placements (room.pendingRoadBuilding) — the
+      // roads themselves are placed one at a time through the ordinary buildRoad action, so
+      // each lands immediately and gets buildRoad's full behavior (fog discovery, longest-
+      // road recalc, connectivity anchored to roads already actually placed). Official rules:
+      // with only one road piece left you still get to place that one.
+      const roadsRemaining = Math.min(2, MAX_ROADS - player.roadsBuilt);
+      if (roadsRemaining <= 0) throw new Error('No road pieces remaining');
 
       hand.devCards.splice(idx, 1);
       player.devCardCount = hand.devCards.length;
       room.devCardPlayedThisTurn = true;
+      room.pendingRoadBuilding = { uid: action.uid, roadsRemaining };
       addLog(room, `${player.displayName} played Road Building.`);
-      recalcLongestRoad(room, players);
-      recomputeVisibleVP(room, players);
       break;
     }
 
@@ -1442,6 +1445,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.phase = 'roll';
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
+      room.pendingRoadBuilding = null;
       room.turnStartedAt = Date.now();
       room.turnTimerExtensionMs = 0;
       addLog(room, `${players[action.uid].displayName} ended their turn.`);
@@ -1468,6 +1472,7 @@ export function applyAction(bundle: GameStateBundle, action: GameAction): GameSt
       room.phase = 'roll';
       room.diceRoll = null;
       room.devCardPlayedThisTurn = false;
+      room.pendingRoadBuilding = null;
       room.turnStartedAt = Date.now();
       room.turnTimerExtensionMs = 0;
       addLog(room, `${players[timedOutUid].displayName}'s turn timed out.`);
@@ -1634,6 +1639,7 @@ function advanceSetupTurn(room: RoomState): void {
       room.turnStartedAt = Date.now();
       room.turnTimerExtensionMs = 0;
       room.devCardPlayedThisTurn = false;
+      room.pendingRoadBuilding = null;
       room.setupTurnStartedAt = null;
       addLog(room, 'Setup complete.');
     } else {
@@ -1742,8 +1748,13 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
     return types;
   }
 
+  // A played Road Building card grants free placements in either roll or main phase,
+  // regardless of affordability or the paid-build gates below.
+  const freeRoadPending = room.pendingRoadBuilding?.uid === uid && player.roadsBuilt < MAX_ROADS;
+
   if (room.phase === 'roll') {
     types.push('rollDice');
+    if (freeRoadPending) types.push('buildRoad');
     if (
       !room.devCardPlayedThisTurn &&
       hand.devCards.some((c) => c.type === 'knight' && c.boughtTurn !== room.turnNumber)
@@ -1755,7 +1766,9 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
 
   // phase === 'main'
   types.push('endTurn');
-  if (player.roadsBuilt < MAX_ROADS && canAfford(hand.resources, BUILD_COSTS.road)) types.push('buildRoad');
+  if (freeRoadPending || (player.roadsBuilt < MAX_ROADS && canAfford(hand.resources, BUILD_COSTS.road))) {
+    types.push('buildRoad');
+  }
   if (player.settlementsBuilt < MAX_SETTLEMENTS && canAfford(hand.resources, BUILD_COSTS.settlement)) {
     types.push('buildSettlement');
   }

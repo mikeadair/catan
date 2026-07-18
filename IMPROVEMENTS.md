@@ -189,6 +189,21 @@ length (tooltip carries piece count).
   collected plus "N turns played — X was the most-rolled number". Steals/cards-played would
   need richer log metas (engine) — left for a second pass.
 
+## Follow-up fixes (post-review, 2026-07-17)
+
+- **Road Building card rework (bug report from Mike):** the card used to stage both edges
+  client-side and submit one atomic `playRoadBuilding` — no road appeared until both were
+  picked, and the handler skipped `discoverHexesAtEdge`, so fog hexes never revealed.
+  Now the card play arms `room.pendingRoadBuilding` (uid + roadsRemaining) and each free
+  road is an ordinary `buildRoad` (free while armed) — immediate placement, fog discovery,
+  longest-road recalc all come from the shared path. Cleared on end/timeout of turn. Bots
+  play the card then place via their normal expansion logic. Harness: `&state=road-building`.
+- **Self-review fixes:** shortcut-key map is cleared on the loading/game-over early returns
+  (a stale `R` handler could otherwise fire doomed rollDice dispatches after the game ended);
+  TradeOffers' can't-afford auto-reject now exempts *targeted* trades, since a single
+  responder who can't afford the ask is exactly who the Counter button exists for (the
+  trade-response timer still resolves an unanswered targeted trade).
+
 ## Review-tooling note
 
 The batch `npm run snap` run failed transiently partway (selector `boundingBoxOrThrow`

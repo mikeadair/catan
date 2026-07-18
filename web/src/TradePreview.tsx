@@ -26,6 +26,7 @@ const stateOverrides: Record<string, Partial<RoomState>> = {
   'robber-hex': { phase: 'robber', robberPhaseStartedAt: Date.now() - 5_000 },
   'gold-pick': { phase: 'goldPick', pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
   'game-over': { phase: 'gameOver', winnerUid: 'p0' },
+  'road-building': { pendingRoadBuilding: { uid: 'p0', roadsRemaining: 2 } },
   paused: { paused: true, pausedAt: Date.now() - 3_000 },
   // Not-yet-paused but a vote is already in ("Pausing… (X/Y)") / paused with a resume vote
   // already in ("Paused (X/Y to resume)") — PauseControl's two remaining label variants beyond

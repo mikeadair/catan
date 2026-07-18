@@ -1150,6 +1150,59 @@ describe('win condition', () => {
   });
 });
 
+describe('road building card', () => {
+  it('arms free placements; each road places immediately via buildRoad at no cost', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].devCards.push({ id: 'rb1', type: 'roadBuilding', boughtTurn: -1 });
+    bundle.hands[uid].resources = { brick: 0, lumber: 0, ore: 0, grain: 0, wool: 0 };
+    const roadsBefore = bundle.players[uid].roadsBuilt;
+
+    bundle = applyAction(bundle, { type: 'playRoadBuilding', uid, devCardId: 'rb1' });
+    expect(bundle.room.pendingRoadBuilding).toEqual({ uid, roadsRemaining: 2 });
+    expect(bundle.room.devCardPlayedThisTurn).toBe(true);
+    // No roads placed yet by the card itself.
+    expect(bundle.players[uid].roadsBuilt).toBe(roadsBefore);
+
+    const board = bundle.room.board!;
+    const connectable = () =>
+      Object.keys(board.edges).find(
+        (eId) =>
+          !bundle.room.edges[eId] &&
+          board.edges[eId].vertexIds.some((v) =>
+            Object.entries(bundle.room.edges).some(([e2, owner]) => owner === uid && board.edges[e2].vertexIds.includes(v)),
+          ),
+      )!;
+
+    // First free road: places immediately (with an empty hand), grant counts down.
+    bundle = applyAction(bundle, { type: 'buildRoad', uid, edgeId: connectable() });
+    expect(bundle.players[uid].roadsBuilt).toBe(roadsBefore + 1);
+    expect(bundle.room.pendingRoadBuilding).toEqual({ uid, roadsRemaining: 1 });
+
+    // Second free road: grant clears.
+    bundle = applyAction(bundle, { type: 'buildRoad', uid, edgeId: connectable() });
+    expect(bundle.players[uid].roadsBuilt).toBe(roadsBefore + 2);
+    expect(bundle.room.pendingRoadBuilding).toBeNull();
+
+    // A third buildRoad is a normal paid one again — empty hand, so it must fail.
+    expect(() => applyAction(bundle, { type: 'buildRoad', uid, edgeId: connectable() })).toThrow(/afford/);
+  });
+
+  it('an unused grant is cleared when the turn ends', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    bundle.hands[uid].devCards.push({ id: 'rb1', type: 'roadBuilding', boughtTurn: -1 });
+
+    bundle = applyAction(bundle, { type: 'playRoadBuilding', uid, devCardId: 'rb1' });
+    bundle = applyAction(bundle, { type: 'endTurn', uid });
+    expect(bundle.room.pendingRoadBuilding).toBeNull();
+  });
+});
+
 describe('legalActionTypes', () => {
   it('offers buildSettlement then buildRoad in setup order', () => {
     const bundle = makeGame(2);

@@ -660,13 +660,17 @@ function decideRoadBuildingPlay(bundle: GameStateBundle, botUid: string, difficu
     return best;
   };
 
+  // Playing the card only arms room.pendingRoadBuilding — the roads themselves get placed by
+  // decideMainAction's pending-free-road branch on subsequent decisions. Still verify two
+  // decent placements exist before committing the card, same as when the action carried both
+  // edges itself.
   const edge1 = bestUnbuiltEdge(null);
   if (!edge1) return null;
   for (const v of board.edges[edge1].vertexIds) ownVertices.add(v);
   const edge2 = bestUnbuiltEdge(edge1);
   if (!edge2) return null;
 
-  return { type: 'playRoadBuilding', uid: botUid, devCardId: card.id, edgeIds: [edge1, edge2] };
+  return { type: 'playRoadBuilding', uid: botUid, devCardId: card.id };
 }
 
 /** Plays Year of Plenty to close a build gap outright, for free, instead of waiting on a bank
@@ -755,6 +759,14 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
   if (targetedAtMe) {
     const response = decideTradeResponse(bundle, botUid, difficulty);
     if (response) return response;
+  }
+
+  // 0b. Place any free roads granted by a played Road Building card before other planning —
+  // buildRoad is free while room.pendingRoadBuilding is armed for this bot. If no placement
+  // exists (fully boxed in), fall through; endTurn clears the pending grant.
+  if (room.pendingRoadBuilding?.uid === botUid && player.roadsBuilt < MAX_ROADS) {
+    const edge = bestExpansionRoad(bundle, botUid, difficulty);
+    if (edge) return { type: 'buildRoad', uid: botUid, edgeId: edge };
   }
 
   if (difficulty === 'easy' && Math.random() < EASY_SKIP_BUILD_CHANCE) {

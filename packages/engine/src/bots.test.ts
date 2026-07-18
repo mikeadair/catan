@@ -785,8 +785,15 @@ describe('decideBotAction: voluntary development card plays', () => {
     expect(action?.type).toBe('playRoadBuilding');
     if (action?.type === 'playRoadBuilding') {
       expect(action.devCardId).toBe('r1');
-      expect(action.edgeIds[0]).not.toBe(action.edgeIds[1]);
     }
+
+    // Once the card is played (grant armed server-side), the bot's next decision places a
+    // free road via ordinary buildRoad.
+    normal.bundle.room.pendingRoadBuilding = { uid: normal.botUid, roadsRemaining: 2 };
+    normal.bundle.room.devCardPlayedThisTurn = true;
+    normal.bundle.hands[normal.botUid].devCards = [];
+    const placement = decideBotAction(normal.bundle, normal.botUid);
+    expect(placement?.type).toBe('buildRoad');
 
     const easy = makeDevCardGame('easy');
     easy.bundle.room.vertices[settlementVertexId] = { type: 'settlement', uid: easy.botUid };

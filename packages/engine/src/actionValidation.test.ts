@@ -11,7 +11,7 @@ describe('assertValidActionShape', () => {
       { type: 'buyDevCard', uid: 'p0' },
       { type: 'playKnight', uid: 'p0', devCardId: 'c1', robberHexId: 'h1', stealFromUid: null },
       { type: 'playKnight', uid: 'p0', devCardId: 'c1', robberHexId: 'h1', stealFromUid: 'p1' },
-      { type: 'playRoadBuilding', uid: 'p0', devCardId: 'c1', edgeIds: ['e1', 'e2'] },
+      { type: 'playRoadBuilding', uid: 'p0', devCardId: 'c1' },
       { type: 'playYearOfPlenty', uid: 'p0', devCardId: 'c1', resources: ['ore', 'grain'] },
       { type: 'playMonopoly', uid: 'p0', devCardId: 'c1', resource: 'ore' },
       { type: 'moveRobber', uid: 'p0', robberHexId: 'h1', stealFromUid: null },

@@ -210,6 +210,11 @@ export default function TradeOffers({
   useEffect(() => {
     for (const t of trades) {
       if (t.status !== 'pending' || t.proposerUid === uid || !isRelevant(t, uid)) continue;
+      // Targeted trades are exempt: this player is the *only* responder, and not being able
+      // to afford the ask is precisely when a counter-offer makes sense — auto-rejecting
+      // here would kill the Counter button's window before the player could use it. The
+      // room's trade-response timer still resolves a targeted trade nobody answers.
+      if (t.targetUid !== null) continue;
       if (blocked || calledAutoRejectRef.current.has(t.id)) continue;
       if (responderStatus(t, uid) !== 'pending') continue;
       if (canAffordCost(ownResources, t.receive)) continue;

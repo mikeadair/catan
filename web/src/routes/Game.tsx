@@ -30,11 +30,6 @@ import './Game.css';
 
 const AFK_AUTO_ROLL_MS = 15000;
 
-interface RoadBuildingPending {
-  devCardId: string;
-  edges: EdgeId[];
-}
-
 interface RobberVictimStep {
   hexId: string;
   eligible: string[];
@@ -75,7 +70,6 @@ export default function Game(): JSX.Element {
   // the phase/turn-change effect below on anything else that invalidates it.
   const [pendingBuild, setPendingBuild] = useState<{ type: 'road'; edgeId: EdgeId } | { type: 'settlement' | 'city'; vertexId: VertexId } | null>(null);
   const [knightPending, setKnightPending] = useState<string | null>(null);
-  const [roadBuildingPending, setRoadBuildingPending] = useState<RoadBuildingPending | null>(null);
   const [yopPending, setYopPending] = useState<string | null>(null);
   const [yopSelection, setYopSelection] = useState<Partial<ResourceCount>>({});
   const [monopolyPending, setMonopolyPending] = useState<string | null>(null);
@@ -421,11 +415,16 @@ export default function Game(): JSX.Element {
     return () => clearTimeout(timer);
   }, [room?.paused, room?.phase, room?.setupTurnStartedAt, uid, dispatchQuiet]);
 
+  // These early returns skip the shortcut-map assignment below — clear the map so a stale
+  // handler from the last playing render (e.g. R -> rollDice) can't keep firing doomed
+  // dispatches from the loading or game-over screens.
   if (!uid || !room) {
+    shortcutsRef.current = {};
     return <div className="game-loading">Loading game…</div>;
   }
 
   if (room.phase === 'gameOver') {
+    shortcutsRef.current = {};
     const winner = room.winnerUid ? players[room.winnerUid] : null;
     const localWin = winner !== null && room.winnerUid === uid;
     return (
@@ -454,6 +453,7 @@ export default function Game(): JSX.Element {
   }
 
   if (!room.board) {
+    shortcutsRef.current = {};
     return <div className="game-loading">Loading board…</div>;
   }
 
@@ -577,25 +577,12 @@ export default function Game(): JSX.Element {
     }
   }
 
-  async function handleRoadBuildingEdgeClick(edgeId: EdgeId) {
-    if (!roadBuildingPending) return;
-    const edges = [...roadBuildingPending.edges, edgeId];
-    if (edges.length < 2) {
-      setRoadBuildingPending({ ...roadBuildingPending, edges });
-      return;
-    }
-    const ok = await runAction({
-      type: 'playRoadBuilding',
-      uid: uid!,
-      devCardId: roadBuildingPending.devCardId,
-      edgeIds: [edges[0], edges[1]],
-    });
-    setRoadBuildingPending(ok ? null : { ...roadBuildingPending, edges: [] });
-  }
-
   function handlePlayDevCard(type: Exclude<DevCardType, 'victoryPoint'>, devCardId: string) {
     if (type === 'knight') setKnightPending(devCardId);
-    else if (type === 'roadBuilding') setRoadBuildingPending({ devCardId, edges: [] });
+    // Road Building plays immediately — the server arms room.pendingRoadBuilding and each
+    // free road is then placed one at a time via ordinary buildRoad clicks (see the
+    // interaction branch below), landing (and revealing fog) as soon as it's picked.
+    else if (type === 'roadBuilding') void runAction({ type: 'playRoadBuilding', uid: uid!, devCardId });
     else if (type === 'yearOfPlenty') setYopPending(devCardId);
     else if (type === 'monopoly') setMonopolyPending(devCardId);
   }
@@ -648,7 +635,6 @@ export default function Game(): JSX.Element {
   // --- Resolve the Board's interaction mode + click handlers, in priority order.
   let interactionMode: BoardInteractionMode = 'none';
   let freeSetup = false;
-  let extraOwnedEdgeIds: EdgeId[] | undefined;
   let onVertexClick: ((v: VertexId) => void) | undefined;
   let onEdgeClick: ((e: EdgeId) => void) | undefined;
   let onHexClick: ((h: string) => void) | undefined;
@@ -672,11 +658,14 @@ export default function Game(): JSX.Element {
     onHexClick = (hexId) => {
       void handleRobberHexClick(hexId);
     };
-  } else if (roadBuildingPending) {
+  } else if (room.pendingRoadBuilding?.uid === uid) {
+    // Free roads from a played Road Building card — each click is an ordinary buildRoad
+    // (free server-side while the grant is armed), so it places and reveals fog immediately;
+    // the mode stays active until the server's grant counts down to null.
     interactionMode = 'placeRoad';
-    extraOwnedEdgeIds = roadBuildingPending.edges;
     onEdgeClick = (edgeId) => {
-      void handleRoadBuildingEdgeClick(edgeId);
+      setPendingBuild({ type: 'road', edgeId });
+      void runAction({ type: 'buildRoad', uid, edgeId });
     };
   } else if (buildMode === 'road') {
     interactionMode = 'placeRoad';
@@ -716,6 +705,10 @@ export default function Game(): JSX.Element {
   }
   else if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
   else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
+  else if (room.pendingRoadBuilding?.uid === uid) {
+    const n = room.pendingRoadBuilding.roadsRemaining;
+    phaseBanner = `Road Building — place ${n} free road${n === 1 ? '' : 's'}.`;
+  }
   else if (room.phase === 'roll' && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
   else if ((room.phase === 'roll' || room.phase === 'main') && !isCurrentPlayer) {
     // An opponent's ordinary turn is most of the game, and without this branch it was the
@@ -778,7 +771,6 @@ export default function Game(): JSX.Element {
           uid={uid}
           interactionMode={interactionMode}
           freeSetup={freeSetup}
-          extraOwnedEdgeIds={extraOwnedEdgeIds}
           onVertexClick={onVertexClick}
           onEdgeClick={onEdgeClick}
           onHexClick={onHexClick}

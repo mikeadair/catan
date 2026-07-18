@@ -93,9 +93,6 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
       return;
     case 'playRoadBuilding':
       if (!isString(a.devCardId)) throw new Error('playRoadBuilding requires devCardId');
-      if (!Array.isArray(a.edgeIds) || a.edgeIds.length !== 2 || !a.edgeIds.every(isString)) {
-        throw new Error('playRoadBuilding requires edgeIds: [EdgeId, EdgeId]');
-      }
       return;
     case 'playYearOfPlenty':
       if (!isString(a.devCardId)) throw new Error('playYearOfPlenty requires devCardId');

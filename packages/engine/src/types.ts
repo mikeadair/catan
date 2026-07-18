@@ -289,6 +289,11 @@ export interface RoomState {
   pendingGoldPicks: { uid: string; amount: number }[];
   // Added by game/rules.ts (additive, optional so other constructors aren't broken):
   devCardPlayedThisTurn?: boolean; // at most one dev card may be played per turn
+  // Set when the current player plays a Road Building card; each free road then goes through
+  // the ordinary buildRoad action (placing immediately, revealing fog hexes, etc.) while this
+  // counts down. Cleared when it hits zero or the turn ends. Optional so older room docs
+  // (which never had the field) still typecheck; absent reads as "none pending".
+  pendingRoadBuilding?: { uid: string; roadsRemaining: number } | null;
   lastSetupSettlementVertexId?: VertexId | null; // anchors the free setup road to the settlement just placed
   // Total extension (ms) already granted to the current turn via proposeTrade (see
   // extendTurnTimerForTrade in rules.ts) — tracked so repeated trade proposals in the same
@@ -342,7 +347,9 @@ export type GameAction =
   | { type: 'buildCity'; uid: string; vertexId: VertexId }
   | { type: 'buyDevCard'; uid: string }
   | { type: 'playKnight'; uid: string; devCardId: string; robberHexId: string; stealFromUid: string | null }
-  | { type: 'playRoadBuilding'; uid: string; devCardId: string; edgeIds: [EdgeId, EdgeId] }
+  // Arms room.pendingRoadBuilding — the two free roads are then placed one at a time via
+  // ordinary buildRoad actions, so each placement lands (and reveals fog) immediately.
+  | { type: 'playRoadBuilding'; uid: string; devCardId: string }
   | { type: 'playYearOfPlenty'; uid: string; devCardId: string; resources: [Resource, Resource] }
   | { type: 'playMonopoly'; uid: string; devCardId: string; resource: Resource }
   | { type: 'moveRobber'; uid: string; robberHexId: string; stealFromUid: string | null } // post-7 roll, no card
