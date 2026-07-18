@@ -29,7 +29,7 @@ export default function PauseControl({ room, players, uid, blocked, onVote }: Pa
         disabled={blocked || hasVoted}
         title={hasVoted ? 'Waiting for enough players to resume' : 'Vote to resume the game'}
       >
-        <PauseIcon className="pause-control__icon" /> Paused {hasVoted ? `(${votesSoFar}/${votesNeeded} to resume)` : '— Resume?'}
+        <PauseIcon className="pause-control__icon" /> {hasVoted ? `Resume ${votesSoFar}/${votesNeeded}` : 'Resume?'}
       </button>
     );
   }

@@ -217,6 +217,7 @@
 }
 
 .game__sidebar-side-toggle {
+  flex-shrink: 0;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -271,6 +272,8 @@
 }
 
 .game__leave-button {
+  flex-shrink: 0;
+  white-space: nowrap;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 8px;

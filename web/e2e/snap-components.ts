@@ -296,7 +296,7 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.pause-control',
     preview: 'trade',
     screen: 'game',
-    description: 'PauseControl paused, no resume vote from self yet ("Paused — Resume?") — the plain not-voted / not-yet-paused variant is already visible in sidebar.png',
+    description: 'PauseControl paused, no resume vote from self yet ("Resume?") — the plain not-voted / not-yet-paused variant is already visible in sidebar.png',
     query: 'state=paused',
   },
   'pause-control-pausing': {
@@ -310,7 +310,7 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.pause-control',
     preview: 'trade',
     screen: 'game',
-    description: 'PauseControl paused, own resume-vote already in ("Paused (X/Y to resume)")',
+    description: 'PauseControl paused, own resume-vote already in ("Resume X/Y")',
     query: 'state=paused-voted',
   },
   'leave-confirm-dialog': {

@@ -7,6 +7,11 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  /* Longest label ("Resuming… (2/3)") must never push the leave button out of
+     .game__sidebar-top — shrink with ellipsis instead. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pause-control:not(:disabled):hover {
