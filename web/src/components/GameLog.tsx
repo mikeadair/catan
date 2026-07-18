@@ -169,6 +169,12 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
   // size increases each row's height (and so scrollHeight) without touching items.length,
   // so without this a pinned-to-bottom view would otherwise fall a line or two short of
   // the true bottom right after sizing up.
+  //
+  // Keyed on the LAST item's id, not just the count: the engine caps room.log at 50
+  // entries (addLog splices the oldest out), so once a game is long enough the list
+  // *rotates* — every new entry arrives at a constant length, which is exactly when a
+  // length-only dependency stops firing and auto-scroll silently dies mid-game.
+  const lastItemId = visibleItems.length > 0 ? visibleItems[visibleItems.length - 1].id : null;
   useEffect(() => {
     if (!autoScroll) return;
     const el = scrollRef.current;
@@ -183,7 +189,7 @@ export default function GameLog({ log, chat, players, turnOrder, onSend }: GameL
       isAutoScrollingRef.current = false;
     });
     return () => cancelAnimationFrame(raf);
-  }, [visibleItems.length, autoScroll, logSize, filter]);
+  }, [lastItemId, visibleItems.length, autoScroll, logSize, filter]);
 
   function handleScroll() {
     if (isAutoScrollingRef.current) {
