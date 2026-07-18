@@ -1010,3 +1010,34 @@ describe('decideBotAction: does not spam an already-rejected trade', () => {
     expect(action?.type).toBe('proposeTrade');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Dev-card buying vs. expansion
+// ---------------------------------------------------------------------------
+
+describe('decideBotAction: dev-card buying does not cannibalize a near-affordable expansion', () => {
+  // Hand of ore 2 / grain 2 / wool 1 covers a dev card exactly, but is also just 1 ore
+  // short of a city (3 ore / 2 grain) — the overlap that used to make bots convert every
+  // spare ore+grain+wool into dev cards and never accumulate a city.
+  const nearCityHand: Partial<Record<Resource, number>> = { ore: 2, grain: 2, wool: 1 };
+
+  it('holds off on the dev card (and saves) when a city upgrade is within reach', () => {
+    const { bundle, botUid } = makeMainPhaseGame('normal', nearCityHand, { devCardDeckCount: 10 });
+    // Give the bot a settlement to upgrade — without one, "close to a city" is meaningless.
+    const vertexId = Object.keys(bundle.room.board!.vertices)[0];
+    bundle.room.vertices[vertexId] = { type: 'settlement', uid: botUid };
+
+    const action = decideBotAction(bundle, botUid);
+    // Nothing else is affordable or tradeable here, so saving means plain endTurn — the
+    // key assertion is that it is NOT buyDevCard.
+    expect(action?.type).toBe('endTurn');
+  });
+
+  it('still buys the dev card with the same hand when no expansion is close', () => {
+    // Same hand, but no settlement on the board to upgrade and no reachable settlement
+    // spot — the ore/grain/wool has no higher-priority use, so the dev card is correct.
+    const { bundle, botUid } = makeMainPhaseGame('normal', nearCityHand, { devCardDeckCount: 10 });
+    const action = decideBotAction(bundle, botUid);
+    expect(action).toEqual({ type: 'buyDevCard', uid: botUid });
+  });
+});

@@ -470,6 +470,38 @@ function othersMayHave(room: RoomState, hand: ResourceCount, r: Resource): boole
   return STARTING_BANK[r] - room.bank[r] - hand[r] > 0;
 }
 
+/** How many resources in total the hand is short of `cost`. */
+function totalDeficit(hand: ResourceCount, cost: Partial<ResourceCount>): number {
+  const deficits = resourceDeficits(hand, cost);
+  return RESOURCES.reduce((s, r) => s + (deficits[r] ?? 0), 0);
+}
+
+/** How close a spare-resource buy has to be to a city/settlement before the bot saves for
+ * the build instead of spending on a dev card. ≤2 short of a city means holding ≥3 of its
+ * 5 resources. */
+const EXPANSION_REACH_THRESHOLD = 2;
+
+/** Whether the bot is within EXPANSION_REACH_THRESHOLD resources of a city upgrade (with a
+ * settlement to upgrade) or a new settlement (with a reachable spot). Used to hold off on
+ * dev-card buys that would spend the very resources those builds need. */
+function expansionWithinReach(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): boolean {
+  const { room, players, hands } = bundle;
+  const player = players[botUid];
+  const hand = hands[botUid].resources;
+  if (player.citiesBuilt < MAX_CITIES && totalDeficit(hand, BUILD_COSTS.city) <= EXPANSION_REACH_THRESHOLD) {
+    const hasSettlement = Object.values(room.vertices).some((b) => b.uid === botUid && b.type === 'settlement');
+    if (hasSettlement) return true;
+  }
+  if (
+    player.settlementsBuilt < MAX_SETTLEMENTS &&
+    totalDeficit(hand, BUILD_COSTS.settlement) <= EXPANSION_REACH_THRESHOLD &&
+    bestConnectedSettlementVertex(bundle, botUid, difficulty) !== null
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Bank-trade target: the resource that would unlock the highest-priority build it's
  * exactly one resource TYPE short of, falling back to "whatever I have least of" if no
  * build is that close. */
@@ -805,8 +837,16 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
     if (edge) return { type: 'buildRoad', uid: botUid, edgeId: edge };
   }
 
-  // 6. Buy a development card.
-  if (room.devCardDeckCount > 0 && canAffordLocal(hand.resources, BUILD_COSTS.devCard)) {
+  // 6. Buy a development card — but never by cannibalizing a nearly-affordable expansion.
+  // The dev-card cost (ore/wheat/sheep) overlaps both the city (ore/wheat) and settlement
+  // (wheat/sheep) costs, so an unconditional buy here meant a bot with steady ore/wheat
+  // income never accumulated the 3-ore/2-wheat for a city: every spare ore+wheat+sheep got
+  // converted into a dev card instead, draining the deck while production stalled.
+  if (
+    room.devCardDeckCount > 0 &&
+    canAffordLocal(hand.resources, BUILD_COSTS.devCard) &&
+    !expansionWithinReach(bundle, botUid, difficulty)
+  ) {
     return { type: 'buyDevCard', uid: botUid };
   }
 
