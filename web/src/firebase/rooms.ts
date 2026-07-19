@@ -87,7 +87,7 @@ export interface ChatMessage {
 export interface SecretEffect {
   id: string;
   uid: string;
-  kind: 'flashbang' | 'ship';
+  kind: 'flashbang' | 'ship' | 'confetti' | 'quake' | 'sheep' | 'disco';
   affectSelf: boolean;
   ts: number;
 }

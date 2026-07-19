@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { sendEffect, subscribeEffects, type SecretEffect } from '../firebase/rooms';
 import shipIcon from '../assets/decor/ship.png';
+import ConfettiBurst from './ConfettiBurst';
 import './SecretMenu.css';
 
 const TRIGGER = 'michael';
@@ -14,8 +15,36 @@ const TRIGGER = 'michael';
 // not replay every flashbang fired while it was away (the first-snapshot guard below covers
 // the common case; this covers docs that land late through a flaky connection).
 const EFFECT_FRESH_MS = 15000;
-const FLASHBANG_MS = 3000;
-const SHIP_MS = 7000;
+
+// How long each effect stays mounted (or, for the body-class effects, applied) — sized to
+// each one's CSS animation plus its longest per-piece delay, not a shared constant.
+const EFFECT_MS: Record<SecretEffect['kind'], number> = {
+  flashbang: 3000,
+  ship: 7000,
+  confetti: 3500,
+  quake: 2500,
+  sheep: 5600,
+  disco: 4000,
+};
+
+const EFFECT_BUTTONS: { kind: SecretEffect['kind']; label: string }[] = [
+  { kind: 'flashbang', label: '💥 Flashbang' },
+  { kind: 'ship', label: '⛵ Ship' },
+  { kind: 'confetti', label: '🎉 Confetti' },
+  { kind: 'quake', label: '🌍 Earthquake' },
+  { kind: 'sheep', label: '🐑 Sheep rain' },
+  { kind: 'disco', label: '🪩 Disco' },
+];
+
+// Deterministic (index-based) sheep placement, same reasoning as ConfettiBurst: stable
+// across re-renders and in snap screenshots.
+const SHEEP_COUNT = 16;
+const SHEEP = Array.from({ length: SHEEP_COUNT }, (_, i) => ({
+  key: i,
+  left: (i * 47) % 100,
+  delay: ((i * 89) % 1200) / 1000,
+  duration: 2.8 + ((i * 37) % 1400) / 1000,
+}));
 
 interface ActiveEffect {
   key: string;
@@ -80,53 +109,100 @@ export default function SecretMenu({ roomId, uid }: SecretMenuProps): JSX.Elemen
         setActive((cur) => [...cur, { key, kind: effect.kind, top: 12 + Math.random() * 55 }]);
         setTimeout(() => {
           setActive((cur) => cur.filter((a) => a.key !== key));
-        }, effect.kind === 'flashbang' ? FLASHBANG_MS : SHIP_MS);
+        }, EFFECT_MS[effect.kind] ?? 3000);
       }
     });
   }, [roomId, uid]);
 
+  // Quake and disco act on the whole page (a transform/filter animation on <body> — that's
+  // what makes the *entire* viewport, fixed overlays included, shake or hue-spin), so they're
+  // body classes rather than rendered layers. Toggled off both when the effect expires and on
+  // unmount, so leaving the game can't strand a class on <body>.
+  const quakeActive = active.some((a) => a.kind === 'quake');
+  const discoActive = active.some((a) => a.kind === 'disco');
+  useEffect(() => {
+    document.body.classList.toggle('secret-fx-quake', quakeActive);
+    return () => document.body.classList.remove('secret-fx-quake');
+  }, [quakeActive]);
+  useEffect(() => {
+    document.body.classList.toggle('secret-fx-disco', discoActive);
+    return () => document.body.classList.remove('secret-fx-disco');
+  }, [discoActive]);
+
   return (
     <>
       {open && (
-        <div className="secret-menu" role="dialog" aria-label="Secret menu">
-          <div className="secret-menu__title">🤫 Secret menu</div>
-          <button
-            type="button"
-            className="secret-menu__button"
-            onClick={() => void sendEffect(roomId, uid, 'flashbang', affectSelf).catch(() => {})}
-          >
-            💥 Flashbang
-          </button>
-          <button
-            type="button"
-            className="secret-menu__button"
-            onClick={() => void sendEffect(roomId, uid, 'ship', affectSelf).catch(() => {})}
-          >
-            ⛵ Ship
-          </button>
-          <label className="secret-menu__toggle">
-            <input type="checkbox" checked={affectSelf} onChange={(e) => setAffectSelf(e.target.checked)} />
-            Affect self
-          </label>
-          <button type="button" className="secret-menu__close" onClick={() => setOpen(false)}>
-            Close
-          </button>
+        <div className="modal-overlay" onClick={() => setOpen(false)}>
+          <div className="modal secret-menu" role="dialog" aria-label="Secret menu" onClick={(e) => e.stopPropagation()}>
+            <h3>🤫 Secret menu</h3>
+            <p>Broadcasts to everyone in the room.</p>
+            <div className="secret-menu__grid">
+              {EFFECT_BUTTONS.map(({ kind, label }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className="secret-menu__button"
+                  onClick={() => void sendEffect(roomId, uid, kind, affectSelf).catch(() => {})}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="secret-menu__toggle">
+              <input type="checkbox" checked={affectSelf} onChange={(e) => setAffectSelf(e.target.checked)} />
+              Affect self
+            </label>
+            <div className="modal__actions">
+              <button type="button" onClick={() => setOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      {active.map((a) =>
-        a.kind === 'flashbang' ? (
-          <div key={a.key} className="secret-fx-flashbang" aria-hidden="true" />
-        ) : (
-          <img
-            key={a.key}
-            src={shipIcon}
-            className="secret-fx-ship"
-            style={{ top: `${a.top}%` }}
-            alt=""
-            aria-hidden="true"
-          />
-        ),
-      )}
+      {active.map((a) => {
+        if (a.kind === 'flashbang') {
+          return <div key={a.key} className="secret-fx-flashbang" aria-hidden="true" />;
+        }
+        if (a.kind === 'ship') {
+          return (
+            <img
+              key={a.key}
+              src={shipIcon}
+              className="secret-fx-ship"
+              style={{ top: `${a.top}%` }}
+              alt=""
+              aria-hidden="true"
+            />
+          );
+        }
+        if (a.kind === 'confetti') {
+          return (
+            <div key={a.key} className="secret-fx-confetti" aria-hidden="true">
+              <ConfettiBurst />
+            </div>
+          );
+        }
+        if (a.kind === 'sheep') {
+          return (
+            <div key={a.key} className="secret-fx-sheep" aria-hidden="true">
+              {SHEEP.map((s) => (
+                <span
+                  key={s.key}
+                  style={{
+                    left: `${s.left}%`,
+                    animationDelay: `${s.delay}s`,
+                    animationDuration: `${s.duration}s`,
+                  }}
+                >
+                  🐑
+                </span>
+              ))}
+            </div>
+          );
+        }
+        return null; // quake/disco render via body classes above
+      })}
     </>
   );
 }
