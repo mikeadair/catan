@@ -86,3 +86,37 @@
   color: var(--color-text-dim);
   z-index: 1;
 }
+
+/* The sidebar narrows to 280px at <=1500px viewports (Game.css) — five 52px cards + gaps +
+   panel padding no longer fit one row there, and the wool card wrapping to its own second
+   row cost the sidebar ~70px of height (paid straight out of the log's flexible share).
+   Shrink the cards enough to keep all five on one row instead. */
+@media (max-width: 1500px) {
+  .bank-card {
+    width: 44px;
+    height: 58px;
+  }
+  .bank-panel__cards {
+    gap: 4px;
+  }
+}
+
+/* Short viewports (e.g. 1080p at 125-150% OS scaling): every fixed-height sidebar piece
+   trimmed here is height the log & chat panel gets back — it's the sidebar's only flexible
+   panel and was collapsing to its min-height floor. */
+@media (max-height: 940px) {
+  .bank-panel {
+    padding: 8px;
+    gap: 6px;
+  }
+  .bank-card {
+    height: 54px;
+  }
+  .bank-card__icon {
+    width: 18px;
+    height: 18px;
+  }
+  .bank-card__count {
+    font-size: 13px;
+  }
+}

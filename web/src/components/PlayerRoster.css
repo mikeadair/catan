@@ -277,3 +277,49 @@
   margin-left: 1px;
   flex-shrink: 0;
 }
+
+/* Short viewports: tighter rows so a full 4-player roster leaves the log & chat panel (the
+   sidebar's only flexible panel) something better than its min-height floor — see the
+   matching media query in BankPanel.css. */
+@media (max-height: 940px) {
+  .player-roster {
+    padding: 8px;
+    gap: 6px;
+  }
+  .player-roster__list {
+    gap: 4px;
+  }
+  .player-roster__row {
+    padding: 4px 6px;
+    gap: 8px;
+  }
+  .player-roster__avatar {
+    width: 30px;
+    height: 30px;
+  }
+  .player-roster__row--you .player-roster__avatar {
+    width: 34px;
+    height: 34px;
+  }
+  .player-roster__body {
+    gap: 3px;
+  }
+  .player-roster__card-badge {
+    width: 21px;
+    height: 26px;
+  }
+  .player-roster__card-badge-icon {
+    width: 13px;
+    height: 13px;
+  }
+  .player-roster__card-badge-count {
+    font-size: 10px;
+  }
+  .player-roster__mini-stat {
+    font-size: 10px;
+  }
+  .player-roster__mini-stat-icon {
+    width: 13px;
+    height: 13px;
+  }
+}

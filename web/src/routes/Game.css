@@ -590,6 +590,15 @@
   }
 }
 
+/* Short viewports: tighten the sidebar's inter-panel gap — pairs with the compact-panel
+   media queries in BankPanel.css/PlayerRoster.css to hand the reclaimed height to the
+   log & chat panel. */
+@media (max-height: 940px) {
+  .game__sidebar {
+    gap: 8px;
+  }
+}
+
 /* --- Responsive: extra-large desktop (>= 2200px wide) --------------------------------------
    The board SVG already scales up to fill its column; the fixed 320px sidebar just reads
    disproportionately small out there — give it (and the fog variant) a bit more room. */
