@@ -56,9 +56,12 @@ interface ActiveEffect {
 export interface SecretMenuProps {
   roomId: string;
   uid: string;
+  /** Which screen edge to float against — Game.tsx passes the side the sidebar ISN'T on, so
+   * the open menu hangs over open board water instead of covering the roster/log. */
+  side: 'left' | 'right';
 }
 
-export default function SecretMenu({ roomId, uid }: SecretMenuProps): JSX.Element | null {
+export default function SecretMenu({ roomId, uid, side }: SecretMenuProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [affectSelf, setAffectSelf] = useState(false);
   const [active, setActive] = useState<ActiveEffect[]>([]);
@@ -132,32 +135,26 @@ export default function SecretMenu({ roomId, uid }: SecretMenuProps): JSX.Elemen
   return (
     <>
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal secret-menu" role="dialog" aria-label="Secret menu" onClick={(e) => e.stopPropagation()}>
-            <h3>🤫 Secret menu</h3>
-            <p>Broadcasts to everyone in the room.</p>
-            <div className="secret-menu__grid">
-              {EFFECT_BUTTONS.map(({ kind, label }) => (
-                <button
-                  key={kind}
-                  type="button"
-                  className="secret-menu__button"
-                  onClick={() => void sendEffect(roomId, uid, kind, affectSelf).catch(() => {})}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <label className="secret-menu__toggle">
-              <input type="checkbox" checked={affectSelf} onChange={(e) => setAffectSelf(e.target.checked)} />
-              Affect self
-            </label>
-            <div className="modal__actions">
-              <button type="button" onClick={() => setOpen(false)}>
-                Close
-              </button>
-            </div>
-          </div>
+        <div className={`secret-menu secret-menu--${side}`} role="dialog" aria-label="Secret menu">
+          <div className="secret-menu__title">🤫 Secret menu</div>
+          <div className="secret-menu__hint">Broadcasts to everyone in the room.</div>
+          {EFFECT_BUTTONS.map(({ kind, label }) => (
+            <button
+              key={kind}
+              type="button"
+              className="secret-menu__button"
+              onClick={() => void sendEffect(roomId, uid, kind, affectSelf).catch(() => {})}
+            >
+              {label}
+            </button>
+          ))}
+          <label className="secret-menu__toggle">
+            <input type="checkbox" checked={affectSelf} onChange={(e) => setAffectSelf(e.target.checked)} />
+            Affect self
+          </label>
+          <button type="button" className="secret-menu__close" onClick={() => setOpen(false)}>
+            Close
+          </button>
         </div>
       )}
       {active.map((a) => {

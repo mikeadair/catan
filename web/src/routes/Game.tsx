@@ -1051,7 +1051,7 @@ export default function Game(): JSX.Element {
           </div>
         </div>
       )}
-      {roomId && <SecretMenu roomId={roomId} uid={uid} />}
+      {roomId && <SecretMenu roomId={roomId} uid={uid} side={sidebarSide === 'left' ? 'right' : 'left'} />}
       {leaveConfirmOpen && (
         <div className="modal-overlay">
           <div className="modal">
