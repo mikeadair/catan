@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type JSX,
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -466,7 +467,10 @@ export default function BoardView({
       viewBox={viewBox}
       role="img"
       aria-label="Catan board"
-      style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
+      // --own-color drives the build-candidate hotspots (Board.css): pulsing spots in the
+      // player's OWN color, not a generic accent yellow, so "where can I build" and "which
+      // color am I" read off the same glance.
+      style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none', '--own-color': ownColor } as CSSProperties}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
@@ -853,7 +857,7 @@ export default function BoardView({
                   cx={mid.x}
                   cy={mid.y}
                   r={5}
-                  fill="var(--color-accent)"
+                  fill="var(--own-color, var(--color-accent))"
                   stroke="#1c1c1c"
                   strokeWidth={1}
                   className="catan-board__pulse-bubble"

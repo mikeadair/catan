@@ -24,8 +24,12 @@
   outline: none;
 }
 
+/* Candidate hotspots render in the local player's own color (--own-color, set inline on the
+   <svg> root from PLAYER_COLOR_HEX) rather than the generic accent yellow — the highlight
+   doubles as a "you are this color" reminder. The accent-yellow stroke stays as an outline
+   so dark player colors don't sink into the water/terrain behind them. */
 .catan-board__hotspot--vertex {
-  fill: var(--color-accent);
+  fill: var(--own-color, var(--color-accent));
   fill-opacity: 0.55;
   stroke: var(--color-accent);
   stroke-width: 2;
@@ -45,8 +49,8 @@
 }
 
 .catan-board__hotspot--edge {
-  stroke: var(--color-accent);
-  stroke-opacity: 0.4;
+  stroke: var(--own-color, var(--color-accent));
+  stroke-opacity: 0.45;
 }
 
 .catan-board__hotspot--edge:hover {

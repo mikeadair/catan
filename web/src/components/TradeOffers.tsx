@@ -266,12 +266,18 @@ export default function TradeOffers({
                   <strong>{isMine ? 'You' : (proposer?.displayName ?? 'Someone')}</strong> offer{isMine ? '' : 's'}
                   {isOpen && !isMine ? <span className="trade-offers__open-tag">open to all</span> : null}
                 </div>
+                {/* Always from the VIEWER's perspective, with explicit gain/loss labels — the
+                    old proposer-perspective `give → receive` arrow made the responder mentally
+                    flip the trade around before knowing whether Accept was good for them. */}
                 <div className="trade-offers__exchange">
-                  <ResourceIconRow resources={t.give} />
-                  <span className="trade-offers__arrow" aria-hidden>
-                    →
-                  </span>
-                  <ResourceIconRow resources={t.receive} />
+                  <div className="trade-offers__exchange-row">
+                    <span className="trade-offers__exchange-label trade-offers__exchange-label--get">You get</span>
+                    <ResourceIconRow resources={isMine ? t.receive : t.give} />
+                  </div>
+                  <div className="trade-offers__exchange-row">
+                    <span className="trade-offers__exchange-label trade-offers__exchange-label--give">You give</span>
+                    <ResourceIconRow resources={isMine ? t.give : t.receive} />
+                  </div>
                 </div>
                 <ResponderDots trade={t} players={players} />
               </div>

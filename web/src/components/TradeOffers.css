@@ -67,14 +67,31 @@
 
 .trade-offers__exchange {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.trade-offers__arrow {
-  color: var(--color-text-dim);
+.trade-offers__exchange-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trade-offers__exchange-label {
+  font-size: 10px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  width: 52px;
+  flex-shrink: 0;
+}
+
+.trade-offers__exchange-label--get {
+  color: #5fbf77;
+}
+
+.trade-offers__exchange-label--give {
+  color: #e07070;
 }
 
 .trade-offers__resource-row {
