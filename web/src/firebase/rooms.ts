@@ -315,6 +315,19 @@ export async function joinRoom(
   });
 }
 
+/** Reads just a room's join code — used by App's auto-rejoin to recognize an invite link
+ * that points at the room this browser was already seated in (see App.tsx). Members can
+ * always read their room doc regardless of status; a non-member's read of a playing room is
+ * denied by rules and resolves null here, which callers treat as "not my room". */
+export async function fetchRoomCode(roomId: string): Promise<string | null> {
+  try {
+    const snap = await getDoc(roomRef(roomId));
+    return snap.exists() ? ((snap.data() as { code?: string }).code ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function addBot(roomId: string, difficulty: BotDifficulty): Promise<void> {
   await runTransaction(db, async (tx) => {
     const ref = roomRef(roomId);

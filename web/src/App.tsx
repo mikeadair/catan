@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthUid } from './firebase/auth';
+import { fetchRoomCode } from './firebase/rooms';
 import { useGameStore, getLastRoomId } from './state/store';
 import { RoomErrorBoundary } from './RoomErrorBoundary';
 import { unlockAudio, isMuted, setMuted, playSfx } from './audio/sfx';
@@ -26,14 +27,30 @@ function App() {
   }, [uid, setUid]);
 
   // Auto-rejoin the last room this browser was in, unless a room is already active.
-  // A ?join=CODE invite link always wins over auto-rejoin: without this, a stale last-room
+  // A ?join=CODE invite link normally wins over auto-rejoin: without this, a stale last-room
   // id in localStorage hijacked the visit straight into the old room and the invitee never
-  // saw Home's join form at all.
+  // saw Home's join form at all. One critical exception: when the invite code IS the room
+  // this browser is already seated in (a guest who joined through the link keeps ?join=CODE
+  // in the address bar, then refreshes mid-game), deferring to the link would dump them on
+  // Home — and re-joining by code fails once the game is 'playing', so they were effectively
+  // booted. Verify via the room doc (members can always read it) and rejoin instead.
   useEffect(() => {
     if (!uid || roomId) return;
-    if (new URLSearchParams(window.location.search).has('join')) return;
     const last = getLastRoomId();
-    if (last) enterRoom(last);
+    const joinCode = new URLSearchParams(window.location.search).get('join');
+    if (!joinCode) {
+      if (last) enterRoom(last);
+      return;
+    }
+    if (!last) return;
+    let cancelled = false;
+    void fetchRoomCode(last).then((code) => {
+      if (cancelled || useGameStore.getState().roomId) return;
+      if (code !== null && code === joinCode.trim().toUpperCase()) enterRoom(last);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [uid, roomId, enterRoom]);
 
   // Browsers suspend AudioContext until a user gesture; unlock on the first one.

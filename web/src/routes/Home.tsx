@@ -139,6 +139,18 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       });
   }, [authUser.isAnonymous, authUser.uid]);
 
+  /** Strips a consumed ?join=CODE from the URL once a room has actually been entered, so a
+   * later refresh auto-rejoins (App.tsx) instead of deferring to the invite link and dumping
+   * the player back here. Deliberately NOT done on mount when the code is merely prefilled —
+   * until the join succeeds, the param still needs to win over a stale last-room auto-rejoin. */
+  function clearJoinParamFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('join')) return;
+    params.delete('join');
+    const qs = params.toString();
+    window.history.replaceState({}, '', qs ? `${window.location.pathname}?${qs}` : window.location.pathname);
+  }
+
   function handleNameChange(value: string) {
     setName(value);
     persistName(value);
@@ -180,6 +192,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
         preferredColor: color,
       });
       await saveProfileIfSignedIn(finalName);
+      clearJoinParamFromUrl();
       useGameStore.getState().enterRoom(roomId);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -198,6 +211,7 @@ export default function Home({ uid }: { uid: string }): JSX.Element {
       setDisplayName(finalName).catch(() => {});
       const roomId = await joinRoom(joinCode, uid, finalName, color);
       await saveProfileIfSignedIn(finalName);
+      clearJoinParamFromUrl();
       useGameStore.getState().enterRoom(roomId);
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : String(err));
