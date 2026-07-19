@@ -327,8 +327,15 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.secret-menu',
     preview: 'trade',
     screen: 'game',
-    description: 'Hidden easter-egg menu (flashbang/ship broadcasts) — summoned by typing "michael" anywhere in-game',
+    description: 'Hidden easter-egg menu (flashbang/ship/confetti/quake/sheep/disco broadcasts) — summoned by typing "michael" anywhere in-game',
     keys: 'michael', // only mounts once its trigger word has been typed — see SecretMenu.tsx
+  },
+  'fx-sheep': {
+    selector: '.secret-fx-sheep',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Secret-menu sheep-rain effect mid-fall (captured via the preview-only fx= param — see SecretMenu.tsx)',
+    query: 'fx=sheep',
   },
 };
 
