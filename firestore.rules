@@ -128,6 +128,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Cosmetic easter-egg broadcasts (secret menu — see web/src/components/SecretMenu.tsx).
+    // Same trust model as chat: seated members may append docs attributed to themselves,
+    // nothing here ever touches game state.
+    match /rooms/{roomId}/effects/{effectId} {
+      allow read: if isMember(roomId);
+      allow create: if isMember(roomId) && request.auth.uid == request.resource.data.uid;
+      allow update, delete: if false;
+    }
+
     // Per-account preference doc (display name + preferred color), written once a guest
     // upgrades to a real (email) account — see web/src/firebase/users.ts. Strictly own-doc
     // only, both directions; nobody else may read or write another uid's preferences.

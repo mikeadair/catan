@@ -26,6 +26,9 @@ export interface SnapComponent {
    * trade composer only mounts once its toggle button is clicked. Distinct from a *scenario*'s
    * clicks (below), which go further than "make it visible" into a specific interaction state. */
   clicks?: string[];
+  /** Keystrokes typed at the page level (page.keyboard.type) after load, before `clicks` — for
+   * components summoned by typing rather than clicking (e.g. the secret menu's trigger word). */
+  keys?: string;
   /** Install a frozen Playwright clock before navigating (Date.now()/timers stop advancing on
    * their own past install time) — for components whose interesting state is otherwise a
    * transient, timer-driven race against real wall-clock time (e.g. TradeOffers' reject-flash,
@@ -319,6 +322,13 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     screen: 'game',
     description: "Leave-game confirmation dialog (Game.tsx's leaveConfirmOpen)",
     clicks: ['.game__leave-button'], // not visible at all until this click — same pattern as trade-bar above
+  },
+  'secret-menu': {
+    selector: '.secret-menu',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Hidden easter-egg menu (flashbang/ship broadcasts) — summoned by typing "michael" anywhere in-game',
+    keys: 'michael', // only mounts once its trigger word has been typed — see SecretMenu.tsx
   },
 };
 

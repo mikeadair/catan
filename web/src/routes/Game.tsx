@@ -25,6 +25,7 @@ import DiscardModal from '../components/DiscardModal';
 import GoldPickModal from '../components/GoldPickModal';
 import GameOverStandings from '../components/GameOverStandings';
 import ConfettiBurst from '../components/ConfettiBurst';
+import SecretMenu from '../components/SecretMenu';
 import shipIcon from '../assets/decor/ship.png';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
@@ -54,6 +55,7 @@ function sfxForLogMessage(message: string): SfxKind | null {
 
 export default function Game(): JSX.Element {
   const uid = useGameStore((s) => s.uid);
+  const roomId = useGameStore((s) => s.roomId);
   const room = useGameStore((s) => s.room);
   const players = useGameStore((s) => s.players);
   const ownHand = useGameStore((s) => s.ownHand);
@@ -1049,6 +1051,7 @@ export default function Game(): JSX.Element {
           </div>
         </div>
       )}
+      {roomId && <SecretMenu roomId={roomId} uid={uid} />}
       {leaveConfirmOpen && (
         <div className="modal-overlay">
           <div className="modal">

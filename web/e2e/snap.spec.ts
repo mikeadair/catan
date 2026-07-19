@@ -151,6 +151,7 @@ async function captureComponent(
   if (comp.freezeClock) await page.clock.install();
   await page.goto(url);
   await page.waitForLoadState('networkidle');
+  if (comp.keys) await page.keyboard.type(comp.keys);
   await clickAll(page, [...(comp.clicks ?? []), ...extraClicks]);
   const dir = `${SCREENSHOT_DIR}/${comp.screen}`;
   mkdirSync(dir, { recursive: true });

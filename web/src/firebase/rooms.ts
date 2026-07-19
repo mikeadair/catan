@@ -43,6 +43,7 @@ import {
 // rooms/{roomId}/players/{uid}/private/hand      -> PrivateHand  (doc id literally "hand")
 // rooms/{roomId}/trades/{tradeId}                -> TradeOffer
 // rooms/{roomId}/chat/{msgId}                    -> ChatMessage
+// rooms/{roomId}/effects/{effectId}              -> SecretEffect (easter-egg broadcasts)
 // rooms/{roomId}/serverOnly/devDeck              -> { cards: DevCardType[] } (Cloud Functions only)
 //
 // All in-game mutation (rollDice, build*, trade*, ..., and startGame's initial deal) goes
@@ -77,6 +78,17 @@ export interface ChatMessage {
   uid: string;
   displayName: string;
   text: string;
+  ts: number;
+}
+
+// Easter-egg broadcast fired from the hidden secret menu (see components/SecretMenu.tsx).
+// Purely cosmetic, never touches game state — same trust model as chat: any seated member
+// may create one, every client decides locally how (and whether) to render it.
+export interface SecretEffect {
+  id: string;
+  uid: string;
+  kind: 'flashbang' | 'ship';
+  affectSelf: boolean;
   ts: number;
 }
 
@@ -619,6 +631,26 @@ export async function sendChat(
   const msgRef = doc(collection(db, 'rooms', roomId, 'chat'));
   const message: ChatMessage = { id: msgRef.id, uid, displayName, text, ts: Date.now() };
   await setDoc(msgRef, message);
+}
+
+export function subscribeEffects(roomId: string, cb: (effects: SecretEffect[]) => void): () => void {
+  // Newest-first with a small cap — unlike chat there's no history UI, so old effect docs
+  // only matter for the subscriber's freshness/seen checks.
+  const q = query(collection(db, 'rooms', roomId, 'effects'), orderBy('ts', 'desc'), limit(20));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => d.data() as SecretEffect));
+  });
+}
+
+export async function sendEffect(
+  roomId: string,
+  uid: string,
+  kind: SecretEffect['kind'],
+  affectSelf: boolean
+): Promise<void> {
+  const effectRef = doc(collection(db, 'rooms', roomId, 'effects'));
+  const effect: SecretEffect = { id: effectRef.id, uid, kind, affectSelf, ts: Date.now() };
+  await setDoc(effectRef, effect);
 }
 
 export async function heartbeat(roomId: string, uid: string): Promise<void> {
