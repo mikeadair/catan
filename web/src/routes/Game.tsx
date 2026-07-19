@@ -26,7 +26,7 @@ import GoldPickModal from '../components/GoldPickModal';
 import GameOverStandings from '../components/GameOverStandings';
 import ConfettiBurst from '../components/ConfettiBurst';
 import SecretMenu from '../components/SecretMenu';
-import shipIcon from '../assets/decor/ship.png';
+import SailingShip from '../components/SailingShip';
 import RobberModal, { type RobberStep } from '../components/RobberModal';
 import './Game.css';
 
@@ -760,7 +760,10 @@ export default function Game(): JSX.Element {
       className={`game${sidebarSide === 'left' ? ' game--sidebar-left' : ''}${isFogMap ? ' game--fog' : ''}`}
     >
       <div className="game__board-area">
-        <img src={shipIcon} className="game__anchored-ship" alt="" aria-hidden="true" />
+        {/* The same slowly-sailing decorative ship as the home screen (see SailingShip.tsx —
+            factored out for exactly this reuse), crossing the open water below the hex grid,
+            replacing an earlier static anchored <img> that just bobbed in place. */}
+        <SailingShip layerClassName="game__ship-layer" topRange={[78, 90]} />
         {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
         {resourceGrantMessage && (
           <div key={resourceGrantMessage} className="game__resource-grant">
