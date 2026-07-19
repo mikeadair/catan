@@ -540,13 +540,36 @@ export async function claimAndRunOffTurnBotTrade(
   return runBotDecisionAndSubmit(roomId, room, players, trades, botUid);
 }
 
+// Fields added to RoomState after rooms already existed in production — a doc written by an
+// older deploy simply lacks them. A client can still land on such a doc (App auto-rejoins the
+// last room id stored in localStorage), and an undefined array here used to crash the Game
+// render on its first unconditional access (room.pendingGoldPicks.some(...)) into a bare blue
+// screen, permanently, on every reload. Spread these under the raw doc so missing keys pick
+// up safe defaults; keys present in the doc always win. Timers default to null (= disabled,
+// what those games were created with), never to the createRoom defaults.
+const LEGACY_ROOM_DEFAULTS: Partial<Omit<RoomState, 'id'>> = {
+  victoryPointsToWin: DEFAULT_VICTORY_POINTS_TO_WIN,
+  discardLimit: DEFAULT_DISCARD_LIMIT,
+  turnTimerSeconds: null,
+  tradeResponseTimerSeconds: null,
+  safeMode: false,
+  paused: false,
+  pausedAt: null,
+  pauseVotes: [],
+  discoveredHexIds: null,
+  pendingGoldPicks: [],
+  devCardPlayedThisTurn: false,
+  pendingRoadBuilding: null,
+  lastSetupSettlementVertexId: null,
+};
+
 export function subscribeRoom(roomId: string, cb: (room: RoomState | null) => void): () => void {
   return onSnapshot(roomRef(roomId), (snap) => {
     if (!snap.exists()) {
       cb(null);
       return;
     }
-    cb({ id: snap.id, ...(snap.data() as Omit<RoomState, 'id'>) });
+    cb({ id: snap.id, ...LEGACY_ROOM_DEFAULTS, ...(snap.data() as Omit<RoomState, 'id'>) });
   });
 }
 

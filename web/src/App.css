@@ -23,6 +23,19 @@
   }
 }
 
+.app-crash__button {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.app-crash__button:hover {
+  border-color: var(--color-accent);
+}
+
 .toast {
   position: fixed;
   top: 16px;

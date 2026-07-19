@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuthUid } from './firebase/auth';
 import { useGameStore, getLastRoomId } from './state/store';
+import { RoomErrorBoundary } from './RoomErrorBoundary';
 import { unlockAudio, isMuted, setMuted, playSfx } from './audio/sfx';
 import { SoundOnIcon, SoundOffIcon } from './components/gameIcons';
 import Home from './routes/Home';
@@ -15,6 +16,7 @@ function App() {
   const room = useGameStore((s) => s.room);
   const setUid = useGameStore((s) => s.setUid);
   const enterRoom = useGameStore((s) => s.enterRoom);
+  const leaveRoom = useGameStore((s) => s.leaveRoom);
   const error = useGameStore((s) => s.error);
   const clearError = useGameStore((s) => s.clearError);
   const [muted, setMutedState] = useState(isMuted);
@@ -24,8 +26,12 @@ function App() {
   }, [uid, setUid]);
 
   // Auto-rejoin the last room this browser was in, unless a room is already active.
+  // A ?join=CODE invite link always wins over auto-rejoin: without this, a stale last-room
+  // id in localStorage hijacked the visit straight into the old room and the invitee never
+  // saw Home's join form at all.
   useEffect(() => {
     if (!uid || roomId) return;
+    if (new URLSearchParams(window.location.search).has('join')) return;
     const last = getLastRoomId();
     if (last) enterRoom(last);
   }, [uid, roomId, enterRoom]);
@@ -82,7 +88,9 @@ function App() {
       >
         {muted ? <SoundOffIcon className="sound-toggle__icon" /> : <SoundOnIcon className="sound-toggle__icon" />}
       </button>
-      {!roomId || !room ? <Home uid={uid} /> : room.status === RoomStatus.Lobby ? <Lobby /> : <Game />}
+      <RoomErrorBoundary key={roomId ?? 'home'} onLeave={leaveRoom}>
+        {!roomId || !room ? <Home uid={uid} /> : room.status === RoomStatus.Lobby ? <Lobby /> : <Game />}
+      </RoomErrorBoundary>
     </>
   );
 }
