@@ -895,11 +895,22 @@ export default function Game(): JSX.Element {
                     : 'You give — tap cards below to add to the trade'
                   : 'Your hand'}
               </span>
-              {tradeComposerOpen && tradeGiveTotal > 0 && (
-                <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
-                  Clear ({tradeGiveTotal})
+              <div className="game__toolbar-label-controls">
+                {tradeComposerOpen && tradeGiveTotal > 0 && (
+                  <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
+                    Clear ({tradeGiveTotal})
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`game__hand-trade-toggle${tradeComposerOpen ? ' game__hand-trade-toggle--active' : ''}`}
+                  onClick={toggleTradeComposer}
+                  aria-pressed={tradeComposerOpen}
+                >
+                  <TradeIcon className="game__hand-trade-toggle-icon" />
+                  Trade
                 </button>
-              )}
+              </div>
             </div>
             {tradeComposerOpen ? (
               <ResourceHand resources={resources} variant="cards" selected={tradeGive} onChange={setTradeGive} />
@@ -908,15 +919,6 @@ export default function Game(): JSX.Element {
             )}
           </div>
           <div className="game__toolbar-actions">
-            <button
-              type="button"
-              className={`build-toolbar__button${tradeComposerOpen ? ' build-toolbar__button--active' : ''}`}
-              onClick={toggleTradeComposer}
-              aria-pressed={tradeComposerOpen}
-            >
-              <TradeIcon className="build-toolbar__icon" />
-              <span className="build-toolbar__label">Trade</span>
-            </button>
             <DevCardPanel
               devCards={ownHand?.devCards ?? []}
               turnNumber={room.turnNumber}
@@ -924,7 +926,6 @@ export default function Game(): JSX.Element {
               blocked={pendingActionType !== null}
               onPlay={handlePlayDevCard}
             />
-            {(ownHand?.devCards.length ?? 0) > 0 && <div className="game__toolbar-divider" aria-hidden="true" />}
             <BuildToolbar
               resources={resources}
               legalTypes={legalTypes}

@@ -317,36 +317,25 @@
   gap: 16px;
 }
 
-/* Groups Trade, owned dev cards, and the build buttons into one wrapping cluster — previously
-   these were independent flex children of .game__toolbar-main, which wrapped unpredictably
-   (e.g. the build buttons dropping to their own line under the hand while Trade/dev-cards
-   floated mid-row above them) and read as scattered rather than one "things you can do" group.
-   `flex: 1 1 auto` also absorbs whatever width the hand's fixed box and the timer/end-turn
-   stack don't use, so the right-hand stack lands flush against the toolbar's right edge without
+/* Owned dev cards stacked above the buildable/purchasable things — those are two different kinds
+   of action ("play what you're already holding" vs. "spend resources to build/buy"), and a
+   vertical stack (each row wrapping independently within the column's width) reads as two
+   distinct groups without needing the divider the old single-row layout used to separate them.
+   This also, not incidentally, uses less *width* than the old single wrapping row (which also
+   held the Trade toggle, now moved to the hand's own label row — see
+   .game__hand-trade-toggle) — one row of buttons is narrower than three squeezed side by side,
+   which is what lets .game__toolbar-hand stay at its full 620px width to a smaller viewport
+   before needing to shrink (see the max-width media query below).
+   `flex: 1 1 auto` absorbs whatever width the hand's fixed box and the timer/end-turn stack
+   don't use, so the right-hand stack lands flush against the toolbar's right edge without
    needing its own margin-left: auto. */
 .game__toolbar-actions {
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/* Separates the owned, playable dev cards (DevCardPanel) from the buildable/purchasable
-   things (BuildToolbar) — those are two different kinds of action ("play what you're already
-   holding" vs. "spend resources to build/buy") and sitting directly adjacent with identical
-   button styling made them read as one undifferentiated group. Only rendered when there's a
-   dev-card group to actually separate from (see the conditional in Game.tsx) — an empty hand
-   shouldn't leave an orphaned bar sitting right after Trade with nothing behind it. Height
-   comes from the flex line's own stretch (this container's `align-items` is left at its
-   `stretch` default), so it always matches whatever the button-cards in that row are tall. */
-.game__toolbar-divider {
-  align-self: stretch;
-  width: 1px;
-  background: var(--color-border);
-  margin: 0 2px;
-  flex-shrink: 0;
 }
 
 .game__toolbar-hand {
@@ -406,6 +395,52 @@
 
 .game__toolbar-clear-give:hover {
   border-color: var(--color-accent);
+}
+
+/* Groups the label row's trailing controls (Clear, Trade) so .game__toolbar-label-row's
+   space-between only ever splits it into two ends — the label on the left, this cluster on the
+   right — rather than spreading three+ items evenly across the row once Clear is also showing. */
+.game__toolbar-label-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* The hand's Trade toggle — moved here from the actions row below (see .game__toolbar-actions'
+   doc comment) so it sits with the hand it actually operates on, and freeing that row to fit a
+   narrower hand box less often. Filled with --color-trade rather than the neutral
+   build-toolbar__button treatment used everywhere else in the footer: this is the one control in
+   the hand's own header, reached far more often than any single build button, so it's meant to
+   read as a shortcut at a glance instead of blending into the row of build-toolbar__buttons it
+   used to sit in. */
+.game__hand-trade-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  background: var(--color-trade);
+  border: 1px solid var(--color-trade);
+  border-radius: 999px;
+  padding: 3px 10px 3px 8px;
+  color: #0c1626;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.game__hand-trade-toggle:hover {
+  filter: brightness(1.1);
+}
+
+.game__hand-trade-toggle--active {
+  background: var(--color-panel-light);
+  border-color: var(--color-trade);
+  color: var(--color-trade);
+}
+
+.game__hand-trade-toggle-icon {
+  width: 13px;
+  height: 13px;
 }
 
 /* Timer stacked above End Turn (was side-by-side) — the two are really one "wrap up your turn"
@@ -524,20 +559,27 @@
   font-weight: 700;
 }
 
-/* --- Responsive: medium desktop (~1280-1800px wide) ---------------------------------------
-   The toolbar's fixed-width hand box (620px) plus the 320px sidebar left the build/dev action
+/* --- Responsive: medium desktop (~1280-1700px wide) ---------------------------------------
+   The toolbar's fixed-width hand box (620px) plus the 320px sidebar left the build action
    cluster too little room at common laptop widths — its buttons wrapped into a tall column,
    and since the toolbar lives in the grid's `auto` row, that height came straight out of the
    board's `1fr` row (collapsing the board down to a small letterboxed rectangle with wasted
    space on either side). Shrink the fixed-footprint pieces instead: the hand box narrows (its
    card groups wrap within), the sidebar gives up 40px, and the build buttons compact (see
-   BuildToolbar.css/DevCardPanel.css's matching media queries).
+   BuildToolbar.css's matching media query).
    This used to cut off at 1500px, which measured out to fitting the action row exactly (or
    missing it by a couple px) at very common resolutions just above that line — 1512x982 (14"
    MacBook Air/Pro @2x) and 1600x900 both still wrapped the action row onto 2-3 lines and
-   ballooned the toolbar's height. 1800px comfortably covers those; screens wider than that
-   have enough width to spare for the roomier full-size treatment. */
-@media (max-width: 1800px) {
+   ballooned the toolbar's height. Widening it to 1800px fixed that, but that was calibrated
+   back when Trade + dev cards + build buttons all shared one wrapping row (see
+   .game__toolbar-actions below) — DevCardPanel is now always icon-only regardless of width
+   (its full-name labels were the one holdout that could still force a wrap on its own, since it
+   renders one card per *owned type* rather than a fixed set — see DevCardPanel.css) and Trade
+   moved to the hand's own label row (.game__hand-trade-toggle), so the action column only ever
+   needs to fit the build buttons alone. 1700px is the new measured minimum (with ~50px of
+   margin, not an exact fit) for the full-size hand+build-toolbar+sidebar combination to still
+   fit in one row above that width. */
+@media (max-width: 1700px) {
   .game {
     grid-template-columns: 1fr 280px;
   }

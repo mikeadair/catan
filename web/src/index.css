@@ -9,6 +9,10 @@
   --color-accent: #f2b134;
   --color-danger: #e5484d;
   --color-success: #3ba55d;
+  /* Distinct from --color-accent (gold, reserved for primary CTAs like End Turn/Play) — the
+     hand's Trade toggle wants its own pop of color so it reads as a shortcut into the toolbar's
+     one *frequent, low-commitment* action, not another CTA competing with End Turn. */
+  --color-trade: #4c8bf5;
 
   --resource-brick: #c1652f;
   --resource-lumber: #2f7a3d;

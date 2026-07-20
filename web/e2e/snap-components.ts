@@ -127,14 +127,14 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     selector: '.game__toolbar',
     preview: 'trade',
     screen: 'game',
-    description: 'Whole bottom action toolbar (hand, trade toggle, dev cards, build toolbar, turn timer, end turn)',
+    description: 'Whole bottom action toolbar (hand with its own trade toggle, dev cards stacked above the build toolbar, turn timer, end turn)',
   },
   'toolbar-maxed-hand': {
     selector: '.game__toolbar',
     preview: 'trade',
     screen: 'game',
     description:
-      'Toolbar stress test: every resource pinned at 19 (all five hand groups hit the overlap-fan + overflow-stepper look at once) and one of every dev card type (full 5-card DevCardPanel row, dev-cards/build divider visible)',
+      'Toolbar stress test: every resource pinned at 19 (all five hand groups hit the overlap-fan + overflow-stepper look at once) and one of every dev card type (full 5-card DevCardPanel row, stacked above the build buttons)',
     query: 'hand=maxed',
   },
   'build-toolbar': {
@@ -154,12 +154,13 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     preview: 'trade',
     screen: 'game',
     description: 'Floating trade composer panel ("you want" cards + offer/bank/target controls)',
-    // The toggle button (Game.tsx) reuses BuildToolbar's `.build-toolbar__button` class for
-    // visual consistency but, unlike BuildToolbar's own road/settlement/city/dev-card buttons,
-    // is a *direct* child of `.game__toolbar-actions` rather than nested inside `.build-toolbar` —
-    // this scopes to exactly that one button. (A plain text match isn't safe here: TradeOffers'
-    // "Trade with Bot Bob" finalize button also contains "Trade" and sits earlier in the DOM.)
-    clicks: ['.game__toolbar-actions > button.build-toolbar__button'], // closed by default — this is what mounts it
+    // The toggle button lives in the hand's own label row (Game.tsx), styled via its own
+    // `.game__hand-trade-toggle` class rather than BuildToolbar's shared button class — it used
+    // to sit inside .game__toolbar-actions alongside the build buttons, scoped by being a direct
+    // child there; a plain text match still isn't safe regardless (TradeOffers' "Trade with Bot
+    // Bob" finalize button also contains "Trade" and sits earlier in the DOM), so the distinct
+    // class name is what scopes this to exactly the one button.
+    clicks: ['.game__hand-trade-toggle'], // closed by default — this is what mounts it
   },
   'trade-offers': {
     selector: '.game__trades-overlay',
@@ -365,7 +366,7 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
     // composer is open (Game.tsx's tradeComposerOpen ? ... : ... around .game__toolbar-hand) —
     // without this first click, the hand-card click below lands on a non-interactive card and
     // silently no-ops, producing a screenshot indistinguishable from the plain 'hand' component.
-    clicks: ['.game__toolbar-actions > button.build-toolbar__button', '[data-testid="hand-card"]'],
+    clicks: ['.game__hand-trade-toggle', '[data-testid="hand-card"]'],
     description: 'Trade composer open, one hand card tapped/selected for the trade',
   },
   'trade-bar-with-selection': {
@@ -377,7 +378,7 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
     // extraSelectors — captures exactly the two real, already-rendered regions together (with
     // whatever's normally visible in the gap between them), not a synthetic layout.
     component: 'hand',
-    clicks: ['.game__toolbar-actions > button.build-toolbar__button', '[data-testid="hand-card"]'],
+    clicks: ['.game__hand-trade-toggle', '[data-testid="hand-card"]'],
     extraSelectors: ['.trade-bar'],
     description: 'Trade composer open with one hand card selected — give side (hand, bottom) and want side (trade-bar, floating above) shown together',
   },
@@ -392,7 +393,7 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
     // stepGroup's "lowest unselected index first" fill order, before it starts climbing pure
     // overflow.
     clicks: [
-      '.game__toolbar-actions > button.build-toolbar__button',
+      '.game__hand-trade-toggle',
       ...Array(5).fill('[data-testid="hand-card-overflow"][data-resource="ore"] button[aria-label="Add one more Ore to trade"]'),
     ],
     description: 'Ore over the cap, counter alone clicked 5x — every individual face now selected, stepper still at 0',
@@ -400,7 +401,7 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
   'hand-overflow-counter-into-overflow': {
     component: 'hand',
     clicks: [
-      '.game__toolbar-actions > button.build-toolbar__button',
+      '.game__hand-trade-toggle',
       ...Array(7).fill('[data-testid="hand-card-overflow"][data-resource="ore"] button[aria-label="Add one more Ore to trade"]'),
     ],
     description: 'Ore over the cap, counter clicked 7x — faces full, stepper now climbing past them (total 7)',
