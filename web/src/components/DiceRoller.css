@@ -1,8 +1,7 @@
 .dice-roller {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  z-index: 40;
+  /* Positioning (previously position: absolute; right/bottom/z-index here directly) now lives
+     on its parent, .game__board-controls (Game.css) — that wrapper also holds the turn
+     timer/End Turn button, floated as one bottom-right stack. */
   display: flex;
   flex-direction: column;
   align-items: center;

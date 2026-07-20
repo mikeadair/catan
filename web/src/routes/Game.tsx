@@ -785,15 +785,39 @@ export default function Game(): JSX.Element {
           onEdgeClick={onEdgeClick}
           onHexClick={onHexClick}
         />
-        {showDiceRoller && (
-          <DiceRoller
-            diceRoll={room.diceRoll}
-            canRoll={legalTypes.includes('rollDice')}
-            isCurrentPlayer={isCurrentPlayer}
-            isPending={pendingActionType === 'rollDice'}
-            onRoll={() => void runAction({ type: 'rollDice', uid })}
-          />
-        )}
+        {/* Turn timer + End Turn used to live in the toolbar's own right-hand column — moved
+            here, next to the dice roller (same "float over the board's water margin, never
+            affect the toolbar's layout" treatment DiceRoller already used), so the toolbar row
+            only has to fit the hand + build/dev actions. That's what let the hand box's
+            full-size (3-resource-group) breakpoint drop this low — see Game.css's
+            .game__toolbar-actions doc comment for the measured minimum. End Turn stays
+            unconditionally mounted (just disabled when illegal) same as before; only the dice
+            roller itself is phase-gated. */}
+        <div className="game__board-controls">
+          <div className="game__turn-controls">
+            <TurnTimer
+              turnStartedAt={room.turnStartedAt}
+              turnTimerSeconds={room.turnTimerSeconds}
+              paused={room.paused}
+              pausedAt={room.pausedAt}
+            />
+            <EndTurnButton
+              legalTypes={legalTypes}
+              isCurrentPlayer={isCurrentPlayer}
+              pendingActionType={pendingActionType}
+              onEndTurn={() => void runAction({ type: 'endTurn', uid })}
+            />
+          </div>
+          {showDiceRoller && (
+            <DiceRoller
+              diceRoll={room.diceRoll}
+              canRoll={legalTypes.includes('rollDice')}
+              isCurrentPlayer={isCurrentPlayer}
+              isPending={pendingActionType === 'rollDice'}
+              onRoll={() => void runAction({ type: 'rollDice', uid })}
+            />
+          )}
+        </div>
         {/* Rendered as an overlay anchored in the board's own empty water margin (the `pad`
             space around the hex grid in Board.tsx) rather than a layout-participating grid
             column — a grid column's width changes with its content (zero when no trades are
@@ -934,20 +958,6 @@ export default function Game(): JSX.Element {
               pendingActionType={pendingActionType}
               onToggleMode={(mode) => setBuildMode((cur) => (cur === mode ? null : mode))}
               onBuyDevCard={() => void runAction({ type: 'buyDevCard', uid })}
-            />
-          </div>
-          <div className="game__toolbar-right">
-            <TurnTimer
-              turnStartedAt={room.turnStartedAt}
-              turnTimerSeconds={room.turnTimerSeconds}
-              paused={room.paused}
-              pausedAt={room.pausedAt}
-            />
-            <EndTurnButton
-              legalTypes={legalTypes}
-              isCurrentPlayer={isCurrentPlayer}
-              pendingActionType={pendingActionType}
-              onEndTurn={() => void runAction({ type: 'endTurn', uid })}
             />
           </div>
         </div>

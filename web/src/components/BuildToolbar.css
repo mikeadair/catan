@@ -72,7 +72,7 @@
   letter-spacing: 0.02em;
 }
 
-/* Compact variant for medium desktops — pairs with Game.css's max-width: 1700px rules, so this
+/* Compact variant for medium desktops — pairs with Game.css's max-width: 1550px rules, so this
    row (now just the build buttons — Trade and dev cards no longer share it, see Game.css's
    .game__toolbar-actions) fits beside the (narrowed) hand box on one line instead of wrapping
    into a tall column that starves the board row. Sized with a few px of slack rather than an
@@ -81,7 +81,7 @@
    with ~0-2px to spare at 1280-1366px wide, which is what let it silently wrap back into 2-3
    rows at in-between sizes — a couple of extra characters in a bot's name or a localized string
    would have broken it just as easily. */
-@media (max-width: 1700px) {
+@media (max-width: 1550px) {
   .build-toolbar {
     gap: 6px;
   }

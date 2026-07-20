@@ -155,17 +155,47 @@
    space Board.tsx leaves around the hex grid's viewBox) rather than a layout-participating
    grid column — see the .game grid-template-columns comment above for why. Sits in the
    top-right of the board area: clear of the top-center phase banner/resource-grant/roll-gains
-   callouts and the bottom-right dice roller (see DiceRoller.css). Purely `position: absolute`
-   so its content (zero trades vs several) never changes the board's or toolbar's box size —
-   TradeOffers itself still returns null when nothing's pending. max-height + overflow-y keeps
-   a long list from spilling out of the board area or over the dice roller. */
+   callouts and the bottom-right .game__board-controls stack (dice roller + turn timer/End Turn
+   — see that rule below). Purely `position: absolute` so its content (zero trades vs several)
+   never changes the board's or toolbar's box size — TradeOffers itself still returns null when
+   nothing's pending. max-height + overflow-y keeps a long list from spilling out of the board
+   area or over that stack.
+   The 250px reservation is this rule's own 60px `top` offset, plus board-controls' measured
+   height (154px) and its 20px bottom offset, plus ~15px margin — all fixed pixel values
+   independent of viewport size (board-controls' shape is content-driven, not a `%`/`vh` of
+   anything), so this constant holds at any board-area size rather than being tuned for one
+   width like the toolbar breakpoints elsewhere in this file. board-controls got taller than the
+   old dice-only cluster once the turn timer/End Turn button joined it (see Game.tsx), which is
+   what pushed this up from its original 140px (measure again and adjust if
+   .game__board-controls' own contents change). */
 .game__trades-overlay {
   position: absolute;
   top: 60px;
   right: 12px;
-  max-height: calc(100% - 140px);
+  max-height: calc(100% - 250px);
   overflow-y: auto;
   z-index: 45;
+}
+
+/* Turn timer + End Turn, floated above the dice roller as one bottom-right stack (see Game.tsx's
+   doc comment on this JSX for why they moved out of the toolbar). Same "never affects the
+   board's or toolbar's layout" treatment as .game__trades-overlay above — DiceRoller.css no
+   longer positions `.dice-roller` itself, this wrapper does it for both. */
+.game__board-controls {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.game__turn-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .game__sidebar {
@@ -310,9 +340,8 @@
 .game__toolbar-main {
   display: flex;
   /* Not `center` — the hand box has a tall fixed min-height (see .game__toolbar-hand below)
-     that the actions cluster and the timer/end-turn stack don't need to match; pinning
-     everything to the top keeps the actions row and the timer/end-turn stack aligned with
-     the hand's own top edge instead of floating at its vertical middle. */
+     that the actions cluster doesn't need to match; pinning both to the top keeps the actions
+     row aligned with the hand's own top edge instead of floating at its vertical middle. */
   align-items: flex-start;
   gap: 16px;
 }
@@ -326,9 +355,12 @@
    .game__hand-trade-toggle) — one row of buttons is narrower than three squeezed side by side,
    which is what lets .game__toolbar-hand stay at its full 620px width to a smaller viewport
    before needing to shrink (see the max-width media query below).
-   `flex: 1 1 auto` absorbs whatever width the hand's fixed box and the timer/end-turn stack
-   don't use, so the right-hand stack lands flush against the toolbar's right edge without
-   needing its own margin-left: auto. */
+   The turn timer/End Turn button used to sit in a third column here too (.game__toolbar-right,
+   now removed) — they've moved next to the dice roller in the board area instead (see Game.tsx),
+   which is what let that breakpoint drop as low as it did: with nothing else sharing this row,
+   the action column only has to fit the build buttons.
+   `flex: 1 1 auto` absorbs whatever width the hand's fixed box doesn't use, so this doesn't
+   collapse to a shrink-wrapped column flush against the hand's own right edge. */
 .game__toolbar-actions {
   display: flex;
   flex-direction: column;
@@ -447,24 +479,6 @@
   height: 13px;
 }
 
-/* Timer stacked above End Turn (was side-by-side) — the two are really one "wrap up your turn"
-   control, and stacking reads that way at a glance instead of as two unrelated same-row boxes;
-   it also gives both a shared width to line up against, flush right (flex-shrink: 0 keeps this
-   column its own natural width regardless of how much/little room .game__toolbar-actions ends
-   up using). */
-.game__toolbar-right {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.game__toolbar-right .turn-timer {
-  width: 100%;
-  box-sizing: border-box;
-}
-
 .game__monopoly-choices {
   display: flex;
   flex-wrap: wrap;
@@ -563,7 +577,7 @@
   font-weight: 700;
 }
 
-/* --- Responsive: medium desktop (~1280-1700px wide) ---------------------------------------
+/* --- Responsive: medium desktop (~1280-1550px wide) ---------------------------------------
    The toolbar's fixed-width hand box (620px) plus the 320px sidebar left the build action
    cluster too little room at common laptop widths — its buttons wrapped into a tall column,
    and since the toolbar lives in the grid's `auto` row, that height came straight out of the
@@ -571,19 +585,19 @@
    space on either side). Shrink the fixed-footprint pieces instead: the hand box narrows (its
    card groups wrap within), the sidebar gives up 40px, and the build buttons compact (see
    BuildToolbar.css's matching media query).
-   This used to cut off at 1500px, which measured out to fitting the action row exactly (or
-   missing it by a couple px) at very common resolutions just above that line — 1512x982 (14"
-   MacBook Air/Pro @2x) and 1600x900 both still wrapped the action row onto 2-3 lines and
-   ballooned the toolbar's height. Widening it to 1800px fixed that, but that was calibrated
-   back when Trade + dev cards + build buttons all shared one wrapping row (see
-   .game__toolbar-actions below) — DevCardPanel is now always icon-only regardless of width
-   (its full-name labels were the one holdout that could still force a wrap on its own, since it
-   renders one card per *owned type* rather than a fixed set — see DevCardPanel.css) and Trade
-   moved to the hand's own label row (.game__hand-trade-toggle), so the action column only ever
-   needs to fit the build buttons alone. 1700px is the new measured minimum (with ~50px of
-   margin, not an exact fit) for the full-size hand+build-toolbar+sidebar combination to still
-   fit in one row above that width. */
-@media (max-width: 1700px) {
+   This threshold has moved twice as other things stopped competing with the build buttons for
+   this row's width: it started at 1500px, which measured out to fitting the row exactly (or
+   missing it by a couple px) right above that line — 1512x982 (14" MacBook Air/Pro @2x) and
+   1600x900 both still wrapped onto 2-3 lines. Widening it to 1800px fixed that, back when Trade
+   + dev cards + build buttons all shared this one wrapping row. Trade moved to the hand's own
+   label row (.game__hand-trade-toggle) and dev cards moved to their own stacked row above this
+   one (DevCardPanel.css), dropping it to 1700px. The turn timer + End Turn button (previously a
+   third column here, .game__toolbar-right) moved out to float next to the dice roller in the
+   board area instead (see Game.tsx) — with nothing left sharing this row but the build buttons
+   themselves, 1550px is the new measured minimum (with ~50px of margin, not an exact fit) for
+   the full-size hand+build-toolbar+sidebar combination to still fit in one row above that
+   width. */
+@media (max-width: 1550px) {
   .game {
     grid-template-columns: 1fr 280px;
   }
