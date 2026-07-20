@@ -1,15 +1,19 @@
 /* One compact icon-only button-card per owned dev-card type, same shell as BuildToolbar's
    .build-toolbar__button — no outer panel chrome (border/background) of its own, so it reads
    as part of the same row of action-cards rather than a separately-framed box.
-   No text label (unlike BuildToolbar's one-word Road/Settlement/City): unlike that fixed set,
-   this renders one card per *owned type*, so a name as long as "Road Building" or "Year of
-   Plenty" multiplies straight into the row width every time another type is picked up — with
-   all five types at once (a real, if uncommon, hand) that's enough to force this row (now
-   stacked above BuildToolbar — see Game.css's .game__toolbar-actions) to wrap regardless of
-   viewport width, which is exactly the kind of game-state-driven layout shift (as opposed to
-   a window-resize-driven one) a fixed CSS breakpoint can't account for. Icon + count is enough
-   to identify a card you already own; the full name plus rules text is still one hover away via
-   the card's own `title` (see DevCardPanel.tsx). */
+   Icon-only (no text label) is the *default*, not a small-screen-only compromise: unlike
+   BuildToolbar's fixed one-word labels (Road/Settlement/City), this renders one card per
+   *owned type*, so a name as long as "Road Building" or "Year of Plenty" multiplies straight
+   into the row width every time another type is picked up — with all five types at once (a
+   real, if uncommon, hand) that's enough to force a wrap on its own, independent of viewport
+   width, which is exactly the kind of game-state-driven layout shift a fixed CSS breakpoint
+   can't account for. The full name + rules text is still one hover away via the card's own
+   `title` either way (see DevCardPanel.tsx).
+   The `min-width: 1900px` variant below restores the full name label once there's reliably
+   enough spare width in the action column (now that dev cards stack above BuildToolbar — see
+   Game.css's .game__toolbar-actions — this row's width is independent of the build buttons'
+   own row) for even the worst-case all-five-types-owned row to still read as one line rather
+   than a sparse, icon-only-looking row on a screen with plenty of room to spare. */
 .dev-card-panel {
   display: flex;
   align-items: stretch;
@@ -43,6 +47,29 @@
   font-size: 9px;
   color: var(--color-text-dim);
   letter-spacing: 0.02em;
+}
+
+/* Measured: at this width the action column has ~740px to spare for a stacked dev-card row vs.
+   the ~625px the full-label row needs at its worst (all 5 types owned) — comfortable margin,
+   not an exact fit (see the earlier BuildToolbar.css breakpoint bug this file's own history
+   already ran into once for what an exact-fit margin costs). */
+@media (min-width: 1900px) {
+  .dev-card-panel {
+    gap: 8px;
+  }
+  .dev-card-panel__card {
+    padding: 10px 14px;
+    min-width: 100px;
+  }
+  .dev-card-panel__name {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    text-align: center;
+  }
+  .dev-card-panel__count {
+    font-size: 10px;
+  }
 }
 
 .dev-card-panel__play {
