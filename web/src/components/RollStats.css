@@ -1,29 +1,55 @@
 .roll-stats {
+  flex-shrink: 0;
+}
+
+/* Trigger button: shares .game__sidebar-side-toggle's icon-button chrome (border/padding/
+   hover) so it reads as one of the same row of small utility buttons (side-toggle, "?") rather
+   than a differently-styled control — only the marker-hiding/cursor/select rules below are
+   specific to it being a <summary>. */
+.roll-stats__summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.roll-stats__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Floating popover, not a normal-flow child — opening it must never resize `.game__sidebar-top`
+   (which would in turn push every panel below it down a few px) any more than TradeOffers'
+   overlay is allowed to resize the board area (see Game.css's .game__trades-overlay comment for
+   the same rationale). Positioned relative to `.game__sidebar-top` (that's the `position:
+   relative` ancestor — see Game.css), not to this `<details>` itself, so it spans the sidebar's
+   own width via left/right: 0 instead of a fixed pixel width that could either overflow the
+   sidebar or look stranded narrow inside it. */
+.roll-stats__bars {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 8px;
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 50;
 }
 
-.roll-stats__summary {
+.roll-stats__title {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-dim);
   font-weight: 600;
-  cursor: pointer;
-  user-select: none;
+  margin-bottom: 10px;
 }
 
-.roll-stats__summary:hover {
-  color: var(--color-text);
-}
-
-.roll-stats__bars {
+.roll-stats__grid {
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   gap: 3px;
-  margin-top: 10px;
 }
 
 .roll-stats__col {

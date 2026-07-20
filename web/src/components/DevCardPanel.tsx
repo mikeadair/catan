@@ -76,7 +76,7 @@ export default function DevCardPanel({ devCards, turnNumber, canPlayAny, blocked
               : null;
         const Icon = CARD_ICON[type];
         return (
-          <div key={type} className="dev-card-panel__card" title={CARD_DESCRIPTION[type]}>
+          <div key={type} className="dev-card-panel__card" title={`${CARD_LABEL[type]}: ${CARD_DESCRIPTION[type]}`}>
             <Icon className="dev-card-panel__icon-svg" />
             <span className="dev-card-panel__name">{CARD_LABEL[type]}</span>
             <span className="dev-card-panel__count">×{cards.length}</span>

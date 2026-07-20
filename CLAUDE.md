@@ -13,19 +13,22 @@ A web implementation of Settlers of Catan (React 19 + TypeScript + Vite, Firebas
 
 Three different mechanisms exist for this, at different cost/coverage tradeoffs — pick the cheapest one that answers your question. All of them are Playwright under the hood; none of them require you to drive `mcp__*` browser tools or open a real tab yourself. (`web/e2e/layout.spec.ts` also drives through home → lobby → game setup → mid-game, but only to assert no page-level scrollbar at 3 viewport sizes — it takes no screenshots, so it isn't one of these mechanisms.)
 
-**A focused screenshot of one component — `npm run snap` (from `web/`).** By far the cheapest option for "does this one component look right," both in wall-clock time (no Firebase emulator, no bot AI, no game setup — each capture is ~1-2s) and in your own context (an element-cropped PNG is typically 10-50KB vs. several hundred KB for a full 1080p page). Run with no arguments and it screenshots *every* registered component *and* every named scenario in one pass (~35s total for ~40 entries); pass `SNAP_COMPONENT`/`SNAP_SCENARIO` to narrow to one, or `SNAP_COMPONENT=all` for just the plain components without the interaction states:
+**A focused screenshot of one component — `npm run snap` (from `web/`).** By far the cheapest option for "does this one component look right," both in wall-clock time (no Firebase emulator, no bot AI, no game setup — each capture is ~1-2s) and in your own context (an element-cropped PNG is typically 10-50KB vs. several hundred KB for a full 1080p page). Run with no arguments and it screenshots *every* registered component, every named scenario, *and* the whole-viewport responsive size sweep below, in one pass; pass `SNAP_COMPONENT`/`SNAP_SCENARIO`/`SNAP_SIZES` to narrow to one of those three, or `SNAP_COMPONENT=all` for just the plain components without the interaction states or size sweep:
 
 ```
-npm run snap                              # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, one file each
-SNAP_COMPONENT=all npm run snap           # just components, skip scenarios (faster)
+npm run snap                              # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, plus the SNAP_SIZES sweep
+SNAP_COMPONENT=all npm run snap           # just components, skip scenarios and the size sweep (faster)
 SNAP_COMPONENT=hand npm run snap          # just the hand, saved as game/hand.png
 SNAP_SCENARIO=hand-card-selected npm run snap   # the hand with a card already tapped/selected
+SNAP_SIZES=1 npm run snap                 # just the responsive size sweep, skip components/scenarios
 SNAP_LIST=1 npm run snap                  # print the registry (grouped by screen), capture nothing
 ```
 
 Output is organized by screen — `web/e2e/snap-screenshots/<screen>/<name>.png`, where `<screen>` is `main-menu`, `lobby`, or `game` (each `SNAP_COMPONENTS` entry declares its own `screen`) — so a design pass can open one screen's folder at a time instead of one flat directory of everything. Every capture defaults to `SNAP_PAD=24` (24px of surrounding context beyond the tight element crop, clamped to the viewport) rather than an edge-to-edge crop, so a component reads in relation to its immediate neighbors; pass `SNAP_PAD=0` for a tight crop, or a larger value for more context. (The `SNAP_URL` ad hoc escape hatch, having no registry entry to pick a sensible default, still defaults to 0.)
 
 The component/scenario names, their selectors, and (where relevant) the click sequence needed to reach them are a registry in `web/e2e/snap-components.ts` — check there (or `SNAP_LIST=1 npm run snap`) before grepping component files for a selector yourself. `SNAP_SCENARIOS` in that same file is specifically for states worth reaching more than once (a card selected for trade, a panel opened) — add to it whenever you work out a click sequence like that, so the next agent gets it for free instead of re-deriving it. A `SNAP_COMPONENTS` entry can also carry a `query` string (e.g. `state=discard`, `seats=full`) for harness variants reached via URL params rather than clicks. For anything not worth adding to the registry, `SNAP_URL`/`SNAP_SELECTOR`/`SNAP_CLICK`/`SNAP_OUT` remain as an ad hoc escape hatch — see `web/e2e/snap.spec.ts`'s header comment for the full env var list either way.
+
+`SNAP_SIZES` (same file's `SNAP_SIZES`/`SNAP_SIZE_SCREENS`) is a different kind of capture from the two registries above: a whole-screen, full-page (not cropped to a selector) screenshot at a spread of real desktop/laptop widths (1280–2560px), for checking a screen's *responsive layout* — grid columns, button-row wrapping, dead space — rather than one component's own appearance. Saved flat as `size-<screen>-<width>x<height>.png`. Add a viewport size to `SNAP_SIZES` or a screen to `SNAP_SIZE_SCREENS` in `snap-components.ts` rather than reaching for the old one-off `SNAP_URL`+`SNAP_VIEWPORT`+`SNAP_OUT` combination, which still works but only ever captures one size at a time.
 
 Everything above targets one of four dev-only fake-state harnesses, which is what makes this fast — no live Firebase room, deterministic, real components:
 

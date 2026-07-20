@@ -56,3 +56,29 @@
   background: var(--color-panel);
   color: var(--color-text-dim);
 }
+
+/* Compact variant, matching Game.css's max-width: 1800px / BuildToolbar.css's own compact
+   query — keeps this sitting on the same single action row as the build buttons instead of
+   being the one holdout at full size that pushes the row over and forces a wrap.
+   The name label is dropped entirely rather than just shrunk: unlike BuildToolbar's one-word
+   labels (Road/Settlement/City), dev-card names run long ("Road Building", "Year of Plenty")
+   and — since this renders one card per *owned type*, not a fixed set — a hand with several
+   types at once multiplies that width straight into the row. Icon + count is enough to
+   identify a card you already own; the full name (plus the rules text) is still one hover
+   away via the card's own `title` (see DevCardPanel.tsx). */
+@media (max-width: 1800px) {
+  .dev-card-panel {
+    gap: 6px;
+  }
+  .dev-card-panel__card {
+    min-width: 44px;
+    padding: 7px 6px;
+    gap: 4px;
+  }
+  .dev-card-panel__name {
+    display: none;
+  }
+  .dev-card-panel__count {
+    font-size: 9px;
+  }
+}

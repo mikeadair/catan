@@ -183,6 +183,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Anchors RollStats' floating popover (.roll-stats__bars) — see RollStats.css for why it's
+     positioned relative to this row rather than to the small <details> trigger itself. */
+  position: relative;
 }
 
 /* The global sound toggle (App.css `.sound-toggle`) is fixed at top:12px/left:12px — when
@@ -521,14 +524,20 @@
   font-weight: 700;
 }
 
-/* --- Responsive: medium desktop (~1280-1500px wide) ---------------------------------------
+/* --- Responsive: medium desktop (~1280-1800px wide) ---------------------------------------
    The toolbar's fixed-width hand box (620px) plus the 320px sidebar left the build/dev action
-   cluster ~300px at 1280px wide — its buttons stacked into a tall column, and since the
-   toolbar lives in the grid's `auto` row, that height came straight out of the board's `1fr`
-   row (collapsing the board entirely at 1280x720). Shrink the fixed-footprint pieces instead:
-   the hand box narrows (its card groups wrap within), the sidebar gives up 40px, and the
-   build buttons compact (see BuildToolbar.css's matching media query). */
-@media (max-width: 1500px) {
+   cluster too little room at common laptop widths — its buttons wrapped into a tall column,
+   and since the toolbar lives in the grid's `auto` row, that height came straight out of the
+   board's `1fr` row (collapsing the board down to a small letterboxed rectangle with wasted
+   space on either side). Shrink the fixed-footprint pieces instead: the hand box narrows (its
+   card groups wrap within), the sidebar gives up 40px, and the build buttons compact (see
+   BuildToolbar.css/DevCardPanel.css's matching media queries).
+   This used to cut off at 1500px, which measured out to fitting the action row exactly (or
+   missing it by a couple px) at very common resolutions just above that line — 1512x982 (14"
+   MacBook Air/Pro @2x) and 1600x900 both still wrapped the action row onto 2-3 lines and
+   ballooned the toolbar's height. 1800px comfortably covers those; screens wider than that
+   have enough width to spare for the roomier full-size treatment. */
+@media (max-width: 1800px) {
   .game {
     grid-template-columns: 1fr 280px;
   }

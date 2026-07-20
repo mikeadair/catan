@@ -168,6 +168,19 @@ export default function TradePreview(): JSX.Element {
       },
     };
 
+    // ?players=max fills out the room to a full 5-6 player table (PLAYER_COLORS.length, the
+    // engine's actual max) instead of the default 3 — for stress-testing the sidebar's
+    // PlayerRoster at its worst realistic case (widest name, most rows) rather than the
+    // comfortably-short 3-player default every other harness state uses. Deliberately longer
+    // display names than p1/p2 above (real display names are user-chosen free text, not
+    // guaranteed short) so this also exercises PlayerRoster's own name-truncation/wrap handling,
+    // not just its row count.
+    const maxPlayerExtras: [string, string][] = [
+      ['p3', 'Bot Charlotte'],
+      ['p4', 'Bot Wolfgang'],
+      ['p5', 'Bot Persephone'],
+    ];
+
     const vertexIds = Object.keys(board.vertices);
     room.vertices[vertexIds[3]] = { type: 'settlement', uid: 'p0' };
     room.vertices[vertexIds[10]] = { type: 'city', uid: 'p0' };
@@ -250,6 +263,28 @@ export default function TradePreview(): JSX.Element {
       const overrides = handOverrides[handName];
       if (!overrides) throw new Error(`[TradePreview] unknown ?hand=${handName} — known: ${Object.keys(handOverrides).join(', ')}`);
       Object.assign(ownHand, overrides);
+    }
+    if (params.get('players') === 'max') {
+      for (const [uid, displayName] of maxPlayerExtras) {
+        const seatIndex = room.turnOrder.length;
+        players[uid] = {
+          uid,
+          displayName,
+          color: PLAYER_COLORS[seatIndex],
+          isBot: true,
+          seatIndex,
+          resourceCount: 3,
+          devCardCount: 0,
+          visibleVictoryPoints: 1,
+          knightsPlayed: 0,
+          roadsBuilt: 1,
+          settlementsBuilt: 1,
+          citiesBuilt: 0,
+          connected: true,
+          lastSeen: Date.now(),
+        };
+        room.turnOrder = [...room.turnOrder, uid];
+      }
     }
 
     useGameStore.setState({

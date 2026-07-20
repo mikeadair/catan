@@ -15,22 +15,29 @@
 //
 // Usage (from web/, dev server auto-started/reused by playwright.snap.config.ts):
 //
-//   npm run snap                                          # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, one file each
-//   SNAP_COMPONENT=all npm run snap                        # just components, skip scenarios (faster, no interaction states)
+//   npm run snap                                          # every SNAP_COMPONENTS + SNAP_SCENARIOS entry, plus the SNAP_SIZES sweep
+//   SNAP_COMPONENT=all npm run snap                        # just components, skip scenarios and the size sweep (faster, no interaction states)
 //   SNAP_COMPONENT=hand npm run snap                       # one named component (registry: snap-components.ts)
 //   SNAP_SCENARIO=hand-card-selected npm run snap          # one named component + interaction sequence
+//   SNAP_SIZES=1 npm run snap                               # just the whole-viewport responsive sweep (SNAP_SIZES/SNAP_SIZE_SCREENS), skip components/scenarios
 //   SNAP_LIST=1 npm run snap                                # print the registry, capture nothing
 //   SNAP_URL='http://localhost:5183/?preview=trade' SNAP_SELECTOR='.trade-bar' npm run snap   # ad hoc, not in the registry
 //
 // Env vars:
 //   SNAP_COMPONENT  name from SNAP_COMPONENTS (snap-components.ts), or 'all' for every component
-//                   but no scenarios. Omit + no other mode selected defaults to *every* component
-//                   and every scenario. Saved as <name>.png.
+//                   but no scenarios or size sweep. Omit + no other mode selected defaults to
+//                   *every* component, every scenario, and the size sweep. Saved as <name>.png.
 //   SNAP_SCENARIO   name from SNAP_SCENARIOS (snap-components.ts) — a component plus a click
 //                   sequence that reaches a specific, worth-repeating interaction state (e.g. a
 //                   card selected for trade). Takes precedence over SNAP_COMPONENT. Saved as <name>.png.
+//   SNAP_SIZES      any truthy value: run only the whole-viewport responsive sweep (every
+//                   SNAP_SIZE_SCREENS entry at every SNAP_SIZES dimension from snap-components.ts)
+//                   — full-page screenshots, not cropped to a selector, for eyeballing a whole
+//                   screen's layout (grid columns, wrapping, dead space) at real desktop/laptop
+//                   resolutions rather than one component in isolation. Takes precedence over
+//                   SNAP_COMPONENT/SNAP_SCENARIO. Saved as size-<screen>-<width>x<height>.png.
 //   SNAP_URL        ad hoc escape hatch for anything not in the registry — full URL to load.
-//                   Takes precedence over SNAP_COMPONENT/SNAP_SCENARIO.
+//                   Takes precedence over everything else above.
 //   SNAP_SELECTOR   with SNAP_URL: CSS selector to crop to (first match) — omit for full-page.
 //   SNAP_CLICK      with SNAP_URL, or appended after SNAP_COMPONENT's own clicks: comma-separated
 //                   CSS selectors to click in order (first match each) before capturing.
@@ -41,19 +48,20 @@
 //                   little of its surrounding chrome, not an edge-to-edge crop; SNAP_URL ad hoc
 //                   captures default to 0 (opt in explicitly, since there's no registry entry to
 //                   have already picked a sensible default for an arbitrary selector). Pass 0
-//                   explicitly to force a tight crop for a registry capture.
+//                   explicitly to force a tight crop for a registry capture. Not used by the size
+//                   sweep — those are always full-page.
 //   SNAP_OUT        with SNAP_URL: filename, saved under e2e/snap-screenshots/ (gitignored).
-//                   Ignored for SNAP_COMPONENT/SNAP_SCENARIO/'all' modes, which name files after
-//                   the component/scenario name so a batch run doesn't overwrite itself.
+//                   Ignored for SNAP_COMPONENT/SNAP_SCENARIO/'all'/SNAP_SIZES modes, which name
+//                   files after themselves so a batch run doesn't overwrite itself.
 //
 // Registry captures (SNAP_COMPONENT/SNAP_SCENARIO/default sweep) are saved under
 // e2e/snap-screenshots/<screen>/<name>.png — screen is 'main-menu' | 'lobby' | 'game', from each
 // SNAP_COMPONENTS entry (snap-components.ts) — so a review pass can look at one screen's folder
-// at a time instead of one flat directory of everything. SNAP_URL ad hoc captures (no registry
-// entry, so no screen to file under) stay directly under snap-screenshots/.
+// at a time instead of one flat directory of everything. The size sweep saves flat, directly
+// under snap-screenshots/ (size-<screen>-<width>x<height>.png), same as SNAP_URL ad hoc captures.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, rmSync } from 'node:fs';
-import { SNAP_COMPONENTS, SNAP_SCENARIOS, type SnapComponent } from './snap-components';
+import { SNAP_COMPONENTS, SNAP_SCENARIOS, SNAP_SIZES, SNAP_SIZE_SCREENS, type SnapComponent } from './snap-components';
 
 const SCREENSHOT_DIR = 'e2e/snap-screenshots'; // relative to web/ (the suite's cwd) — gitignored
 const DEFAULT_PAD = 24; // px of surrounding context for registry captures — see SNAP_PAD above
@@ -81,6 +89,15 @@ function printRegistry(): void {
     // eslint-disable-next-line no-console
     console.log(`  ${name.padEnd(24)} (component: ${s.component}) ${s.description}`);
   }
+  // eslint-disable-next-line no-console
+  console.log('\n[snap] SNAP_SIZE_SCREENS (swept across every SNAP_SIZES dimension):');
+  const dims = SNAP_SIZES.map((s) => `${s.width}x${s.height}`).join(', ');
+  for (const [name, s] of Object.entries(SNAP_SIZE_SCREENS)) {
+    // eslint-disable-next-line no-console
+    console.log(`  ${name.padEnd(24)} (${s.preview}${s.query ? `?${s.query}` : ''})`);
+  }
+  // eslint-disable-next-line no-console
+  console.log(`  sizes: ${dims}`);
 }
 
 async function clickAll(page: Page, selectors: string[]): Promise<void> {
@@ -163,6 +180,34 @@ async function captureComponent(
   console.log(`[snap] saved: ${file}`);
 }
 
+/** Full-page screenshot of one SNAP_SIZE_SCREENS entry at one SNAP_SIZES dimension — see that
+ * registry's doc comment in snap-components.ts for why this is full-page rather than cropped to
+ * a selector (the point is to see the whole screen's responsive layout, not one component). */
+async function captureSize(
+  page: Page,
+  screenName: string,
+  screen: (typeof SNAP_SIZE_SCREENS)[string],
+  width: number,
+  height: number,
+): Promise<void> {
+  await page.setViewportSize({ width, height });
+  const url = screen.query ? `/?preview=${screen.preview}&${screen.query}` : `/?preview=${screen.preview}`;
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
+  const file = `${SCREENSHOT_DIR}/size-${screenName}-${width}x${height}.png`;
+  await page.screenshot({ path: file, fullPage: true });
+  // eslint-disable-next-line no-console
+  console.log(`[snap] saved: ${file}`);
+}
+
+async function captureAllSizes(page: Page): Promise<void> {
+  for (const [screenName, screen] of Object.entries(SNAP_SIZE_SCREENS)) {
+    for (const { width, height } of SNAP_SIZES) {
+      await captureSize(page, screenName, screen, width, height);
+    }
+  }
+}
+
 test('snap', async ({ page }) => {
   if (process.env.SNAP_LIST) {
     printRegistry();
@@ -184,13 +229,14 @@ test('snap', async ({ page }) => {
   const url = process.env.SNAP_URL;
   const scenarioName = process.env.SNAP_SCENARIO;
   const componentName = process.env.SNAP_COMPONENT;
+  const sizesOnly = process.env.SNAP_SIZES;
 
   // A full sweep (the true default, or SNAP_COMPONENT=all) is meant to be a complete,
   // self-consistent snapshot of the current registry — wipe the whole output dir first so a
   // renamed/removed registry entry's stale file doesn't linger and look like it's still
-  // current. A single named capture (SNAP_COMPONENT=<name>/SNAP_SCENARIO/SNAP_URL) only ever
-  // touches its own file, so leave every other previously-captured screenshot alone.
-  const isFullSweep = !url && !scenarioName && (!componentName || componentName === 'all');
+  // current. A single named capture (SNAP_COMPONENT=<name>/SNAP_SCENARIO/SNAP_URL/SNAP_SIZES)
+  // only ever touches its own file(s), so leave every other previously-captured screenshot alone.
+  const isFullSweep = !url && !scenarioName && !sizesOnly && (!componentName || componentName === 'all');
   if (isFullSweep) {
     rmSync(SCREENSHOT_DIR, { recursive: true, force: true });
   }
@@ -213,6 +259,12 @@ test('snap', async ({ page }) => {
     }
     // eslint-disable-next-line no-console
     console.log(`[snap] saved: ${file}`);
+    return;
+  }
+
+  if (sizesOnly) {
+    await captureAllSizes(page);
+    expect(SNAP_SIZES.length).toBeGreaterThan(0);
     return;
   }
 
@@ -262,5 +314,11 @@ test('snap', async ({ page }) => {
     const comp = SNAP_COMPONENTS[scenario.component];
     await captureComponent(page, name, comp, scenario.clicks, pad, undefined, scenario.extraSelectors);
   }
+
+  // ...and the whole-viewport responsive sweep (SNAP_SIZES/SNAP_SIZE_SCREENS) — see that
+  // registry's doc comment in snap-components.ts. Last, since it changes the page's viewport
+  // size; nothing below here depends on the config's default viewport being restored.
+  await captureAllSizes(page);
+
   expect(Object.keys(SNAP_COMPONENTS).length + Object.keys(SNAP_SCENARIOS).length).toBeGreaterThan(0);
 });

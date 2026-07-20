@@ -840,6 +840,7 @@ export default function Game(): JSX.Element {
           >
             ?
           </button>
+          <RollStats log={room.log} />
           <PauseControl
             room={room}
             players={players}
@@ -848,7 +849,7 @@ export default function Game(): JSX.Element {
             onVote={() => void runAction({ type: room.paused ? 'voteToUnpause' : 'voteToPause', uid })}
           />
           <button type="button" className="game__leave-button" onClick={() => setLeaveConfirmOpen(true)}>
-            Leave game
+            Leave
           </button>
         </div>
         <BankPanel bank={room.bank} devCardsRemaining={room.devCardDeckCount} />
@@ -863,7 +864,6 @@ export default function Game(): JSX.Element {
           victoryPointsToWin={room.victoryPointsToWin}
           longestRoadLengths={longestRoadLengths}
         />
-        <RollStats log={room.log} />
         <GameLog log={room.log} chat={chat} players={players} turnOrder={room.turnOrder} onSend={(text) => void sendChatMessage(text)} />
       </aside>
 

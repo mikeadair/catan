@@ -162,6 +162,18 @@ export function PanelLeftIcon(props: IconProps): JSX.Element {
   );
 }
 
+/* Three bars of ascending height — "distribution," for the roll-stats popover trigger. Deliberately
+ * not a literal die face: this represents the *histogram* of many rolls, not a single roll. */
+export function BarChartIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="14" width="4" height="6" rx="1" fill="currentColor" />
+      <rect x="10" y="9" width="4" height="11" rx="1" fill="currentColor" />
+      <rect x="16" y="4" width="4" height="16" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function SoundOnIcon(props: IconProps): JSX.Element {
   return (
     <svg {...base(props)}>

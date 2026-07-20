@@ -411,3 +411,49 @@ export const SNAP_SCENARIOS: Record<string, SnapScenario> = {
     description: 'Home name card with the sign-in/create-account panel expanded (email+password tab)',
   },
 };
+
+// Full-page, whole-viewport captures at a spread of real desktop/laptop resolutions — for
+// checking a whole screen's responsive layout (grid columns, wrapping, starved rows) rather than
+// one component in isolation, which is what SNAP_COMPONENTS/SNAP_SCENARIOS above are for. These
+// used to only be reachable one at a time via the SNAP_URL/SNAP_VIEWPORT/SNAP_OUT ad hoc escape
+// hatch (e.g. `SNAP_URL=.../?preview=trade SNAP_VIEWPORT=1366x768 SNAP_OUT=size-game-1366x768.png
+// npm run snap`), which is fine for a single one-off check but tedious to repeat across a whole
+// sweep — SNAP_SIZES=1 (or the true default full sweep) now drives this list automatically.
+// Sizes span the common range from small laptops up through very large desktop monitors —
+// 1512x982 and 1600x900 in particular exposed a real bug (see Game.css's max-width: 1800px
+// comment) where a breakpoint cut off just below them, so keep those in the list rather than
+// only round numbers.
+export const SNAP_SIZES: { width: number; height: number }[] = [
+  { width: 1280, height: 720 },
+  { width: 1280, height: 800 },
+  { width: 1366, height: 768 },
+  { width: 1440, height: 900 },
+  { width: 1512, height: 982 },
+  { width: 1600, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+];
+
+export interface SnapSizeScreen {
+  /** Which `?preview=` dev harness renders this screen. */
+  preview: SnapPreview;
+  /** Extra query-string params (no leading '&'/'?'), same as SnapComponent.query. */
+  query?: string;
+}
+
+// Screens swept across every SNAP_SIZES entry, full-page (not cropped to a selector — the whole
+// point is to see the layout, sidebar, and dead space together). Saved as
+// e2e/snap-screenshots/size-<name>-<width>x<height>.png (flat, not under a <screen> subfolder,
+// matching the filenames these already had from prior ad hoc SNAP_OUT runs).
+//
+// Deliberately maxed out, not the harnesses' own comfortable defaults: a responsive sweep is
+// only as useful as its worst case. The default 3-player, 1-dev-card TradePreview state is the
+// easy case — it already fit at every size before these query params existed. `hand=maxed`
+// (TradePreview.tsx) seeds one of every dev-card type; `players=max` fills the room to a full
+// 6-player table (PLAYER_COLORS.length, the engine's real max) with longer bot names than the
+// 3-player default uses, to also stress PlayerRoster's row count/name handling. `seats=full`
+// (LobbyPreview.tsx) is the equivalent for the lobby screen, and already existed before this.
+export const SNAP_SIZE_SCREENS: Record<string, SnapSizeScreen> = {
+  game: { preview: 'trade', query: 'hand=maxed&players=max' },
+  lobby: { preview: 'lobby', query: 'seats=full' },
+};
