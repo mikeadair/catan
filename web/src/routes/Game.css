@@ -342,6 +342,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Anchors .game__hand-trade-toggle, floated top-right — see that rule below. */
+  position: relative;
   /* Stable, truly *fixed* footprint (not just a min-width) so the whole footer never jumps
      around as the hand's content changes — this used to be min/max-width, which let the box's
      intrinsic content width (the label row's text + the "Clear (N)" button, which only
@@ -370,6 +372,10 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+  /* Reserves room for .game__hand-trade-toggle, floated (position: absolute) above this row's
+     own right edge — otherwise the Clear button, which lives in this row and also right-aligns
+     via the space-between above, would sit directly underneath it. */
+  padding-right: 74px;
 }
 
 .game__toolbar-label {
@@ -397,28 +403,26 @@
   border-color: var(--color-accent);
 }
 
-/* Groups the label row's trailing controls (Clear, Trade) so .game__toolbar-label-row's
-   space-between only ever splits it into two ends — the label on the left, this cluster on the
-   right — rather than spreading three+ items evenly across the row once Clear is also showing. */
-.game__toolbar-label-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
 /* The hand's Trade toggle — moved here from the actions row below (see .game__toolbar-actions'
    doc comment) so it sits with the hand it actually operates on, and freeing that row to fit a
-   narrower hand box less often. Filled with --color-trade rather than the neutral
+   narrower hand box less often. `position: absolute`, pinned to the hand box's own top-right
+   corner (anchored on .game__toolbar-hand above) rather than a flex sibling in
+   .game__toolbar-label-row: as a flex item it was claiming real width out of that row (elbowing
+   the "Your hand"/"You give…" label), when what it actually wants is to just sit in the corner
+   above the hand's own rightmost resource-card column — out of flow entirely, same "never
+   resize the layout around it" treatment as the trades overlay/trade composer bar/roll-stats
+   popover elsewhere in this file. Filled with --color-trade rather than the neutral
    build-toolbar__button treatment used everywhere else in the footer: this is the one control in
    the hand's own header, reached far more often than any single build button, so it's meant to
    read as a shortcut at a glance instead of blending into the row of build-toolbar__buttons it
    used to sit in. */
 .game__hand-trade-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
   gap: 5px;
-  flex-shrink: 0;
   background: var(--color-trade);
   border: 1px solid var(--color-trade);
   border-radius: 999px;

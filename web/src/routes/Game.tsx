@@ -895,23 +895,21 @@ export default function Game(): JSX.Element {
                     : 'You give — tap cards below to add to the trade'
                   : 'Your hand'}
               </span>
-              <div className="game__toolbar-label-controls">
-                {tradeComposerOpen && tradeGiveTotal > 0 && (
-                  <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
-                    Clear ({tradeGiveTotal})
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className={`game__hand-trade-toggle${tradeComposerOpen ? ' game__hand-trade-toggle--active' : ''}`}
-                  onClick={toggleTradeComposer}
-                  aria-pressed={tradeComposerOpen}
-                >
-                  <TradeIcon className="game__hand-trade-toggle-icon" />
-                  Trade
+              {tradeComposerOpen && tradeGiveTotal > 0 && (
+                <button type="button" className="game__toolbar-clear-give" onClick={() => setTradeGive({})}>
+                  Clear ({tradeGiveTotal})
                 </button>
-              </div>
+              )}
             </div>
+            <button
+              type="button"
+              className={`game__hand-trade-toggle${tradeComposerOpen ? ' game__hand-trade-toggle--active' : ''}`}
+              onClick={toggleTradeComposer}
+              aria-pressed={tradeComposerOpen}
+            >
+              <TradeIcon className="game__hand-trade-toggle-icon" />
+              Trade
+            </button>
             {tradeComposerOpen ? (
               <ResourceHand resources={resources} variant="cards" selected={tradeGive} onChange={setTradeGive} />
             ) : (
