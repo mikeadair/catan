@@ -46,7 +46,7 @@ import {
   TERRAIN_RESOURCE, GamePhase
 } from './types';
 import { pipCount, vertexLegalForFogSetup } from './board';
-import { hexProtectsWeakPlayer, type GameStateBundle } from './rules';
+import { hexProtectsWeakPlayer, tradeBlocked, type GameStateBundle } from './rules';
 
 export function decideBotAction(bundle: GameStateBundle, botUid: string): GameAction | null {
   try {
@@ -924,10 +924,14 @@ function decideMainAction(bundle: GameStateBundle, botUid: string, difficulty: B
  * indefinitely with bots silently never weighing in.
  */
 function decideTradeResponse(bundle: GameStateBundle, botUid: string, difficulty: BotDifficulty): GameAction | null {
-  const { hands, trades } = bundle;
+  const { players, hands, trades } = bundle;
   const hand = hands[botUid];
   const candidate = trades.find(
-    (t) => t.status === 'pending' && t.proposerUid !== botUid && (t.targetUid === botUid || t.targetUid === null),
+    (t) =>
+      t.status === 'pending' &&
+      t.proposerUid !== botUid &&
+      (t.targetUid === botUid || t.targetUid === null) &&
+      !tradeBlocked(players, botUid, t.proposerUid),
   );
   if (!candidate) return null;
 

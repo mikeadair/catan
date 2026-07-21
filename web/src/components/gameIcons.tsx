@@ -192,3 +192,15 @@ export function SoundOffIcon(props: IconProps): JSX.Element {
     </svg>
   );
 }
+
+/** No-entry style circle-with-slash, used for the per-player and blanket trade-block toggles
+ * in PlayerRoster — filled once active so a blocked player reads as visually "off" at a
+ * glance, same treatment as SoundOffIcon above. */
+export function BlockTradeIcon(props: IconProps): JSX.Element {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth={2} />
+      <line x1="6.3" y1="6.3" x2="17.7" y2="17.7" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}

@@ -20,6 +20,45 @@
   gap: 8px;
 }
 
+.player-roster__header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-roster__block-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--color-text-dim);
+  background: var(--color-panel-light);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 3px 8px 3px 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.player-roster__block-all:hover {
+  color: var(--color-text);
+}
+
+.player-roster__block-all--active {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: rgba(217, 83, 79, 0.12);
+}
+
+.player-roster__block-all-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
 .player-roster__win-target {
   display: inline-flex;
   align-items: center;
@@ -184,6 +223,45 @@
 .player-roster__badge--offline {
   color: var(--color-danger);
   border-color: var(--color-danger);
+}
+
+.player-roster__block-player {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-dim);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.player-roster__block-player:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--color-text);
+}
+
+.player-roster__block-player--active {
+  opacity: 1;
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: rgba(217, 83, 79, 0.12);
+}
+
+.player-roster__block-player:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.player-roster__block-player-icon {
+  width: 11px;
+  height: 11px;
 }
 
 .player-roster__cards-row {

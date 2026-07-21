@@ -5,7 +5,7 @@
 // or anyone else who could accept/reject them.
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import type { PublicPlayer, Resource, ResourceCount, TradeOffer } from '@catan/engine';
-import { RESOURCES } from '@catan/engine';
+import { RESOURCES, tradeBlocked } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import { PLAYER_COLOR_HEX } from './playerColors';
 import './TradeOffers.css';
@@ -234,7 +234,13 @@ export default function TradeOffers({
       // would leave the red flash on screen indefinitely instead of it actually dismissing.
       return Date.now() < until;
     }
-    return t.status === 'pending' && isRelevant(t, uid);
+    if (t.status !== 'pending' || !isRelevant(t, uid)) return false;
+    // Someone else's incoming offer, from a player this viewer has blocked (or vice versa) —
+    // respondTrade would just reject the accept server-side (see tradeBlocked in rules.ts), so
+    // don't bother showing it. The proposer's own client still sees/cancels its own trades
+    // regardless of a block added after the fact.
+    if (t.proposerUid !== uid && tradeBlocked(players, uid, t.proposerUid)) return false;
+    return true;
   });
   if (relevantTrades.length === 0) return null;
 
@@ -284,7 +290,7 @@ export default function TradeOffers({
 
               {isMine && isOpen && interested.length > 0 && (
                 <div className="trade-offers__interested">
-                  {interested.map((interestedUid) => (
+                  {interested.filter((interestedUid) => !tradeBlocked(players, uid, interestedUid)).map((interestedUid) => (
                     <button
                       key={interestedUid}
                       type="button"

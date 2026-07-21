@@ -7,7 +7,7 @@
 // Trade only lights up once the current give/receive selection is a valid N:1 offer.
 import { useEffect, type JSX } from 'react';
 import type { PublicPlayer, Resource, ResourceCount, RoomState } from '@catan/engine';
-import { RESOURCES } from '@catan/engine';
+import { RESOURCES, tradeBlocked } from '@catan/engine';
 import { RESOURCE_ICON, RESOURCE_LABEL } from './resourceIcons';
 import './TradeBar.css';
 
@@ -77,7 +77,11 @@ export default function TradeBar({
   // 3:1 with a generic port), plus any per-resource 2:1 port rates that beat it.
   const baseRate = Math.max(...RESOURCES.map((r) => rates[r]));
   const portRateEntries = RESOURCES.map((r) => [r, rates[r]] as const).filter(([, rate]) => rate < baseRate);
-  const otherPlayers = Object.values(players).filter((p) => p.uid !== uid);
+  // Blocked players never show up as a targeted-trade option — proposeTrade would just be
+  // rejected server-side (see tradeBlocked in rules.ts) — but stay tradeable via an open
+  // ("open to all") offer, since only they (not everyone else) are refusing this pairing.
+  const otherPlayers = Object.values(players).filter((p) => p.uid !== uid && !tradeBlocked(players, uid, p.uid));
+  const blocksAllTrades = players[uid]?.blockAllTrades ?? false;
 
   const giveTotal = RESOURCES.reduce((s, r) => s + (give[r] ?? 0), 0);
   const receiveTotal = RESOURCES.reduce((s, r) => s + (receive[r] ?? 0), 0);
@@ -106,18 +110,24 @@ export default function TradeBar({
   }, [room.bank]);
 
   const countering = counteringTradeId !== null;
-  const canPropose = (canTrade || countering) && !blocked && giveTotal > 0 && receiveTotal > 0 && !bankShortResource;
+  const targetBlocked = targetUid !== '' && tradeBlocked(players, uid, targetUid);
+  const canPropose =
+    (canTrade || countering) && !blocked && !blocksAllTrades && !targetBlocked && giveTotal > 0 && receiveTotal > 0 && !bankShortResource;
   const proposeReason = blocked
     ? 'Waiting for previous action…'
     : canPropose
       ? undefined
-      : !canTrade && !countering
-        ? 'Not your turn'
-        : bankShortResource
-          ? `Not enough ${RESOURCE_LABEL[bankShortResource]} available in the bank`
-          : giveTotal === 0
-            ? 'Tap cards in your hand below to choose what to give'
-            : 'Choose what you want';
+      : blocksAllTrades
+        ? 'You are blocking all trades — turn it off in the player list to trade'
+        : targetBlocked
+          ? 'Trading with this player is blocked'
+          : !canTrade && !countering
+            ? 'Not your turn'
+            : bankShortResource
+              ? `Not enough ${RESOURCE_LABEL[bankShortResource]} available in the bank`
+              : giveTotal === 0
+                ? 'Tap cards in your hand below to choose what to give'
+                : 'Choose what you want';
 
   const givenOne = singleSelection(give);
   const receivedOne = singleSelection(receive);

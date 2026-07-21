@@ -1033,6 +1033,98 @@ describe('trading', () => {
   });
 });
 
+describe('trade blocking', () => {
+  it('setTradeBlocklist sets the caller-only blockAllTrades/blockedTradeUids fields', () => {
+    let bundle = makeGame(2);
+    const uid = bundle.room.turnOrder[0];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid, blockAllTrades: false, blockedTradeUids: [other] });
+    expect(bundle.players[uid].blockAllTrades).toBe(false);
+    expect(bundle.players[uid].blockedTradeUids).toEqual([other]);
+    expect(bundle.players[other].blockedTradeUids ?? []).toEqual([]);
+
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid, blockAllTrades: true, blockedTradeUids: [] });
+    expect(bundle.players[uid].blockAllTrades).toBe(true);
+    expect(bundle.players[uid].blockedTradeUids).toEqual([]);
+  });
+
+  it('proposeTrade refuses a targeted offer to a player who has blocked the proposer', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid: other, blockAllTrades: false, blockedTradeUids: [uid] });
+    expect(() =>
+      applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other }),
+    ).toThrow(/blocked/);
+
+    // Still fine to propose an open trade, or one to blockAllTrades disabled again.
+    expect(() =>
+      applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null }),
+    ).not.toThrow();
+  });
+
+  it('proposeTrade refuses any targeted offer once the proposer has blockAllTrades on', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid, blockAllTrades: true, blockedTradeUids: [] });
+    expect(() =>
+      applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other }),
+    ).toThrow(/blocked/);
+  });
+
+  it('respondTrade refuses to accept (but still allows rejecting) a trade from a blocked player', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 1;
+    bundle.hands[other].resources.grain = 1;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: other });
+    const tradeId = bundle.trades[0].id;
+    // Blocked *after* the trade was already proposed — shouldn't trap it forever.
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid: other, blockAllTrades: false, blockedTradeUids: [uid] });
+
+    expect(() => applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true })).toThrow(/blocked/);
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: false });
+    expect(bundle.trades[0].status).toBe('rejected');
+  });
+
+  it('counterTrade and finalizeTrade both refuse a blocked pairing', () => {
+    let bundle = makeGame(2);
+    bundle = driveSetup(bundle);
+    bundle.room.phase = 'main';
+    const uid = bundle.room.turnOrder[bundle.room.currentPlayerIndex];
+    const other = bundle.room.turnOrder.find((u) => u !== uid)!;
+    bundle.hands[uid].resources.brick = 2;
+    bundle.hands[other].resources.grain = 1;
+
+    bundle = applyAction(bundle, { type: 'proposeTrade', uid, give: { brick: 1 }, receive: { grain: 1 }, targetUid: null });
+    const tradeId = bundle.trades[0].id;
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid: other, blockAllTrades: false, blockedTradeUids: [uid] });
+
+    expect(() =>
+      applyAction(bundle, { type: 'counterTrade', uid: other, tradeId, give: { grain: 1 }, receive: { brick: 2 } }),
+    ).toThrow(/blocked/);
+
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid: other, blockAllTrades: false, blockedTradeUids: [] });
+    bundle = applyAction(bundle, { type: 'respondTrade', uid: other, tradeId, accept: true });
+    bundle = applyAction(bundle, { type: 'setTradeBlocklist', uid: other, blockAllTrades: false, blockedTradeUids: [uid] });
+    expect(() => applyAction(bundle, { type: 'finalizeTrade', uid, tradeId, withUid: other })).toThrow(/blocked/);
+  });
+});
+
 describe('trade-driven turn timer extension', () => {
   it('extends turnStartedAt by TRADE_TURN_EXTENSION_MS when a trade is proposed', () => {
     let bundle = makeGame(2, { turnTimerSeconds: 100 });
@@ -1207,7 +1299,7 @@ describe('legalActionTypes', () => {
   it('offers buildSettlement then buildRoad in setup order', () => {
     const bundle = makeGame(2);
     const uid = bundle.room.turnOrder[0];
-    expect(legalActionTypes(bundle, uid)).toEqual(['voteToPause', 'buildSettlement']);
+    expect(legalActionTypes(bundle, uid)).toEqual(['setTradeBlocklist', 'voteToPause', 'buildSettlement']);
   });
 
   it('offers rollDice at the start of a normal turn', () => {

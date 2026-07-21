@@ -146,6 +146,12 @@ export interface PublicPlayer {
   citiesBuilt: number;
   connected: boolean;
   lastSeen: number; // ms epoch, client-set
+  // Player-to-player trade preferences (bank trades are never affected). Public so other
+  // players' clients can grey out a blocked target before even attempting a proposeTrade
+  // that the server would reject anyway — see tradeBlocked/'setTradeBlocklist' in rules.ts.
+  // Optional/undefined reads as "not blocking anything", so older room docs still typecheck.
+  blockAllTrades?: boolean;
+  blockedTradeUids?: string[];
 }
 
 // --- Private per-player hand, readable only by that player ---
@@ -420,4 +426,8 @@ export type GameAction =
   // uid casts (or withdraws) a vote to flip `paused` the opposite way of its current value.
   // Bots never vote; majority is computed over non-bot turnOrder members only.
   | { type: 'voteToPause'; uid: string }
-  | { type: 'voteToUnpause'; uid: string };
+  | { type: 'voteToUnpause'; uid: string }
+  // Self-only trade preference update: replaces the caller's blockAllTrades/blockedTradeUids
+  // wholesale (not a toggle) — legal in any phase, on or off turn, since it's a standing
+  // preference rather than a move. See tradeBlocked in rules.ts for how it's enforced.
+  | { type: 'setTradeBlocklist'; uid: string; blockAllTrades: boolean; blockedTradeUids: string[] };

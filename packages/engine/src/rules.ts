@@ -154,6 +154,18 @@ function requireCurrentPlayer(room: RoomState, uid: string): void {
   }
 }
 
+/** True if `a` and `b` have blocked player-to-player trades with each other, in either
+ * direction — either one's blockAllTrades, or either one naming the other in
+ * blockedTradeUids, is enough to refuse the pairing. Never affects bankTrade. */
+export function tradeBlocked(players: Record<string, PublicPlayer>, a: string, b: string): boolean {
+  const pa = players[a];
+  const pb = players[b];
+  if (pa?.blockAllTrades || pb?.blockAllTrades) return true;
+  if (pa?.blockedTradeUids?.includes(b)) return true;
+  if (pb?.blockedTradeUids?.includes(a)) return true;
+  return false;
+}
+
 function requirePhase(room: RoomState, phases: RoomState['phase'][]): void {
   if (!phases.includes(room.phase)) {
     throw new Error(`Illegal action during phase '${room.phase}'`);
@@ -1245,6 +1257,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction, rng: ()
       if (!canAfford(hand.resources, action.give)) {
         throw new Error('You do not have the resources you are offering');
       }
+      if (action.targetUid !== null && tradeBlocked(players, action.uid, action.targetUid)) {
+        throw new Error('Trading with this player is blocked');
+      }
       const offer: TradeOffer = {
         id: nanoid(),
         proposerUid: action.uid,
@@ -1275,6 +1290,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction, rng: ()
       if (original.proposerUid === action.uid) throw new Error('Cannot counter your own trade');
       if (original.targetUid && original.targetUid !== action.uid) {
         throw new Error('This trade is not directed at you');
+      }
+      if (tradeBlocked(players, action.uid, original.proposerUid)) {
+        throw new Error('Trading with this player is blocked');
       }
       const counterHand = requireHand(hands, action.uid);
       if (!canAfford(counterHand.resources, action.give)) {
@@ -1310,6 +1328,12 @@ export function applyAction(bundle: GameStateBundle, action: GameAction, rng: ()
       if (trade.proposerUid === action.uid) throw new Error('Cannot respond to your own trade');
       if (trade.targetUid && trade.targetUid !== action.uid) {
         throw new Error('This trade is not directed at you');
+      }
+      // A block toggled after this trade was already proposed shouldn't trap it forever —
+      // rejecting (or an open trade's "withdraw interest", which also routes through here
+      // with accept: false) always stays legal; only accepting is refused.
+      if (action.accept && tradeBlocked(players, action.uid, trade.proposerUid)) {
+        throw new Error('Trading with this player is blocked');
       }
 
       // Open trades (targetUid === null) can draw interest from several players — accepting
@@ -1383,6 +1407,9 @@ export function applyAction(bundle: GameStateBundle, action: GameAction, rng: ()
       if (trade.targetUid !== null) throw new Error('Targeted trades resolve directly, not via finalizeTrade');
       if (!trade.interestedUids?.includes(action.withUid)) {
         throw new Error('That player has not accepted this trade');
+      }
+      if (tradeBlocked(players, action.uid, action.withUid)) {
+        throw new Error('Trading with this player is blocked');
       }
 
       const proposerHand = requireHand(hands, action.uid);
@@ -1567,6 +1594,13 @@ export function applyAction(bundle: GameStateBundle, action: GameAction, rng: ()
       break;
     }
 
+    case 'setTradeBlocklist': {
+      const player = requirePlayer(players, action.uid);
+      player.blockAllTrades = action.blockAllTrades;
+      player.blockedTradeUids = action.blockedTradeUids.filter((u) => u !== action.uid && u in players);
+      break;
+    }
+
     case 'removeSeat': {
       const target = requirePlayer(players, action.targetUid);
       const isSelf = action.uid === action.targetUid;
@@ -1666,6 +1700,9 @@ export function legalActionTypes(bundle: GameStateBundle, uid: string): GameActi
   if (!hand || !player) return types;
 
   const isCurrent = room.turnOrder[room.currentPlayerIndex] === uid;
+
+  // A standing preference, not a move — always available regardless of phase, turn, or pause.
+  types.push('setTradeBlocklist');
 
   if (room.phase === GamePhase.GameOver) return types;
 

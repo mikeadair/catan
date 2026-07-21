@@ -887,6 +887,24 @@ export default function Game(): JSX.Element {
           ownHand={ownHand}
           victoryPointsToWin={room.victoryPointsToWin}
           longestRoadLengths={longestRoadLengths}
+          onToggleBlockAllTrades={() =>
+            void runAction({
+              type: 'setTradeBlocklist',
+              uid,
+              blockAllTrades: !(players[uid]?.blockAllTrades ?? false),
+              blockedTradeUids: players[uid]?.blockedTradeUids ?? [],
+            })
+          }
+          onToggleBlockPlayer={(targetUid) => {
+            const current = players[uid]?.blockedTradeUids ?? [];
+            const next = current.includes(targetUid) ? current.filter((u) => u !== targetUid) : [...current, targetUid];
+            void runAction({
+              type: 'setTradeBlocklist',
+              uid,
+              blockAllTrades: players[uid]?.blockAllTrades ?? false,
+              blockedTradeUids: next,
+            });
+          }}
         />
         <GameLog log={room.log} chat={chat} players={players} turnOrder={room.turnOrder} onSend={(text) => void sendChatMessage(text)} />
       </aside>

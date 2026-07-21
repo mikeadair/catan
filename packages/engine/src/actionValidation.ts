@@ -30,6 +30,7 @@ const ACTION_TYPES: GameAction['type'][] = [
   'voteToPause',
   'voteToUnpause',
   'pickGoldResources',
+  'setTradeBlocklist',
 ];
 
 function isString(v: unknown): v is string {
@@ -142,6 +143,12 @@ export function assertValidActionShape(action: unknown): asserts action is GameA
       return;
     case 'removeSeat':
       if (!isString(a.targetUid)) throw new Error('removeSeat requires targetUid');
+      return;
+    case 'setTradeBlocklist':
+      if (typeof a.blockAllTrades !== 'boolean') throw new Error('setTradeBlocklist requires blockAllTrades: boolean');
+      if (!Array.isArray(a.blockedTradeUids) || !a.blockedTradeUids.every(isString)) {
+        throw new Error('setTradeBlocklist requires blockedTradeUids: string[]');
+      }
       return;
   }
 }
