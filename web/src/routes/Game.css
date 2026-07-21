@@ -75,23 +75,104 @@
   overflow: hidden;
 }
 
+/* The single top-of-board status line — whose turn it is, what the local player needs to do
+   right now, or that the game is paused. Used to be one quiet, same-weight-as-everything-else
+   pill (plain panel background, thin border, inherited body text size) regardless of how
+   urgent the message actually was, which made it easy for players to tune out entirely —
+   "Game paused" got exactly the same treatment as "Bot Alice's turn…". The three kind
+   modifiers below (action/paused/waiting) now scale visual weight to how much the message
+   actually matters: 'action' (something only the local player can do — the one state most
+   worth not missing) and 'paused' (the whole game is frozen) get a bold, saturated, softly
+   pulsing treatment; 'waiting' (someone else is up, purely informational) stays close to the
+   old quiet pill so it doesn't turn into noise for what's most of the game's runtime. */
 .game__phase-banner {
   position: absolute;
-  top: 12px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--color-panel);
-  border: 1px solid var(--color-accent);
-  border-radius: 8px;
-  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 10px 20px;
   z-index: 50;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  animation: phase-banner-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes phase-banner-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.game__phase-banner--waiting {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font-weight: 600;
+  font-size: 15px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
+.game__phase-banner--action {
+  background: var(--color-accent);
+  border: 1px solid #fbcf6c;
+  color: #241a03;
+  box-shadow: 0 4px 20px rgba(242, 177, 52, 0.35), 0 0 0 1px rgba(242, 177, 52, 0.25);
+  animation:
+    phase-banner-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    phase-banner-pulse-action 2.2s ease-in-out 0.3s infinite;
+}
+
+@keyframes phase-banner-pulse-action {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(242, 177, 52, 0.35), 0 0 0 1px rgba(242, 177, 52, 0.25);
+  }
+  50% {
+    box-shadow: 0 4px 28px rgba(242, 177, 52, 0.65), 0 0 0 5px rgba(242, 177, 52, 0.18);
+  }
+}
+
+.game__phase-banner--paused {
+  background: var(--color-danger);
+  border: 1px solid #ff8f92;
+  color: #2c0708;
+  box-shadow: 0 4px 20px rgba(229, 72, 77, 0.4), 0 0 0 1px rgba(229, 72, 77, 0.3);
+  animation:
+    phase-banner-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+    phase-banner-pulse-paused 2.2s ease-in-out 0.3s infinite;
+}
+
+@keyframes phase-banner-pulse-paused {
+  0%, 100% {
+    box-shadow: 0 4px 20px rgba(229, 72, 77, 0.4), 0 0 0 1px rgba(229, 72, 77, 0.3);
+  }
+  50% {
+    box-shadow: 0 4px 28px rgba(229, 72, 77, 0.7), 0 0 0 5px rgba(229, 72, 77, 0.22);
+  }
+}
+
+/* Respect reduced-motion: keep the color/weight treatment (still the primary legibility win)
+   but drop the pulse and entrance-slide, same convention as ConfettiBurst/DiceRoller. */
+@media (prefers-reduced-motion: reduce) {
+  .game__phase-banner {
+    animation: none;
+  }
+}
+
 .game__phase-banner-icon {
-  width: 14px;
-  height: 14px;
-  vertical-align: -2px;
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
 }
 
 .game__resource-grant {

@@ -296,6 +296,27 @@ export const SNAP_COMPONENTS: Record<string, SnapComponent> = {
     description: 'Setup-phase board with free-road placement hotspots active, anchored off the just-placed settlement (rules.ts "setup1" phase, needs-road sub-state)',
     query: 'state=setup1-road',
   },
+  'phase-banner-action': {
+    selector: '.game__phase-banner',
+    preview: 'trade',
+    screen: 'game',
+    description: 'Top-of-board phase banner, \'action\' variant — something only the local player can do right now ("Your turn — roll the dice!"), bold/saturated/pulsing',
+    query: 'state=roll',
+  },
+  'phase-banner-paused': {
+    selector: '.game__phase-banner',
+    preview: 'trade',
+    screen: 'game',
+    description: "Top-of-board phase banner, 'paused' variant (\"Game paused\") — same bold/pulsing treatment as 'action', in --color-danger instead of --color-accent",
+    query: 'state=paused',
+  },
+  'phase-banner-waiting': {
+    selector: '.game__phase-banner',
+    preview: 'trade',
+    screen: 'game',
+    description: "Top-of-board phase banner, 'waiting' variant (\"Bot Alice's turn…\") — purely informational, stays close to the banner's old quiet plain-panel look",
+    query: 'state=waiting',
+  },
   'pause-control-paused': {
     selector: '.pause-control',
     preview: 'trade',

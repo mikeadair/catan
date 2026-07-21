@@ -702,21 +702,38 @@ export default function Game(): JSX.Element {
     ? `Round ${room.setupRound} of 2${room.setupRound === 2 ? ' (reversed order)' : ''} — `
     : '';
 
+  // `kind` drives the banner's visual treatment (see .game__phase-banner--<kind> in Game.css):
+  // 'paused' is the most alarming (the whole game is frozen); 'action' is next (something
+  // only the local player can do right now — the thing they're most likely to miss); 'waiting'
+  // is purely informational (someone else is up) and stays the quietest of the three so it
+  // doesn't compete with 'action' for attention.
   let phaseBanner: JSX.Element | string | null = null;
+  let phaseBannerKind: 'action' | 'waiting' | 'paused' = 'waiting';
   if (room.paused) {
+    phaseBannerKind = 'paused';
     phaseBanner = (
       <>
         <PauseIcon className="game__phase-banner-icon" /> Game paused
       </>
     );
   }
-  else if (setupNeedsSettlement) phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
-  else if (setupNeedsRoad) phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
+  else if (setupNeedsSettlement) {
+    phaseBannerKind = 'action';
+    phaseBanner = `${setupRoundLabel}Place your ${room.setupRound === 2 ? 'second' : 'first'} settlement.`;
+  }
+  else if (setupNeedsRoad) {
+    phaseBannerKind = 'action';
+    phaseBanner = `${setupRoundLabel}Place a road connected to your new settlement.`;
+  }
   else if (room.pendingRoadBuilding?.uid === uid) {
+    phaseBannerKind = 'action';
     const n = room.pendingRoadBuilding.roadsRemaining;
     phaseBanner = `Road Building — place ${n} free road${n === 1 ? '' : 's'}.`;
   }
-  else if (room.phase === GamePhase.Roll && isCurrentPlayer) phaseBanner = 'Your turn — roll the dice!';
+  else if (room.phase === GamePhase.Roll && isCurrentPlayer) {
+    phaseBannerKind = 'action';
+    phaseBanner = 'Your turn — roll the dice!';
+  }
   else if ((room.phase === GamePhase.Roll || room.phase === GamePhase.Main) && !isCurrentPlayer) {
     // An opponent's ordinary turn is most of the game, and without this branch it was the
     // one state with no banner at all — leaving "whose turn is it?" answerable only by
@@ -764,7 +781,14 @@ export default function Game(): JSX.Element {
             factored out for exactly this reuse), crossing the open water below the hex grid,
             replacing an earlier static anchored <img> that just bobbed in place. */}
         <SailingShip layerClassName="game__ship-layer" topRange={[78, 90]} />
-        {phaseBanner && <div className="game__phase-banner">{phaseBanner}</div>}
+        {phaseBanner && (
+          // Keyed on the message itself so the entrance animation (see Game.css) replays
+          // every time the banner's text actually changes — e.g. "Your turn!" fires fresh each
+          // time it comes back around, not just on first mount — instead of only on kind swaps.
+          <div key={typeof phaseBanner === 'string' ? phaseBanner : phaseBannerKind} className={`game__phase-banner game__phase-banner--${phaseBannerKind}`}>
+            {phaseBanner}
+          </div>
+        )}
         {resourceGrantMessage && (
           <div key={resourceGrantMessage} className="game__resource-grant">
             {resourceGrantMessage}

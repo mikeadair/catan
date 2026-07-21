@@ -27,6 +27,15 @@ const stateOverrides: Record<string, Partial<RoomState>> = {
   'gold-pick': { phase: GamePhase.GoldPick, pendingGoldPicks: [{ uid: 'p0', amount: 2 }] },
   'game-over': { phase: GamePhase.GameOver, winnerUid: 'p0' },
   'road-building': { pendingRoadBuilding: { uid: 'p0', roadsRemaining: 2 } },
+  // The default 'main'-phase preview has p0 as the current player but nothing for them to do
+  // yet (Game.tsx's top phase-banner only fires 'Your turn — roll the dice!' during the 'roll'
+  // phase specifically) — this is the only way to reach that banner's 'action' visual variant
+  // without a live dice roll.
+  roll: { phase: GamePhase.Roll, diceRoll: null },
+  // Bumps the current player off p0 (still 'main' phase) so Game.tsx's phase banner falls into
+  // its quiet 'waiting' variant ("Bot Alice's turn…") instead of the default preview's no-banner
+  // state (p0 is the current player there, but 'main' phase on your own turn has no banner).
+  waiting: { currentPlayerIndex: 1 },
   paused: { paused: true, pausedAt: Date.now() - 3_000 },
   // Not-yet-paused but a vote is already in ("Pausing… (X/Y)") / paused with a resume vote
   // already in ("Paused (X/Y to resume)") — PauseControl's two remaining label variants beyond
